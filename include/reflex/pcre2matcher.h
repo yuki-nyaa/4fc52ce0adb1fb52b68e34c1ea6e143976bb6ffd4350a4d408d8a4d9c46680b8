@@ -441,7 +441,7 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
       }
       else
       {
-#if defined(DEBUG)
+#if defined(DEBUG_REFLEX)
         PCRE2_UCHAR message[120];
         pcre2_get_error_message(rc, message, sizeof(message));
         DBGLOGN("Return code: %d '%s' flg=%x", rc, message, flg);

@@ -101,7 +101,7 @@ class AbstractMatcher {
     static const int UNK      = 256;        ///< unknown/undefined character meta-char marker
     static const int BOB      = 257;        ///< begin of buffer meta-char marker
     static const int EOB      = EOF;        ///< end of buffer meta-char marker
-    static const size_t BLOCK = 8192;       ///< buffer growth factor, buffer is initially 2*BLOCK size, at least 256
+    static const size_t BLOCK = (256*1024);       ///< buffer growth factor, buffer is initially 2*BLOCK size, at least 256
     static const size_t REDO  = 0x7FFFFFFF; ///< reflex::Matcher::accept() returns "redo" with reflex::Matcher option "A"
     static const size_t EMPTY = 0xFFFFFFFF; ///< accept() returns "empty" last split at end of input
   };
@@ -299,7 +299,11 @@ class AbstractMatcher {
     if (own_)
     {
 #if defined(WITH_REALLOC)
+#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
+      _aligned_free(static_cast<void*>(buf_));
+#else
       std::free(static_cast<void*>(buf_));
+#endif
 #else
       delete[] buf_;
 #endif
@@ -337,10 +341,19 @@ class AbstractMatcher {
     }
     if (!own_)
     {
+      max_ = 2 * Const::BLOCK;
 #if defined(WITH_REALLOC)
-      buf_ = static_cast<char*>(std::malloc(max_ = 2 * Const::BLOCK));
+#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__)
+      buf_ = static_cast<char*>(_aligned_malloc(max_, 4096));
+      if (buf_ == nullptr)
+        throw std::bad_alloc();
 #else
-      buf_ = new char[max_ = 2 * Const::BLOCK];
+      buf_ = nullptr;
+      if (::posix_memalign(reinterpret_cast<void**>(&buf_), 4096, max_) != 0)
+        throw std::bad_alloc();
+#endif
+#else
+      buf_ = new char[max_];
 #endif
     }
     buf_[0] = '\0';
@@ -411,7 +424,7 @@ class AbstractMatcher {
     if (hit_end())
     {
       (void)lineno();
-      // if there is no \n at the end of input: increase line count by one
+      // if there is no \n at the end of input: increase line count by one to compensate
       if (bol_ < txt_)
         ++lno_;
       return Context(buf_, end_, num_);
@@ -466,7 +479,11 @@ class AbstractMatcher {
       if (own_)
       {
 #if defined(WITH_REALLOC)
+#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
+        _aligned_free(static_cast<void*>(buf_));
+#else
         std::free(static_cast<void*>(buf_));
+#endif
 #else
         delete[] buf_;
 #endif
@@ -613,15 +630,125 @@ class AbstractMatcher {
 #if defined(WITH_SPAN)
     if (lpb_ < txt_)
     {
-      while (bol_ < txt_)
+      char *s = bol_;
+      char *t = txt_;
+      // clang/gcc 4-way vectorizable loop
+      while (t - 4 >= s)
       {
-        char *s = static_cast<char*>(std::memchr(bol_, '\n', txt_ - bol_));
-        if (s == nullptr)
+        if ((t[-1] == '\n') | (t[-2] == '\n') | (t[-3] == '\n') | (t[-4] == '\n'))
           break;
-        ++lno_;
-        bol_ = s + 1;
+        t -= 4;
       }
+      // epilogue
+      if (--t >= s && *t != '\n')
+        if (--t >= s && *t != '\n')
+          if (--t >= s && *t != '\n')
+            --t;
+      bol_ = t + 1;
       lpb_ = txt_;
+      size_t n = lno_;
+#if defined(HAVE_AVX512BW) && (!defined(_MSC_VER) || defined(_WIN64))
+      if (have_HW_AVX512BW())
+      {
+        __m512i vlcn = _mm512_set1_epi8('\n');
+        while (s + 63 <= t)
+        {
+          __m512i vlcm = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(s));
+          uint64_t mask = _mm512_cmpeq_epi8_mask(vlcm, vlcn);
+          n += popcountl(mask);
+          s += 64;
+        }
+      }
+      else if (have_HW_AVX2())
+      {
+        __m256i vlcn = _mm256_set1_epi8('\n');
+        while (s + 31 <= t)
+        {
+          __m256i vlcm = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(s));
+          __m256i vlceq = _mm256_cmpeq_epi8(vlcm, vlcn);
+          uint32_t mask = _mm256_movemask_epi8(vlceq);
+          n += popcount(mask);
+          s += 32;
+        }
+      }
+      else if (have_HW_SSE2())
+      {
+        __m128i vlcn = _mm_set1_epi8('\n');
+        while (s + 15 <= t)
+        {
+          __m128i vlcm = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s));
+          __m128i vlceq = _mm_cmpeq_epi8(vlcm, vlcn);
+          uint32_t mask = _mm_movemask_epi8(vlceq);
+          n += popcount(mask);
+          s += 16;
+        }
+      }
+#elif defined(HAVE_AVX2)
+      if (have_HW_AVX2())
+      {
+        __m256i vlcn = _mm256_set1_epi8('\n');
+        while (s + 31 <= t)
+        {
+          __m256i vlcm = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(s));
+          __m256i vlceq = _mm256_cmpeq_epi8(vlcm, vlcn);
+          uint32_t mask = _mm256_movemask_epi8(vlceq);
+          n += popcount(mask);
+          s += 32;
+        }
+      }
+      else if (have_HW_SSE2())
+      {
+        __m128i vlcn = _mm_set1_epi8('\n');
+        while (s + 15 <= t)
+        {
+          __m128i vlcm = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s));
+          __m128i vlceq = _mm_cmpeq_epi8(vlcm, vlcn);
+          uint32_t mask = _mm_movemask_epi8(vlceq);
+          n += popcount(mask);
+          s += 16;
+        }
+      }
+#elif defined(HAVE_SSE2)
+      if (have_HW_SSE2())
+      {
+        __m128i vlcn = _mm_set1_epi8('\n');
+        while (s + 15 <= t)
+        {
+          __m128i vlcm = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s));
+          __m128i vlceq = _mm_cmpeq_epi8(vlcm, vlcn);
+          uint32_t mask = _mm_movemask_epi8(vlceq);
+          n += popcount(mask);
+          s += 16;
+        }
+      }
+#elif defined(HAVE_NEON)
+      {
+        // ARM AArch64/NEON SIMD optimized loop? - no code found yet that runs faster than the code below
+      }
+#endif
+      uint32_t n0 = 0, n1 = 0, n2 = 0, n3 = 0;
+      // clang/gcc 4-way vectorizable loop
+      while (s + 3 <= t)
+      {
+        n0 += s[0] == '\n';
+        n1 += s[1] == '\n';
+        n2 += s[2] == '\n';
+        n3 += s[3] == '\n';
+        s += 4;
+      }
+      n += n0 + n1 + n2 + n3;
+      // epilogue
+      if (s <= t)
+      {
+        n += *s == '\n';
+        if (++s <= t)
+        {
+          n += *s == '\n';
+          if (++s <= t)
+            n += *s == '\n';
+        }
+      }
+      lno_ = n;
     }
 #else
     size_t n = lno_;
@@ -1348,7 +1475,11 @@ class AbstractMatcher {
         max_ *= 2;
       DBGLOG("Expand buffer to %zu bytes", max_);
 #if defined(WITH_REALLOC)
+#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
+      char *newbuf = static_cast<char*>(_aligned_realloc(static_cast<void*>(buf_), max_, 4096));
+#else
       char *newbuf = static_cast<char*>(std::realloc(static_cast<void*>(buf_), max_));
+#endif
       if (newbuf == nullptr)
         throw std::bad_alloc();
 #else
@@ -1394,7 +1525,11 @@ class AbstractMatcher {
         num_ += gap;
 #if defined(WITH_REALLOC)
         std::memmove(buf_, txt_, end_);
+#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
+        char *newbuf = static_cast<char*>(_aligned_realloc(static_cast<void*>(buf_), max_, 4096));
+#else
         char *newbuf = static_cast<char*>(std::realloc(static_cast<void*>(buf_), max_));
+#endif
         if (newbuf == nullptr)
           throw std::bad_alloc();
 #else

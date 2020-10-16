@@ -38,13 +38,13 @@ Exploiting macro magic to simplify debug logging.
 Usage
 -----
 
-Enable macro DEBUG to debug the compiled source code:
+Enable macro DEBUG_REFLEX to debug the compiled source code:
 
 | Source files compiled with	| DBGLOG(...) entry added to	|
 | ----------------------------- | ----------------------------- |
-| `c++ -DDEBUG`			| `DEBUG.log`			|
-| `c++ -DDEBUG=TEST`		| `TEST.log`			|
-| `c++ -DDEBUG= `		| `stderr`			|
+| `c++ -DDEBUG_REFLEX`			| `DEBUG_REFLEX.log`			|
+| `c++ -DDEBUG_REFLEX=TEST`		| `TEST.log`			|
+| `c++ -DDEBUG_REFLEX= `		| `stderr`			|
 
 `DBGLOG(format, ...)` creates a timestamped log entry with a printf-formatted
 message. The log entry is added to a log file or sent to `stderr` as specified:
@@ -53,14 +53,14 @@ message. The log entry is added to a log file or sent to `stderr` as specified:
 
 `DBGLOGA(format, ...)` appends the formatted string to the previous log entry.
 
-`DBGCHK(condition)` calls `assert(condition)` when compiled in DEBUG mode.
+`DBGCHK(condition)` calls `assert(condition)` when compiled in DEBUG_REFLEX mode.
 
 The utility macro `DBGSTR(const char *s)` returns string `s` or `"(null)"` when
 `s == nullptr`.
 
 @note to temporarily enable debugging a specific block of code without globally
 debugging all code, use a leading underscore, e.g. `_DBGLOG(format, ...)`.
-This appends the debugging information to `DEBUG.log`.
+This appends the debugging information to `DEBUG_REFLEX.log`.
 
 @warning Be careful to revert these statements by removing the leading
 underscore for production-quality code.
@@ -92,7 +92,7 @@ Example
     }
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Compiled with `-DDEBUG` this example logs the following messages in `DEBUG.log`:
+Compiled with `-DDEBUG` this example logs the following messages in `DEBUG_REFLEX.log`:
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.txt}
     140201/225654.692194   example.cpp:11   Program has started
@@ -105,17 +105,17 @@ The first column records the date (140201 is February 1, 2014) and the time
 records the source code file name and the line number of the `DBGLOG` command.
 The third column shows the printf-formatted message.
 
-The `DEBUG.log` file is created in the current directory when it does not
+The `DEBUG_REFLEX.log` file is created in the current directory when it does not
 already exist.
 
 Techniques used:
 
 - Variadic macros with `__VA_ARGS__`.
 - Standard predefined macros `__FILE__` and `__LINE__`.
-- Macro "stringification": expand content of macro `DEBUG` as a string in a
+- Macro "stringification": expand content of macro `DEBUG_REFLEX` as a string in a
   macro body.
-- `#if DEBUG + 0` to test whether macro `DEBUG` is set to a value, since
-  `DEBUG` is 1 when set without a value (for example at the command line).
+- `#if DEBUG_REFLEX + 0` to test whether macro `DEBUG_REFLEX` is set to a value, since
+  `DEBUG_REFLEX` is 1 when set without a value (for example at the command line).
 - `"" __VA_ARGS__` forces `__VA_ARGS__` to start with a literal format string
   (printf security advisory).
 */
@@ -142,7 +142,7 @@ extern "C" void REFLEX_DBGOUT_(const char *log, const char *file, int line);
 #define DBGXIFY(S) DBGIFY_(S)
 #define DBGIFY_(S) #S
 #if DEBUG_REFLEX + 0
-# define DBGFILE "DEBUG.log"
+# define DBGFILE "DEBUG_REFLEX.log"
 #else
 # define DBGFILE DBGXIFY(DEBUG_REFLEX) ".log"
 #endif

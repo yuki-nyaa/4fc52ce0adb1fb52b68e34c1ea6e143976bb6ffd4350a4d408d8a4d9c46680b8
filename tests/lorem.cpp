@@ -5,7 +5,7 @@
 #include <reflex/timer.h>
 #include <fstream>
 
-#ifndef DEBUG
+#ifndef DEBUG_REFLEX
 #define RUNS 100
 #else
 #define RUNS 1

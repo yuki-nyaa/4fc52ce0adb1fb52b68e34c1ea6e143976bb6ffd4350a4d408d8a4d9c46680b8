@@ -50,7 +50,7 @@
 */
 #define WITH_COMPACT_DFA -1
 
-#ifdef DEBUG
+#ifdef DEBUG_REFLEX
 # define DBGLOGPOS(p) \
   if ((p).accept()) \
   { \
@@ -141,7 +141,7 @@ const std::string Pattern::operator[](Accept choice) const
 {
   if (choice == 0)
     return rex_;
-  if (choice >= 1 && choice <= size())
+  if (choice <= size())
   {
     Location loc = end_.at(choice - 1);
     Location prev = 0;
@@ -487,7 +487,7 @@ void Pattern::parse(
   if (opt_.s)
     update_modified('s', modifiers, 0, len - 1);
   pms_ = timer_elapsed(t);
-#ifdef DEBUG
+#ifdef DEBUG_REFLEX
   DBGLOGN("startpos = {");
   for (Positions::const_iterator p = startpos.begin(); p != startpos.end(); ++p)
     DBGLOGPOS(*p);
@@ -1455,6 +1455,12 @@ void Pattern::compile(
         }
         Char lo = i->first.lo();
         Char max = i->first.hi();
+#ifdef DEBUG_REFLEX
+        DBGLOGN("from state %p on %02x-%02x move to {", state, lo, max);
+        for (Positions::const_iterator p = pos.begin(); p != pos.end(); ++p)
+          DBGLOGPOS(*p);
+        DBGLOGN(" } = state %p", target_state);
+#endif        
         while (lo <= max)
         {
           if (i->first.contains(lo))
@@ -1519,7 +1525,7 @@ void Pattern::greedy(Positions& pos) const
 
 void Pattern::trim_lazy(Positions *pos) const
 {
-#ifdef DEBUG
+#ifdef DEBUG_REFLEX
   DBGLOG("BEGIN trim_lazy({");
   for (Positions::const_iterator q = pos->begin(); q != pos->end(); ++q)
     DBGLOGPOS(*q);
@@ -1585,7 +1591,7 @@ void Pattern::trim_lazy(Positions *pos) const
       ++q;
     }
   }
-#ifdef DEBUG
+#ifdef DEBUG_REFLEX
   DBGLOG("END trim_lazy({");
   for (Positions::const_iterator q = pos->begin(); q != pos->end(); ++q)
     DBGLOGPOS(*q);
@@ -1694,7 +1700,7 @@ void Pattern::compile_transition(
               j = followpos.insert(std::pair<Position,Positions>(*k, Positions())).first;
               for (Positions::const_iterator p = i->second.begin(); p != i->second.end(); ++p)
                 j->second.insert(/* p->lazy() || CHECKED algorithmic options: 7/31 */ p->ticked() ? *p : /* CHECKED algorithmic options: 7/31 adds too many states p->greedy() ? p->lazy(0).greedy(false) : */ p->lazy(k->lazy())); // CHECKED algorithmic options: 7/18 ticked() preserves lookahead tail at '/' and ')'
-#ifdef DEBUG
+#ifdef DEBUG_REFLEX
               DBGLOGN("lazy followpos(");
               DBGLOGPOS(*k);
               DBGLOGA(" ) = {");
@@ -1829,7 +1835,7 @@ void Pattern::transition(
   Moves::iterator end = moves.end();
   while (i != end)
   {
-    if (is_subset(i->second, follow))
+    if (i->second == follow)
     {
       chars += i->first;
       moves.erase(i++);
@@ -2734,7 +2740,7 @@ void Pattern::export_dfa(const DFA::State *start) const
           if (state != start && !state->accept && state->heads.empty() && state->tails.empty())
             ::fprintf(file, "\n/*STATE*/\t");
           ::fprintf(file, "N%p [label=\"", (void*)state);
-#ifdef DEBUG
+#ifdef DEBUG_REFLEX
           size_t k = 1;
           size_t n = std::sqrt(state->size()) + 0.5;
           const char *sep = "";
@@ -2991,7 +2997,7 @@ void Pattern::predict_match_dfa(DFA::State *start)
   if (state != nullptr && state->accept == 0)
   {
     gen_predict_match(state);
-#ifdef DEBUG
+#ifdef DEBUG_REFLEX
     for (Char i = 0; i < 256; ++i)
     {
       if (bit_[i] != 0xFF)
