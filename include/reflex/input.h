@@ -330,7 +330,7 @@ class Input {
     static const file_encoding_type custom     = 38; ///< custom code page
   };
   /// FILE* handler functor base class to handle FILE* errors and non-blocking FILE* reads
-  struct Handler { virtual int operator()() = 0; };  
+  struct Handler { virtual int operator()() = 0; };
   /// Stream buffer for reflex::Input, derived from std::streambuf.
   class streambuf;
   /// Stream buffer for reflex::Input to read DOS files, replaces CRLF by LF, derived from std::streambuf.
@@ -463,7 +463,7 @@ class Input {
       istream_(nullptr),
       size_(0)
   {
-    init();
+    init(enc);
     if (file_encoding() == file_encoding::plain)
       file_encoding(enc, page);
   }
@@ -743,17 +743,17 @@ class Input {
     return utfx_;
   }
   /// Initialize the state after (re)setting the input source, auto-detects UTF BOM in FILE* input if the file size is known.
-  void init()
+  void init(file_encoding_type enc = file_encoding::plain)
   {
     std::memset(utf8_, 0, sizeof(utf8_));
     uidx_ = sizeof(utf8_);
     utfx_ = 0;
     page_ = nullptr;
     if (file_ != nullptr)
-      file_init();
+      file_init(enc);
   }
   /// Called by init() for a FILE*.
-  void file_init();
+  void file_init(file_encoding_type enc);
   /// Called by size() for a wstring.
   void wstring_size();
   /// Called by size() for a FILE*.
@@ -769,7 +769,7 @@ class Input {
   void set_handler(Handler *handler)
   {
     handler_ = handler;
-  }      
+  }
  protected:
   const char           *cstring_; ///< char string input (when non-null) of length reflex::Input::size_
   const wchar_t        *wstring_; ///< NUL-terminated wide string input (when non-null)

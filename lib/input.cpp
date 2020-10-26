@@ -39,7 +39,11 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+# define UNUSED(arg) (void)arg
+
 #if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
+# include <io.h>
+# include <fcntl.h>
 # define off_t __int64
 # define ftello _ftelli64
 # define fseeko _fseeki64
@@ -642,8 +646,12 @@ static const unsigned short codepages[38][256] =
   },
 };
 
-void Input::file_init()
+void Input::file_init(file_encoding_type enc)
 {
+// open in binary mode to detect BOM, then reset to original mode afterwards unless UTF-16 or UTF-32
+#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
+  int mode = _setmode(_fileno(file_), _O_BINARY);
+#endif
   // attempt to determine the file size with fstat()
 #if !defined(HAVE_CONFIG_H) || defined(HAVE_FSTAT)
 #if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
@@ -730,6 +738,13 @@ void Input::file_init()
     if (feof(file_) || !handler_ || (*handler_)() == 0)
       break;
   }
+#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
+  // if not UTF-16 or UTF-32, then reset mode to original mode (unless the original mode was binary)
+  if (mode != _O_BINARY && ((utfx_ == file_encoding::plain && enc != file_encoding::utf16be && enc != file_encoding::utf16le && enc != file_encoding::utf32be && enc != file_encoding::utf32le) || utfx_ == file_encoding::utf8))
+    _setmode(_fileno(file_), mode);
+#else
+  UNUSED(enc);
+#endif
 }
 
 size_t Input::file_get(char *s, size_t n)
@@ -746,7 +761,7 @@ size_t Input::file_get(char *s, size_t n)
     {
       uidx_ += k;
       if (size_ >= k)
-        size_ -= k;      
+        size_ -= k;
       return k;
     }
     uidx_ = sizeof(utf8_);
@@ -791,7 +806,7 @@ size_t Input::file_get(char *s, size_t n)
         }
       }
       if (size_ + s >= t)
-        size_ -= t - s;      
+        size_ -= t - s;
       return t - s;
     case file_encoding::utf16le:
       while (n > 0 && ::fread(buf, 2, 1, file_) == 1)
@@ -830,7 +845,7 @@ size_t Input::file_get(char *s, size_t n)
         }
       }
       if (size_ + s >= t)
-        size_ -= t - s;      
+        size_ -= t - s;
       return t - s;
     case file_encoding::utf32be:
       while (n > 0 && ::fread(buf, 4, 1, file_) == 1)
@@ -861,7 +876,7 @@ size_t Input::file_get(char *s, size_t n)
         }
       }
       if (size_ + s >= t)
-        size_ -= t - s;      
+        size_ -= t - s;
       return t - s;
     case file_encoding::utf32le:
       while (n > 0 && ::fread(buf, 4, 1, file_) == 1)
@@ -892,7 +907,7 @@ size_t Input::file_get(char *s, size_t n)
         }
       }
       if (size_ + s >= t)
-        size_ -= t - s;      
+        size_ -= t - s;
       return t - s;
     case file_encoding::latin:
       while (n > 0 && ::fread(t, 1, 1, file_) == 1)
@@ -921,7 +936,7 @@ size_t Input::file_get(char *s, size_t n)
         }
       }
       if (size_ + s >= t)
-        size_ -= t - s;      
+        size_ -= t - s;
       return t - s;
     case file_encoding::cp437:
     case file_encoding::cp850:
@@ -983,7 +998,7 @@ size_t Input::file_get(char *s, size_t n)
         }
       }
       if (size_ + s >= t)
-        size_ -= t - s;      
+        size_ -= t - s;
       return t - s;
     default:
       t += ::fread(t, 1, n, file_);
