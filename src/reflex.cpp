@@ -40,8 +40,8 @@
 #define WITH_BOOST_PARTIAL_MATCH_BUG
 
 /// Safer fopen_s()
-#if (!defined(__WIN32__) && !defined(_WIN32) && !defined(WIN32) && !defined(_WIN64) && !defined(__BORLANDC__)) || defined(__CYGWIN__) || defined(__MINGW32__) || defined(__MINGW64__)
-inline int fopen_s(FILE **file, const char *name, const char *mode) { return (*file = ::fopen(name, mode)) ? 0 : errno; }
+#if (!defined(__WIN32__) && !defined(_WIN32) && !defined(WIN32) && !defined(_WIN64) && !defined(__BORLANDC__)) || defined(__CYGWIN__)
+int fopen_s(FILE **file, const char *name, const char *mode) { return (*file = ::fopen(name, mode)) ? 0 : errno; }
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1056,7 +1056,7 @@ bool Reflex::get_pattern(size_t& pos, std::string& pattern, std::string& regex)
     else if (c == '(' && pos + 2 < linelen && line.at(pos + 1) == '?' && line.at(pos + 2) == '#')
     {
       // eat (?#...)
-      pos += 2; 
+      pos += 2;
       while (pos < linelen && line.at(pos) != ')')
         pos += 1 + (line.at(pos) == '\\');
       ++pos;
@@ -1110,7 +1110,7 @@ bool Reflex::get_pattern(size_t& pos, std::string& pattern, std::string& regex)
       flags |= reflex::convert_flag::permissive;
     try
     {
-      regex = reflex::convert(pattern, library->signature, flags, &definitions); 
+      regex = reflex::convert(pattern, library->signature, flags, &definitions);
     }
     catch (reflex::regex_error& e)
     {
@@ -1941,7 +1941,7 @@ void Reflex::write()
           "#ifndef yy_size_t\n"
           "#define yy_size_t size_t\n"
           "#endif\n"
-          "\n";        
+          "\n";
         if (!options["yy"].empty())
           *out <<
             "extern FILE *" << prefix << "in;\n"
@@ -2001,7 +2001,7 @@ void Reflex::write_prelude()
   *out << "#define REFLEX_VERSION \"" REFLEX_VERSION "\"\n";
   write_banner("OPTIONS USED");
   if (!options["prefix"].empty() && options["prefix"] != "yy")
-  {  
+  {
     for (StringMap::const_iterator option = options.begin(); option != options.end(); ++option)
       if (!option->second.empty())
         if (!options["prefix"].empty() && options["prefix"] != "yy")
@@ -2340,7 +2340,7 @@ void Reflex::write_class()
         "      out(*os);\n"
         "    return " << lex << "(" << args << ");\n"
         "  }\n";
-  }        
+  }
   write_perf_report();
   *out <<
     "};\n";
@@ -2625,7 +2625,7 @@ void Reflex::write_lexer()
         "{\n"
         "  static_cast<yyscanner_t*>(scanner)->lineno(n);\n"
         "}\n"
-        "\n"        
+        "\n"
         "#undef " << prefix << "get_in\n"
         "YY_EXTERN_C FILE *" << prefix << "get_in(yyscan_t scanner)\n"
         "{\n"
@@ -2799,7 +2799,7 @@ void Reflex::write_lexer()
           "{\n"
           "  return YY_SCANNER." << lex << "(*lvalp, *llocp" << comma_args << ");\n"
           "}\n";
-      else      
+      else
         *out <<
           "YY_EXTERN_C " << token_type << " yylex(" << params << ")\n"
           "{\n"
@@ -3297,7 +3297,7 @@ void Reflex::stats()
       else if (!options["tables_file"].empty())
         option.append(";f=").append(start > 0 ? "+" : "").append(file_ext(options["tables_file"], "cpp"));
       if ((!options["full"].empty() || !options["fast"].empty()) && options["tables_file"].empty() && options["stdout"].empty())
-        option.append(";f=+").append(escape_bs(options["outfile"]));      
+        option.append(";f=+").append(escape_bs(options["outfile"]));
       try
       {
         reflex::Pattern pattern(patterns[start], option);
