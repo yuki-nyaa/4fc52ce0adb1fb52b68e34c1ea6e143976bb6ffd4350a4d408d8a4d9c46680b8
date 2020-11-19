@@ -37,9 +37,10 @@
 #ifndef REFLEX_PCRE2MATCHER_H
 #define REFLEX_PCRE2MATCHER_H
 
-#include <reflex/absmatcher.h>
+#include<cassert>
+#include<reflex/absmatcher.h>
 #define PCRE2_CODE_UNIT_WIDTH 8
-#include <pcre2.h>
+#include<pcre2.h>
 
 namespace reflex {
 
@@ -291,7 +292,7 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
     }
     int err;
     PCRE2_SIZE pos;
-    ASSERT(pat_ != nullptr);
+    assert(pat_ != nullptr);
     opc_ = pcre2_compile(reinterpret_cast<PCRE2_SPTR>(pat_->c_str()), static_cast<PCRE2_SIZE>(pat_->size()), cop_, &err, &pos, nullptr);
     if (opc_ == nullptr)
     {

@@ -46,13 +46,14 @@
 /// This compile-time option adds span(), line(), wline(), speeds up buffer shifting and lineno().
 #define WITH_SPAN
 
-#include <reflex/convert.h>
-#include <reflex/debug.h>
-#include <reflex/input.h>
-#include <reflex/traits.h>
-#include <cstdlib>
-#include <cctype>
-#include <iterator>
+#include<reflex/convert.h>
+#include<reflex/debug.h>
+#include<reflex/input.h>
+#include<reflex/traits.h>
+#include<cassert>
+#include<cstdlib>
+#include<cctype>
+#include<iterator>
 
 namespace reflex {
 
@@ -516,7 +517,7 @@ class AbstractMatcher {
     }
     return *this;
   }
-  
+
   /// Returns nonzero capture index (i.e. true) if the entire input matches this matcher's pattern (and internally caches the true/false result to permit repeat invocations).
   size_t matches()
     /// @returns nonzero capture index (i.e. true) if the entire input matched this matcher's pattern, zero (i.e. false) otherwise
@@ -1778,7 +1779,7 @@ class PatternMatcher : public AbstractMatcher {
   const Pattern& pattern() const
     /// @returns reference to pattern object
   {
-    ASSERT(pat_ != nullptr);
+    assert(pat_ != nullptr);
     return *pat_;
   }
  protected:
@@ -1917,7 +1918,7 @@ class PatternMatcher<std::string> : public AbstractMatcher {
   const Pattern& pattern() const
     /// @returns reference to pattern string
   {
-    ASSERT(pat_ != nullptr);
+    assert(pat_ != nullptr);
     return *pat_;
   }
  protected:

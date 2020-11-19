@@ -126,11 +126,6 @@ Techniques used:
 #include <cassert>
 #include <cstdio>
 
-/// If ASSERT not defined, make ASSERT a no-op
-#ifndef ASSERT
-#define ASSERT(c)
-#endif
-
 #undef DBGLOG
 #undef DBGLOGN
 #undef DBGLOGA

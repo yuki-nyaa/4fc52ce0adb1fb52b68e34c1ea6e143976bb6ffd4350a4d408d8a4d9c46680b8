@@ -37,8 +37,9 @@
 #ifndef REFLEX_BOOSTMATCHER_H
 #define REFLEX_BOOSTMATCHER_H
 
-#include <reflex/absmatcher.h>
-#include <boost/regex.hpp>
+#include<cassert>
+#include<reflex/absmatcher.h>
+#include<boost/regex.hpp>
 
 namespace reflex {
 
@@ -173,7 +174,7 @@ class BoostMatcher : public PatternMatcher<boost::regex> {
     /// @returns a pair of size_t and string
   {
     if (itr_ == fin_)
-      return std::pair<size_t,const char*>(0, nullptr); 
+      return std::pair<size_t,const char*>(0, nullptr);
     size_t n = (*itr_).size();
     while (++grp_ < n)
       if ((*itr_)[grp_].matched)
@@ -350,7 +351,7 @@ class BoostMatcher : public PatternMatcher<boost::regex> {
       flg |= boost::regex_constants::match_not_null;
     else if (method == Const::MATCH)
       flg |= boost::regex_constants::match_continuous;
-    ASSERT(pat_ != nullptr);
+    assert(pat_ != nullptr);
     itr_ = boost::cregex_iterator(txt_, buf_ + end_, *pat_, flg);
   }
   boost::match_flag_type flg_; ///< boost::regex match flags

@@ -34,7 +34,9 @@
 @copyright (c) BSD-3 License - see LICENSE.txt
 */
 
-#include "reflex.h"
+#include"reflex.h"
+#include<iostream>
+#include<vector>
 
 /// Work around the Boost.Regex partial_match bug by forcing the generated scanner to buffer all input
 #define WITH_BOOST_PARTIAL_MATCH_BUG
@@ -142,6 +144,8 @@ static const char *options_table[] = {
   "8bit",
   nullptr // end of table
 };
+
+static std::vector<std::string> include_directories;
 
 /// @brief Table with regex library properties.
 ///
@@ -413,11 +417,17 @@ void Reflex::init(int argc, char **argv)
             help();
             break;
           case 'i':
-            options["case_insensitive"] = "true";
-            break;
-          case 'I':
             options["interactive"] = "true";
             break;
+          case 'I': {
+            ++arg;
+            if (*arg)
+              include_directories.emplace_back(arg);
+            else
+              help("missing directory name for option -I");
+            is_grouped = false;
+            break;
+          }
           case 'l':
             options["lex_compat"] = "true";
             break;
@@ -726,12 +736,49 @@ void Reflex::parse()
 }
 
 /// Parse the specified %%include file
-void Reflex::include(const std::string& filename)
+void Reflex::include(const std::string& filename,const bool sys)
 {
   FILE *file = nullptr;
-  fopen_s(&file, filename.c_str(), "r");
-  if (!file)
-    abort("cannot include file ", filename.c_str());
+  std::string fullname;
+  const char* REFLEX_INCLUDE = getenv("REFLEX_INCLUDE");
+
+  if(sys){
+    for(const std::string& s : include_directories){ // First search the "-I" dirs.
+      fullname = s+"/"+filename;
+      fopen_s(&file, fullname.c_str(), "r");
+      if(file)
+        goto search_end;
+    }
+    if(REFLEX_INCLUDE){ // Then comes the environment-defined dir.
+      fullname = std::string(REFLEX_INCLUDE) + "/"+ filename;
+      fopen_s(&file, fullname.c_str(), "r");
+      if(file)
+        goto search_end;
+    }
+    goto search_error;
+  }else{
+    fopen_s(&file, filename.c_str(), "r"); // First search the current dir.
+    if(file)
+      goto search_end;
+    for(const std::string& s : include_directories){ // Then comes the "-I" dirs.
+      fullname = s+"/"+filename;
+      fopen_s(&file, fullname.c_str(), "r");
+      if(file)
+        goto search_end;
+    }
+    if(REFLEX_INCLUDE){ // Finally the environment-defined dir.
+      fullname = std::string(REFLEX_INCLUDE) + "/"+filename;
+      fopen_s(&file, fullname.c_str(), "r");
+      if(file)
+        goto search_end;
+    }
+    goto search_error;
+  }
+
+  search_error:
+  abort("cannot include file ", filename.c_str());
+
+  search_end:
   std::string save_infile(infile);
   infile = filename;
   reflex::BufferedInput save_in(in);
@@ -843,19 +890,19 @@ bool Reflex::br(size_t pos, const char *s)
 }
 
 /// Advance pos to match case-insensitive initial part of the string s followed by white space, return true if OK
-bool Reflex::as(size_t& pos, const char *s)
+bool Reflex::as(size_t& pos, const char *s,bool include)
 {
   if (pos >= linelen || *s == '\0' || lower(line.at(pos)) != *s++)
     return false;
   while (++pos < linelen && *s != '\0' && lower(line.at(pos)) == *s++)
     continue;
-  return ws(pos);
+  return ws(pos,include);
 }
 
 /// Advance pos over whitespace, returns true if whitespace was found
-bool Reflex::ws(size_t& pos)
+bool Reflex::ws(size_t& pos,bool include)
 {
-  if (pos >= linelen || (pos > 0 && !std::isspace(line.at(pos))))
+  if (pos >= linelen || (!include && pos > 0 && !std::isspace(line.at(pos))))
     return false;
   while (pos < linelen && std::isspace(line.at(pos)))
     ++pos;
@@ -970,14 +1017,14 @@ std::string Reflex::get_start(size_t& pos)
 }
 
 /// Advance pos over quoted string, return string
-std::string Reflex::get_string(size_t& pos)
+std::string Reflex::get_string(size_t& pos,const char front = '"', const char back = '"')
 {
-  if (pos >= linelen || line.at(pos) != '"')
+  if (pos >= linelen || line.at(pos) != front)
     return "";
   std::string string;
-  while (++pos < linelen && line.at(pos) != '"')
+  while (++pos < linelen && line.at(pos) != back)
   {
-    if (line.at(pos) == '\\' && (line.at(pos + 1) == '"' || line.at(pos + 1) == '\\'))
+    if (line.at(pos) == '\\' && (line.at(pos + 1) == back || line.at(pos + 1) == '\\'))
       ++pos;
     string.push_back(line.at(pos));
   }
@@ -1440,18 +1487,23 @@ void Reflex::parse_section_1()
         if (linelen > 1 && line.at(0) == '%')
         {
           size_t pos = 1;
-          if (as(pos, "include"))
+          if (as(pos, "include",true))
           {
             do
             {
               std::string filename;
-              if (line.at(pos) == '"')
-                filename = get_string(pos); // %include "NAME"
-              else
-                filename = get_name(pos); // %include NAME
+              bool sys = false;
+              if (line.at(pos) == '"'){
+                sys = false;
+                filename = get_string(pos); // %include"FILE"
+              }
+              else if(line.at(pos)=='<'){
+                sys = true;
+                filename = get_string(pos,'<','>'); // %include<FILE>
+              }
               if (filename.empty())
                 error("bad file name");
-              include(filename);
+              include(filename,sys);
             } while (!nl(pos));
           }
           else
@@ -2022,8 +2074,6 @@ void Reflex::write_prelude()
         *out << option->second << '\n';
     }
   }
-  if (!options["debug"].empty())
-    *out << "\n// --debug option enables ASSERT:\n#define ASSERT(c) assert(c)\n";
   if (!options["perf_report"].empty())
     *out << "\n// --perf-report option requires a timer:\n#include <reflex/timer.h>\n";
 }
@@ -3300,7 +3350,7 @@ void Reflex::stats()
         option.append(";f=+").append(escape_bs(options["outfile"]));
       try
       {
-        reflex::Pattern pattern(patterns[start], option);
+        reflex::Pattern pattern(patterns[start], option); // This generates DFA and writes code.
         reflex::Pattern::Index accept = 1;
         for (size_t rule = 0; rule < rules[start].size(); ++rule)
           if (rules[start][rule].regex != "<<EOF>>" && rules[start][rule].regex != "<<DEFAULT>>")

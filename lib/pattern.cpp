@@ -1460,7 +1460,7 @@ void Pattern::compile(
         for (Positions::const_iterator p = pos.begin(); p != pos.end(); ++p)
           DBGLOGPOS(*p);
         DBGLOGN(" } = state %p", target_state);
-#endif        
+#endif
         while (lo <= max)
         {
           if (i->first.contains(lo))
@@ -1686,7 +1686,7 @@ void Pattern::compile_transition(
                 to.insert(p->negate(true));
               i->second.swap(to);
             }
-          }          
+          }
           if (k->lazy())
           {
 #if 1 // CHECKED algorithmic options: 7/31 this optimization works fine when trim_lazy adds non-lazy greedy state, but may increase the total number of states:
@@ -2766,7 +2766,7 @@ void Pattern::export_dfa(const DFA::State *start) const
             if (i->ticked())
               ::fprintf(file, "'");
             if (i->negate())
-              ::fprintf(file, "-");              
+              ::fprintf(file, "-");
             if (k++ % n)
               sep = " ";
             else

@@ -37,8 +37,9 @@
 #ifndef REFLEX_STDMATCHER_H
 #define REFLEX_STDMATCHER_H
 
-#include <reflex/absmatcher.h>
-#include <regex>
+#include<cassert>
+#include<reflex/absmatcher.h>
+#include<regex>
 
 namespace reflex {
 
@@ -172,7 +173,7 @@ class StdMatcher : public PatternMatcher<std::regex> {
     /// @returns a pair of size_t and string
   {
     if (itr_ == fin_)
-      return std::pair<size_t,const char*>(0, nullptr); 
+      return std::pair<size_t,const char*>(0, nullptr);
     size_t n = (*itr_).size();
     while (++grp_ < n)
       if ((*itr_)[grp_].matched)
@@ -357,7 +358,7 @@ class StdMatcher : public PatternMatcher<std::regex> {
       flg |= std::regex_constants::match_not_null;
     else if (method == Const::MATCH)
       flg |= std::regex_constants::match_continuous;
-    ASSERT(pat_ != nullptr);
+    assert(pat_ != nullptr);
     itr_ = std::cregex_iterator(txt_, buf_ + end_, *pat_, flg);
   }
   std::regex_constants::match_flag_type flg_; ///< std::regex match flags
@@ -403,7 +404,7 @@ class StdEcmaMatcher : public StdMatcher {
     :
       StdMatcher(&pattern, input, opt)
   {
-    ASSERT(!(pattern.flags() & (std::regex::basic | std::regex::extended | std::regex::awk)));
+    assert(!(pattern.flags() & (std::regex::basic | std::regex::extended | std::regex::awk)));
     own_ = false;
   }
   using StdMatcher::pattern;
@@ -411,14 +412,14 @@ class StdEcmaMatcher : public StdMatcher {
   virtual PatternMatcher& pattern(const Pattern& pattern) ///< std::regex for this matcher
     /// @returns this matcher.
   {
-    ASSERT(!(pattern.flags() & (std::regex::basic | std::regex::extended | std::regex::awk)));
+    assert(!(pattern.flags() & (std::regex::basic | std::regex::extended | std::regex::awk)));
     return StdMatcher::pattern(pattern);
   }
   /// Set the pattern to use with this matcher (the given pattern is shared and must be persistent), fails when a POSIX std::regex is given.
   virtual PatternMatcher& pattern(const Pattern *pattern) ///< std::regex for this matcher
     /// @returns this matcher.
   {
-    ASSERT(!(pattern.flags() & (std::regex::basic | std::regex::extended | std::regex::awk)));
+    assert(!(pattern.flags() & (std::regex::basic | std::regex::extended | std::regex::awk)));
     return StdMatcher::pattern(pattern);
   }
   /// Set the pattern from a regex string to use with this matcher.
@@ -484,7 +485,7 @@ class StdPosixMatcher : public StdMatcher {
     :
       StdMatcher(&pattern, input, opt)
   {
-    ASSERT(pattern.flags() & std::regex::awk);
+    assert(pattern.flags() & std::regex::awk);
     own_ = false;
   }
   using StdMatcher::pattern;
@@ -492,14 +493,14 @@ class StdPosixMatcher : public StdMatcher {
   virtual PatternMatcher& pattern(const Pattern& pattern) ///< std::regex for this matcher
     /// @returns this matcher.
   {
-    ASSERT(pattern.flags() & std::regex::awk);
+    assert(pattern.flags() & std::regex::awk);
     return StdMatcher::pattern(pattern);
   }
   /// Set the pattern to use with this matcher (the given pattern is shared and must be persistent), fails when a non-POSIX ERE std::regex is given.
   virtual PatternMatcher& pattern(const Pattern *pattern) ///< std::regex for this matcher
     /// @returns this matcher.
   {
-    ASSERT(pattern.flags() & std::regex::awk);
+    assert(pattern.flags() & std::regex::awk);
     return StdMatcher::pattern(pattern);
   }
   /// Set the pattern from a regex string to use with this matcher.

@@ -142,7 +142,7 @@ class Reflex
   void        parse_section_1();
   void        parse_section_2();
   void        parse_section_3();
-  void        include(const std::string& filename);
+  void        include(const std::string& filename,const bool sys=false);
   void        write();
   void        write_banner(const char *title);
   void        write_prelude();
@@ -168,8 +168,8 @@ class Reflex
   bool        skip_comment(size_t& pos);
   bool        is(const char *s);
   bool        br(size_t pos, const char *s = nullptr);
-  bool        as(size_t& pos, const char *s);
-  bool        ws(size_t& pos);
+  bool        as(size_t& pos, const char *s,bool=false);
+  bool        ws(size_t& pos,bool=false);
   bool        eq(size_t& pos);
   bool        nl(size_t& pos);
   bool        is_code();
@@ -179,7 +179,7 @@ class Reflex
   std::string get_name(size_t& pos);
   std::string get_option(size_t& pos);
   std::string get_start(size_t& pos);
-  std::string get_string(size_t& pos);
+  std::string get_string(size_t& pos,const char,const char);
   bool        get_pattern(size_t& pos, std::string& pattern, std::string& regex);
   std::string get_namespace(size_t& pos);
   std::string get_code(size_t& pos);

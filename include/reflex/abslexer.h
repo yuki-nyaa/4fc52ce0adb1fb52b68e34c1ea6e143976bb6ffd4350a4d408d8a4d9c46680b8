@@ -37,10 +37,11 @@
 #ifndef REFLEX_ABSLEXER_H
 #define REFLEX_ABSLEXER_H
 
-#include <reflex/input.h>
-#include <reflex/absmatcher.h>
-#include <sstream>
-#include <stack>
+#include<reflex/input.h>
+#include<reflex/absmatcher.h>
+#include<cassert>
+#include<sstream>
+#include<stack>
 
 namespace reflex {
 
@@ -224,7 +225,7 @@ class AbstractLexer {
   inline Matcher& matcher() const
     /// @returns reference to the current matcher
   {
-    ASSERT(has_matcher());
+    assert(has_matcher());
     return *matcher_;
   }
   /// Returns a pointer to the current matcher, nullptr if none was set.
