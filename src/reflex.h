@@ -148,7 +148,8 @@ class Reflex
   void        write_prelude();
   void        write_defines();
   void        write_class();
-  void        write_section_top();
+  void        write_section_htop();
+  void        write_section_cpptop();
   void        write_section_class();
   void        write_section_init();
   void        write_perf_report();
@@ -173,7 +174,9 @@ class Reflex
   bool        eq(size_t& pos);
   bool        nl(size_t& pos);
   bool        is_code();
-  bool        is_topcode();
+  bool        is_qcode(const char*);
+  bool        is_htopcode();
+  bool        is_cpptopcode();
   bool        is_classcode();
   bool        is_initcode();
   std::string get_name(size_t& pos);
@@ -201,9 +204,10 @@ class Reflex
   Starts                inclusive;     ///< inclusive start conditions
   StringMap             definitions;   ///< map of {name} to regex
   RulesMap              rules;         ///< <Start_i>regex_j action for Start i Rule j
-  Codes                 section_top;   ///< %top{ user code %} in section 1 container
-  Codes                 section_class; ///< %class{ class code %} in section 1 container
-  Codes                 section_init;  ///< %init{ init code %} in section 1 container
+  Codes                 section_htop;   ///< %code_htop{ user code %} in section 1 container
+  Codes                 section_cpptop;   ///< %code_cpptop{ user code %} in section 1 container
+  Codes                 section_class; ///< %code_class{ class code %} in section 1 container
+  Codes                 section_init;  ///< %code_init{ init code %} in section 1 container
   Codes                 section_1;     ///< %{ user code %} in section 1 container
   CodesMap              section_2;     ///< lexer user code in section 2 container
   Codes                 section_3;     ///< main user code in section 3 container
