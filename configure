@@ -4337,7 +4337,7 @@ _ACEOF
 
 
 # if CXXFLAGS is undefined, set it to our preferred default flags
-: ${CXXFLAGS="-Wall -Wextra -Wunused -O2"}
+: ${CXXFLAGS="-Wextra -Wunused -O2"}
 
 ac_ext=cpp
 ac_cpp='$CXXCPP $CPPFLAGS'

@@ -13,7 +13,7 @@ AC_TYPE_UINT32_T
 AC_TYPE_UINT64_T
 
 # if CXXFLAGS is undefined, set it to our preferred default flags
-: ${CXXFLAGS="-Wall -Wextra -Wunused -O2"}
+: ${CXXFLAGS="-Wextra -Wunused -O2"}
 
 AC_LANG([C++])
 AC_PROG_CXX
@@ -103,7 +103,7 @@ if test "x$with_no_neon" = "xno"; then
                     [mneon_ok=no])
   if test "x$mneon_ok" = "xyes"; then
     SIMD_FLAGS="-DHAVE_NEON"
-  else  
+  else
     save_CXXFLAGS=$CXXFLAGS
     CXXFLAGS="-march=native"
     AC_PREPROC_IFELSE([AC_LANG_PROGRAM([[#include <arm_neon.h>]], [[uint64x2_t n; uint64_t m = vgetq_lane_u64(n, 0);]])],
