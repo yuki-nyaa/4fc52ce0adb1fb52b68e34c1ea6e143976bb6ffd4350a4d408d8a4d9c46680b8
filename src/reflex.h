@@ -149,6 +149,7 @@ class Reflex
   void        write_defines();
   void        write_class();
   void        write_section_htop();
+  void        write_section_hafter();
   void        write_section_cpptop();
   void        write_section_class();
   void        write_section_init();
@@ -176,6 +177,7 @@ class Reflex
   bool        is_code();
   bool        is_qcode(const char*);
   bool        is_htopcode();
+  bool        is_haftercode();
   bool        is_cpptopcode();
   bool        is_classcode();
   bool        is_initcode();
@@ -205,6 +207,7 @@ class Reflex
   StringMap             definitions;   ///< map of {name} to regex
   RulesMap              rules;         ///< <Start_i>regex_j action for Start i Rule j
   Codes                 section_htop;   ///< %code_htop{ user code %} in section 1 container
+  Codes                 section_hafter;   ///< %code_hafter{ user code %} in section 1 container
   Codes                 section_cpptop;   ///< %code_cpptop{ user code %} in section 1 container
   Codes                 section_class; ///< %code_class{ class code %} in section 1 container
   Codes                 section_init;  ///< %code_init{ init code %} in section 1 container

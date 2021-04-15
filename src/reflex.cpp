@@ -945,6 +945,12 @@ bool Reflex::is_htopcode()
   return br(0, "%code_htop");
 }
 
+/// Check if current line starts a block of %code_hafter code
+bool Reflex::is_haftercode()
+{
+  return br(0, "%code_hafter");
+}
+
 /// Check if current line starts a block of %code_cpptop code
 bool Reflex::is_cpptopcode()
 {
@@ -1186,7 +1192,7 @@ std::string Reflex::get_code(size_t& pos)
   size_t blk = 0, lev = 0;
   enum { CODE, STRING, CHAR, COMMENT } tok = CODE;
   bool is_usercode = pos == 0 && is("%{");
-  if (pos == 0 && (is_usercode || is_htopcode() || is_cpptopcode() || is_classcode() || is_initcode()))
+  if (pos == 0 && (is_usercode || is_htopcode() || is_haftercode() || is_cpptopcode() || is_classcode() || is_initcode()))
   {
     ++blk;
     pos = linelen;
@@ -1478,6 +1484,13 @@ void Reflex::parse_section_1()
         size_t this_lineno = lineno;
         std::string code = get_code(pos);
         section_htop.push_back(Code(code, infile, this_lineno));
+      }
+      else if (is_haftercode())
+      {
+        size_t pos = 0;
+        size_t this_lineno = lineno;
+        std::string code = get_code(pos);
+        section_hafter.push_back(Code(code, infile, this_lineno));
       }
       else if (is_cpptopcode())
       {
@@ -1909,6 +1922,7 @@ void Reflex::write()
     if (options["bison_cc"].empty() && (!options["bison"].empty() || !options["reentrant"].empty() || !options["bison_bridge"].empty() || !options["bison_locations"].empty()))
       *out << "\n#ifdef __cplusplus\n";
     write_class();
+    write_section_hafter();
     if (!options["bison_cc"].empty())
     {
       write_banner("BISON C++");
@@ -2432,6 +2446,16 @@ void Reflex::write_section_htop()
   {
     write_banner("SECTION 1: %code_htop user code");
     write_code(section_htop);
+  }
+}
+
+/// Write %%code_hafter code to lex.yy.cpp
+void Reflex::write_section_hafter()
+{
+  if (!section_hafter.empty())
+  {
+    write_banner("SECTION 1: %code_hafter user code");
+    write_code(section_hafter);
   }
 }
 
