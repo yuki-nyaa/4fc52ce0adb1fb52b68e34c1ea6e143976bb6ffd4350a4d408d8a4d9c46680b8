@@ -300,7 +300,7 @@ class AbstractMatcher {
     if (own_)
     {
 #if defined(WITH_REALLOC)
-#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
+#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__)
       _aligned_free(static_cast<void*>(buf_));
 #else
       std::free(static_cast<void*>(buf_));
@@ -480,7 +480,7 @@ class AbstractMatcher {
       if (own_)
       {
 #if defined(WITH_REALLOC)
-#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
+#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__)
         _aligned_free(static_cast<void*>(buf_));
 #else
         std::free(static_cast<void*>(buf_));
@@ -1476,7 +1476,7 @@ class AbstractMatcher {
         max_ *= 2;
       DBGLOG("Expand buffer to %zu bytes", max_);
 #if defined(WITH_REALLOC)
-#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
+#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__)
       char *newbuf = static_cast<char*>(_aligned_realloc(static_cast<void*>(buf_), max_, 4096));
 #else
       char *newbuf = static_cast<char*>(std::realloc(static_cast<void*>(buf_), max_));
@@ -1526,7 +1526,7 @@ class AbstractMatcher {
         num_ += gap;
 #if defined(WITH_REALLOC)
         std::memmove(buf_, txt_, end_);
-#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
+#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__)
         char *newbuf = static_cast<char*>(_aligned_realloc(static_cast<void*>(buf_), max_, 4096));
 #else
         char *newbuf = static_cast<char*>(std::realloc(static_cast<void*>(buf_), max_));
