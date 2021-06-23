@@ -88,6 +88,7 @@ static const char *options_table[] = {
   "lex",
   "lex_compat",
   "lexer",
+  "templated_lexer",
   "main",
   "matcher",
   "namespace",
@@ -940,35 +941,44 @@ bool Reflex::is_qcode(const char* qualifier){
 }
 
 /// Check if current line starts a block of %code_htop code
-bool Reflex::is_htopcode()
+bool Reflex::is_code_htop()
 {
   return br(0, "%code_htop");
 }
 
 /// Check if current line starts a block of %code_hafter code
-bool Reflex::is_haftercode()
+bool Reflex::is_code_hafter()
 {
   return br(0, "%code_hafter");
 }
 
 /// Check if current line starts a block of %code_cpptop code
-bool Reflex::is_cpptopcode()
+bool Reflex::is_code_cpptop()
 {
   return br(0, "%code_cpptop");
 }
 
 /// Check if current line starts a block of %code_class code
-bool Reflex::is_classcode()
+bool Reflex::is_code_class()
 {
   return br(0, "%code_class");
 }
 
 /// Check if current line starts a block of %code_init code
-bool Reflex::is_initcode()
+bool Reflex::is_code_init()
 {
   return br(0, "%code_init");
 }
-
+/// Check if current line starts a block of %code_lextop code
+bool Reflex::is_code_lextop()
+{
+  return br(0, "%code_lextop");
+}
+/// Check if current line starts a block of %code_templateclass code
+bool Reflex::is_code_templateclass()
+{
+  return br(0, "%code_templateclass");
+}
 /// Advance pos over name (letters, digits, ., -, _ or any non-ASCII character > U+007F), return name
 std::string Reflex::get_name(size_t& pos)
 {
@@ -1184,7 +1194,7 @@ bool Reflex::get_pattern(size_t& pos, std::string& pattern, std::string& regex)
   return !regex.empty();
 }
 
-/// Get line(s) of code, %{ %}, %%code_htop, %%code_cpptop %%code_class, and %%code_init
+/// Get line(s) of code, %{ %}, %%code_htop, %%code_cpptop, %%code_class, %%code_init, %%code_lextop, %%code_templateclass.
 std::string Reflex::get_code(size_t& pos)
 {
   std::string code;
@@ -1192,7 +1202,7 @@ std::string Reflex::get_code(size_t& pos)
   size_t blk = 0, lev = 0;
   enum { CODE, STRING, CHAR, COMMENT } tok = CODE;
   bool is_usercode = pos == 0 && is("%{");
-  if (pos == 0 && (is_usercode || is_htopcode() || is_haftercode() || is_cpptopcode() || is_classcode() || is_initcode()))
+  if (pos == 0 && (is_usercode || is_code_htop() || is_code_hafter() || is_code_cpptop() || is_code_class() || is_code_init() || is_code_lextop() || is_code_templateclass()))
   {
     ++blk;
     pos = linelen;
@@ -1478,40 +1488,54 @@ void Reflex::parse_section_1()
         std::string code = get_code(pos);
         section_1.push_back(Code(code, infile, this_lineno));
       }
-      else if (is_htopcode())
+      else if (is_code_htop())
       {
         size_t pos = 0;
         size_t this_lineno = lineno;
         std::string code = get_code(pos);
         section_htop.push_back(Code(code, infile, this_lineno));
       }
-      else if (is_haftercode())
+      else if (is_code_hafter())
       {
         size_t pos = 0;
         size_t this_lineno = lineno;
         std::string code = get_code(pos);
         section_hafter.push_back(Code(code, infile, this_lineno));
       }
-      else if (is_cpptopcode())
+      else if (is_code_cpptop())
       {
         size_t pos = 0;
         size_t this_lineno = lineno;
         std::string code = get_code(pos);
         section_cpptop.push_back(Code(code, infile, this_lineno));
       }
-      else if (is_classcode())
+      else if (is_code_class())
       {
         size_t pos = 0;
         size_t this_lineno = lineno;
         std::string code = get_code(pos);
         section_class.push_back(Code(code, infile, this_lineno));
       }
-      else if (is_initcode())
+      else if (is_code_init())
       {
         size_t pos = 0;
         size_t this_lineno = lineno;
         std::string code = get_code(pos);
         section_init.push_back(Code(code, infile, this_lineno));
+      }
+      else if (is_code_lextop())
+      {
+        size_t pos = 0;
+        size_t this_lineno = lineno;
+        std::string code = get_code(pos);
+        section_lextop.push_back(Code(code, infile, this_lineno));
+      }
+      else if (is_code_templateclass())
+      {
+        size_t pos = 0;
+        size_t this_lineno = lineno;
+        std::string code = get_code(pos);
+        section_templateclass.push_back(Code(code, infile, this_lineno));
       }
       else
       {
@@ -2194,6 +2218,7 @@ void Reflex::write_class()
     write_namespace_open();
     *out << '\n';
   }
+  write_section_templateclass();
   *out <<
     "class " << lexer << " : public " << base << " {\n";
   write_section_class();
@@ -2487,6 +2512,23 @@ void Reflex::write_section_init()
   if (!options["perf_report"].empty())
     *out << "    set_perf_report();\n";
   *out << "  }\n";
+}
+
+/// Write %%code_lextop code to lex.yy.cpp
+void Reflex::write_section_lextop()
+{
+  if (!section_lextop.empty())
+  {
+    write_banner("SECTION 1: %code_lextop user code");
+    write_code(section_lextop);
+  }
+}
+
+/// Write %%code_templateclass code to lex.yy.cpp
+void Reflex::write_section_templateclass()
+{
+  if (!section_templateclass.empty())
+    write_code(section_templateclass);
 }
 
 /// Write perf_report code to lex.yy.cpp
@@ -2944,6 +2986,7 @@ void Reflex::write_lexer()
     }
     *out << '\n';
   }
+  write_section_templateclass();
   *out << token_type << " ";
   if (!options["namespace"].empty())
     write_namespace_scope();
@@ -2951,6 +2994,8 @@ void Reflex::write_lexer()
     *out << options["yyclass"];
   else if (!options["class"].empty())
     *out << options["class"];
+  else if (!options["templated_lexer"].empty())
+    *out << options["templated_lexer"];
   else
     *out << options["lexer"];
   if (!options["bison_complete"].empty())
@@ -2984,6 +3029,7 @@ void Reflex::write_lexer()
       *out << "  static const " << library->pattern << " PATTERN_" << conditions[start] << "(REGEX_" << conditions[start] << ");\n";
     }
   }
+  write_section_lextop();
   *out <<
     "  if (!has_matcher())\n"
     "  {\n";

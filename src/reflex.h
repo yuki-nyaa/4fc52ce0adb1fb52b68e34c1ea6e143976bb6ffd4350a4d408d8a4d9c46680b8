@@ -153,6 +153,8 @@ class Reflex
   void        write_section_cpptop();
   void        write_section_class();
   void        write_section_init();
+  void        write_section_lextop();
+  void        write_section_templateclass();
   void        write_perf_report();
   void        write_section_1();
   void        write_section_3();
@@ -176,11 +178,13 @@ class Reflex
   bool        nl(size_t& pos);
   bool        is_code();
   bool        is_qcode(const char*);
-  bool        is_htopcode();
-  bool        is_haftercode();
-  bool        is_cpptopcode();
-  bool        is_classcode();
-  bool        is_initcode();
+  bool        is_code_htop();
+  bool        is_code_hafter();
+  bool        is_code_cpptop();
+  bool        is_code_class();
+  bool        is_code_init();
+  bool        is_code_lextop();
+  bool        is_code_templateclass();
   std::string get_name(size_t& pos);
   std::string get_option(size_t& pos);
   std::string get_start(size_t& pos);
@@ -211,6 +215,8 @@ class Reflex
   Codes                 section_cpptop;   ///< %code_cpptop{ user code %} in section 1 container
   Codes                 section_class; ///< %code_class{ class code %} in section 1 container
   Codes                 section_init;  ///< %code_init{ init code %} in section 1 container
+  Codes                 section_lextop;  ///< %code_lextop{ user code %} in section 1 container
+  Codes                 section_templateclass;  ///< %code_templateclass{ user code %} in section 1 container
   Codes                 section_1;     ///< %{ user code %} in section 1 container
   CodesMap              section_2;     ///< lexer user code in section 2 container
   Codes                 section_3;     ///< main user code in section 3 container
