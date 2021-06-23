@@ -2394,7 +2394,7 @@ void Reflex::write_class()
     else
     {
       *out <<
-        "  virtual " << token_type << " " << lex << "(" << params << ")";
+        "  " << token_type << " " << lex << "(" << params << ")";
     }
     if (options["class"].empty())
       *out << ";\n";

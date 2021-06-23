@@ -35,6 +35,7 @@
 # Executables
 a.out
 *.exe
+bin/**
 
 # Other
 .DS_Store
