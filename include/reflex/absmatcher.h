@@ -569,7 +569,7 @@ class AbstractMatcher {
   }
   /// Returns the match as a u32string, converted from UTF-8 text(), may include matched \0s.
   std::u32string u32str() const
-    /// @returns wide string with text matched
+    /// @returns u32string with text matched
   {
     return u32cs(txt_, len_);
   }

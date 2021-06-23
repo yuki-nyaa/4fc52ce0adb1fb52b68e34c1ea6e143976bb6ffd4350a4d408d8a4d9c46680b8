@@ -288,23 +288,23 @@ class AbstractLexer {
   {
     return matcher().str();
   }
-  /// Returns wide string with a copy of the text matched.
-  inline std::wstring wstr() const
+  /// Returns u32string with a copy of the text matched.
+  inline std::u32string u32str() const
     /// @returns matched text
   {
-    return matcher().wstr();
+    return matcher().u32str();
   }
   /// Returns the first 8-bit character of the text matched.
-  inline int chr() const
+  inline char chr() const
     /// @returns 8-bit char
   {
     return matcher().chr();
   }
-  /// Returns the first wide character of the text matched.
-  inline int wchr() const
-    /// @returns wide char (UTF-8 converted to Unicode)
+  /// Returns the first u32 character of the text matched.
+  inline char32_t u32chr() const
+    /// @returns char32_t (UTF-8 converted to Unicode)
   {
-    return matcher().wchr();
+    return matcher().u32chr();
   }
   /// Returns the matched text size in number of bytes.
   inline size_t size() const
@@ -312,11 +312,11 @@ class AbstractLexer {
   {
     return matcher().size();
   }
-  /// Returns the matched text size in number of (wide) characters.
-  inline size_t wsize() const
-    /// @returns number of (wide) characters matched
+  /// Returns the length of the matched text in number of u32 characters. This is the same as `wsize()`.
+  size_t u32size() const
+    /// @returns the length of the match in number of u32 (multibyte UTF-8) characters
   {
-    return matcher().wsize();
+    return matcher().u32size();
   }
   /// Returns the line number of matched text.
   inline size_t lineno() const
