@@ -75,32 +75,41 @@ namespace convert_flag {
 ///
 /// A regex library signature is a string of the form `"decls:escapes?+."`.
 ///
-/// The optional `"decls:"` part specifies which modifiers and other special `(?...)` constructs are supported:
-/// - non-capturing group `(?:...)` is supported
-/// - one or all of "imsx" specify which (?ismx) modifiers are supported:
-/// - 'i' specifies that `(?i...)` case-insensitive matching is supported
-/// - 'm' specifies that `(?m...)` multiline mode is supported for the ^ and $ anchors
-/// - 's' specifies that `(?s...)` dotall mode is supported
-/// - 'x' specifies that `(?x...)` freespace mode is supported
-/// - `#` specifies that `(?#...)` comments are supported
-/// - `=` specifies that `(?=...)` lookahead is supported
-/// - `<` specifies that `(?<...)` lookbehind is supported
-/// - `!` specifies that `(?!=...)` and `(?!<...)` are supported
-/// - `^` specifies that `(?^...)` negative (reflex) patterns are supported
+/// The optional `"decls:"` part specifies which modifiers and special `(?...)` constructs are enabled:
+/// - 'i' specifies that `(?i...)` case-insensitive mode is enabled
+/// - 'm' specifies that `(?m...)` multiline mode is enabled for the ^ and $ anchors
+/// - 's' specifies that `(?s...)` dotall mode is enabled
+/// - 'u' specifies that `(?u...)` unicode mode is enabled
+/// - 'x' specifies that `(?x...)` freespace mode is enabled
+/// - `:` specifies that `(?:...)` non-capturing group is enabled
+/// - `#` specifies that `(?#...)` comments are enabled
+/// - `=` specifies that `(?=...)` lookahead is enabled
+/// - `<` specifies that `(?<...)` lookbehind and <name> groups are enabled
+/// - `>` specifies that `(?>...)` atomic groups are enabled
+/// - `|` specifies that `(?|...)` group resets are enabled
+/// - `&` specifies that `(?&...)` subroutines are enabled
+/// - `(` specifies that `(?(...)` conditionals are enabled
+/// - `!` specifies that `(?!=...)` and `(?!<...)` are enabled
+/// - `^` specifies that `(?^...)` negative (reflex) patterns are enabled
+/// - `*` specifies that `(*VERB)` verbs are enabled ?
+/// - `<` specifies that `(?'...)` 'name' groups are enabled ?
+/// - ... any other letter or digit modifier, e.g. `(?123)`
 ///
-/// The `"escapes"` characters specify which standard escapes are supported:
+/// The `"escapes"` characters specify which standard escapes are enabled:
 /// - `a` for `\a` (BEL U+0007)
-/// - `b` for `\b` (BS U+0008) in brackets `[\b]` only AND the `\b` word boundary
+/// - `b` for `\b` the word boundary
 /// - `c` for `\cX` control character specified by `X` modulo 32
-/// - `d` for `\d` ASCII digit `[0-9]`
+/// - `d` for `\d` digit `[0-9]` ASCII or Unicode digit
 /// - `e` for `\e` ESC U+001B
 /// - `f` for `\f` FF U+000C
+/// - `g` for `\g` group capture e.g. \g{1}
 /// - `h` for `\h` ASCII blank `[ \t]` (SP U+0020 or TAB U+0009)
 /// - `i` for `\i` reflex indent anchor
 /// - `j` for `\j` reflex dedent anchor
-/// - `j` for `\k` reflex undent anchor
-/// - `l` for `\l` ASCII lower case letter `[a-z]`
+/// - `k` for `\k` reflex undent anchor or group capture e.g. \k{1}
+/// - `l` for `\l` lower case letter `[a-z]` ASCII or Unicode letter
 /// - `n` for `\n` LF U+000A
+/// - `o` for `\o` octal ASCII or Unicode code
 /// - `p` for `\p{C}` Unicode character classes, also implies Unicode ., \x{X}, \l, \u, \d, \s, \w, and UTF-8 patterns
 /// - `r` for `\r` CR U+000D
 /// - `s` for `\s` space (SP, TAB, LF, VT, FF, or CR)
@@ -140,14 +149,14 @@ namespace convert_flag {
 /// used in lexer specifications.
 ///
 /// The optional `"?+"` specify lazy and possessive support:
-/// - `?` lazy quantifiers for repeats are supported
-/// - `+` possessive quantifiers for repeats are supported
+/// - `?` lazy quantifiers for repeats are enabled
+/// - `+` possessive quantifiers for repeats are enabled
 ///
 /// An optional `"."` (dot) specifies that dot matches any character except newline.
 /// A dot is implied by the presence of the 's' modifier, and can be omitted in that case.
 ///
 /// An optional `"["` specifies that bracket list union, intersection, and
-/// subtraction are supported, i.e. [\w--[a-z]].
+/// subtraction are enabled, i.e. [\w--[a-z]].
 std::string convert(
     const char                              *pattern,                    ///< regex string pattern to convert
     const char                              *signature,                  ///< regex library signature
