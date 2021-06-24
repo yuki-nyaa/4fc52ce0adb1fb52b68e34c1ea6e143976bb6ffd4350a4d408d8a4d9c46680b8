@@ -3361,10 +3361,8 @@ void Reflex::write_regex(const std::string *condition, const std::string& regex)
         *out << "'\\\\',";
       else if (*i == '\'')
         *out << "'\\'',";
-      else if (std::isprint(*i))
-        *out << "'" << *i << "', ";
       else
-        *out << static_cast<unsigned int>(*i) << ", ";
+        *out << "'" << *i << "', ";
     }
     *out << "0 }";
   }
