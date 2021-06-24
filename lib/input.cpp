@@ -733,7 +733,7 @@ void Input::file_init(file_encoding_type enc)
       }
       break;
     }
-    if (handler_ == NULL || feof(file_) || (*handler_)() == 0)
+    if (handler_ == nullptr || feof(file_) || (*handler_)() == 0)
       break;
   }
 #if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
