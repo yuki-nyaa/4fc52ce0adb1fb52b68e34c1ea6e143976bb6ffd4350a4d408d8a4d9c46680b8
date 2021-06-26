@@ -287,49 +287,47 @@ With reflex::BufferedInput::streambuf to create a buffered std::istream:
 */
 class Input {
  public:
-  /// Common file_encoding constants type.
-  typedef unsigned short file_encoding_type;
   /// Common file_encoding constants.
-  struct file_encoding {
-    static const file_encoding_type plain      =  0; ///< plain octets: 7-bit ASCII, 8-bit binary or UTF-8 without BOM detected
-    static const file_encoding_type utf8       =  1; ///< UTF-8 with BOM detected
-    static const file_encoding_type utf16be    =  2; ///< UTF-16 big endian
-    static const file_encoding_type utf16le    =  3; ///< UTF-16 little endian
-    static const file_encoding_type utf32be    =  4; ///< UTF-32 big endian
-    static const file_encoding_type utf32le    =  5; ///< UTF-32 little endian
-    static const file_encoding_type latin      =  6; ///< ISO-8859-1, Latin-1
-    static const file_encoding_type cp437      =  7; ///< DOS CP 437
-    static const file_encoding_type cp850      =  8; ///< DOS CP 850
-    static const file_encoding_type cp858      =  9; ///< DOS CP 858
-    static const file_encoding_type ebcdic     = 10; ///< EBCDIC
-    static const file_encoding_type cp1250     = 11; ///< Windows CP 1250
-    static const file_encoding_type cp1251     = 12; ///< Windows CP 1251
-    static const file_encoding_type cp1252     = 13; ///< Windows CP 1252
-    static const file_encoding_type cp1253     = 14; ///< Windows CP 1253
-    static const file_encoding_type cp1254     = 15; ///< Windows CP 1254
-    static const file_encoding_type cp1255     = 16; ///< Windows CP 1255
-    static const file_encoding_type cp1256     = 17; ///< Windows CP 1256
-    static const file_encoding_type cp1257     = 18; ///< Windows CP 1257
-    static const file_encoding_type cp1258     = 19; ///< Windows CP 1258
-    static const file_encoding_type iso8859_2  = 20; ///< ISO-8859-2, Latin-2
-    static const file_encoding_type iso8859_3  = 21; ///< ISO-8859-3, Latin-3
-    static const file_encoding_type iso8859_4  = 22; ///< ISO-8859-4, Latin-4
-    static const file_encoding_type iso8859_5  = 23; ///< ISO-8859-5, Cyrillic
-    static const file_encoding_type iso8859_6  = 24; ///< ISO-8859-6, Arabic
-    static const file_encoding_type iso8859_7  = 25; ///< ISO-8859-7, Greek
-    static const file_encoding_type iso8859_8  = 26; ///< ISO-8859-8, Hebrew
-    static const file_encoding_type iso8859_9  = 27; ///< ISO-8859-9, Latin-5
-    static const file_encoding_type iso8859_10 = 28; ///< ISO-8859-10, Latin-6
-    static const file_encoding_type iso8859_11 = 29; ///< ISO-8859-11, Thai
-    static const file_encoding_type iso8859_13 = 30; ///< ISO-8859-13, Latin-7
-    static const file_encoding_type iso8859_14 = 31; ///< ISO-8859-14, Latin-8
-    static const file_encoding_type iso8859_15 = 32; ///< ISO-8859-15, Latin-9
-    static const file_encoding_type iso8859_16 = 33; ///< ISO-8859-16
-    static const file_encoding_type macroman   = 34; ///< Macintosh Roman with CR to LF translation
-    static const file_encoding_type koi8_r     = 35; ///< KOI8-R
-    static const file_encoding_type koi8_u     = 36; ///< KOI8-U
-    static const file_encoding_type koi8_ru    = 37; ///< KOI8-RU
-    static const file_encoding_type custom     = 38; ///< custom code page
+  enum struct file_encoding : unsigned char  {
+    plain, ///< plain octets: 7-bit ASCII, 8-bit binary or UTF-8 without BOM detected
+    utf8, ///< UTF-8 with BOM detected
+    utf16be, ///< UTF-16 big endian
+    utf16le, ///< UTF-16 little endian
+    utf32be, ///< UTF-32 big endian
+    utf32le, ///< UTF-32 little endian
+    latin, ///< ISO-8859-1, Latin-1
+    cp437, ///< DOS CP 437
+    cp850, ///< DOS CP 850
+    cp858, ///< DOS CP 858
+    ebcdic, ///< EBCDIC
+    cp1250, ///< Windows CP 1250
+    cp1251, ///< Windows CP 1251
+    cp1252, ///< Windows CP 1252
+    cp1253, ///< Windows CP 1253
+    cp1254, ///< Windows CP 1254
+    cp1255, ///< Windows CP 1255
+    cp1256, ///< Windows CP 1256
+    cp1257, ///< Windows CP 1257
+    cp1258, ///< Windows CP 1258
+    iso8859_2, ///< ISO-8859-2, Latin-2
+    iso8859_3, ///< ISO-8859-3, Latin-3
+    iso8859_4, ///< ISO-8859-4, Latin-4
+    iso8859_5, ///< ISO-8859-5, Cyrillic
+    iso8859_6, ///< ISO-8859-6, Arabic
+    iso8859_7, ///< ISO-8859-7, Greek
+    iso8859_8, ///< ISO-8859-8, Hebrew
+    iso8859_9, ///< ISO-8859-9, Latin-5
+    iso8859_10, ///< ISO-8859-10, Latin-6
+    iso8859_11, ///< ISO-8859-11, Thai
+    iso8859_13, ///< ISO-8859-13, Latin-7
+    iso8859_14, ///< ISO-8859-14, Latin-8
+    iso8859_15, ///< ISO-8859-15, Latin-9
+    iso8859_16, ///< ISO-8859-16
+    macroman, ///< Macintosh Roman with CR to LF translation
+    koi8_r, ///< KOI8-R
+    koi8_u, ///< KOI8-U
+    koi8_ru, ///< KOI8-RU
+    custom, ///< custom code page
   };
   /// FILE* handler functor base class to handle FILE* errors and non-blocking FILE* reads
   struct Handler { virtual int operator()() = 0; };
@@ -457,7 +455,7 @@ class Input {
   /// Construct input character sequence from an open FILE* file descriptor, using the specified file encoding
   Input(
       FILE                 *file,        ///< input file
-      file_encoding_type    enc,         ///< file_encoding (when UTF BOM is not present)
+      file_encoding         enc,         ///< file_encoding (when UTF BOM is not present)
       const unsigned short *page = nullptr) ///< code page for file_encoding::custom
     :
       cstring_(nullptr),
@@ -467,8 +465,8 @@ class Input {
       size_(0)
   {
     init(enc);
-    if (file_encoding() == file_encoding::plain)
-      file_encoding(enc, page);
+    if (get_file_encoding() == file_encoding::plain)
+      set_file_encoding(enc, page);
   }
   /// Construct input character sequence from a std::istream.
   Input(std::istream& istream) ///< input stream
@@ -735,29 +733,28 @@ class Input {
     return 0;
   }
   /// Set encoding for `FILE*` input.
-  void file_encoding(
-      file_encoding_type    enc,         ///< file_encoding
+  void set_file_encoding(
+      file_encoding    enc,         ///< file_encoding
       const unsigned short *page = nullptr) ///< custom code page for file_encoding::custom
     ;
   /// Get encoding of the current `FILE*` input.
-  file_encoding_type file_encoding() const
+  file_encoding get_file_encoding() const
     /// @returns current file_encoding constant
   {
     return utfx_;
   }
   /// Initialize the state after (re)setting the input source, auto-detects UTF BOM in FILE* input if the file size is known.
-  void init(file_encoding_type enc = file_encoding::plain)
+  void init(file_encoding enc = file_encoding::plain)
   {
     std::memset(utf8_, 0, sizeof(utf8_));
     uidx_ = 0;
     ulen_ = 0;
-    utfx_ = 0;
     page_ = nullptr;
     if (file_ != nullptr)
       file_init(enc);
   }
   /// Called by init() for a FILE*.
-  void file_init(file_encoding_type enc);
+  void file_init(file_encoding enc);
   /// Called by size() for a wstring.
   void wstring_size();
   /// Called by size() for a FILE*.
@@ -783,7 +780,7 @@ class Input {
   char                  utf8_[8]; ///< UTF-8 normalization buffer, >=8 bytes
   unsigned short        uidx_;    ///< index in utf8_[]
   unsigned short        ulen_;    ///< length of data in utf8_[] or 0 if no data
-  file_encoding_type    utfx_;    ///< file_encoding
+  file_encoding    utfx_;    ///< file_encoding
   const unsigned short *page_;    ///< custom code page
   Handler              *handler_; ///< to handle FILE* errors and non-blocking FILE* reads
 };
@@ -964,7 +961,7 @@ class BufferedInput : public Input {
   /// Construct buffered input character sequence from an open FILE* file descriptor, using the specified file encoding
   BufferedInput(
       FILE                 *file,        ///< input file
-      file_encoding_type    enc,         ///< file_encoding (when UTF BOM is not present)
+      file_encoding         enc,         ///< file_encoding (when UTF BOM is not present)
       const unsigned short *page = nullptr) ///< code page for file_encoding::custom
     :
       Input(file, enc, page)

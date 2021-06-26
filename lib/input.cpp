@@ -646,7 +646,7 @@ const unsigned short codepages[38][256] =
   },
 };
 
-void Input::file_init(file_encoding_type enc)
+void Input::file_init(file_encoding enc)
 {
 // open in binary mode to detect BOM, then reset to original mode afterwards unless UTF-16 or UTF-32
 #if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
@@ -1173,7 +1173,7 @@ void Input::istream_size()
   }
 }
 
-void Input::file_encoding(unsigned short enc, const unsigned short *page)
+void Input::set_file_encoding(file_encoding enc, const unsigned short *page)
 {
   if (file_ && utfx_ != enc)
   {
@@ -1230,7 +1230,7 @@ void Input::file_encoding(unsigned short enc, const unsigned short *page)
         case file_encoding::koi8_r:
         case file_encoding::koi8_u:
         case file_encoding::koi8_ru:
-          page_ = codepages[enc - file_encoding::latin - 1];
+          page_ = codepages[static_cast<size_t>(enc) - static_cast<size_t>(file_encoding::latin) - 1];
           while (ulen_-- > 0)
           {
             c1 = page_[*b++];
