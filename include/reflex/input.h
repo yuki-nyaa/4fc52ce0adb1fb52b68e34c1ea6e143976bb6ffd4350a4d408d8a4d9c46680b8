@@ -41,6 +41,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cwchar>
+#include <cassert>
 #include <iostream>
 #include <string>
 
@@ -287,6 +289,8 @@ With reflex::BufferedInput::streambuf to create a buffered std::istream:
 */
 class Input {
  public:
+  /// Input type
+  enum struct input_type_enum : unsigned char {NIL,FILE_P,STD_ISTREAM_P,CCHAR_P,CWCHAR_P};
   /// Common file_encoding constants.
   enum struct file_encoding : unsigned char  {
     plain, ///< plain octets: 7-bit ASCII, 8-bit binary or UTF-8 without BOM detected
@@ -337,28 +341,20 @@ class Input {
   class dos_streambuf;
   /// Construct empty input character sequence.
   Input()
-    :
-      cstring_(nullptr),
-      wstring_(nullptr),
-      file_(nullptr),
-      istream_(nullptr),
-      size_(0),
-      handler_(nullptr)
   {
     init();
   }
   /// Copy constructor (with intended "move semantics" as internal state is shared, should not rely on using the rhs after copying).
   Input(const Input& input) ///< an Input object to share state with (undefined behavior results from using both objects)
     :
-      cstring_(input.cstring_),
-      wstring_(input.wstring_),
-      file_(input.file_),
-      istream_(input.istream_),
+      input_type_(input.input_type_),
+      underlying_input_(input.underlying_input_),
       size_(input.size_),
       uidx_(input.uidx_),
       ulen_(input.ulen_),
       utfx_(input.utfx_),
-      page_(input.page_)
+      page_(input.page_),
+      handler_(input.handler_)
   {
     std::memcpy(utf8_, input.utf8_, sizeof(utf8_));
   }
@@ -367,10 +363,8 @@ class Input {
       const char *cstring, ///< char string
       size_t      size)    ///< length of the string
     :
-      cstring_(cstring),
-      wstring_(nullptr),
-      file_(nullptr),
-      istream_(nullptr),
+      input_type_(input_type_enum::CCHAR_P),
+      underlying_input_(cstring),
       size_(size)
   {
     init();
@@ -378,76 +372,47 @@ class Input {
   /// Construct input character sequence from a NUL-terminated string.
   Input(const char *cstring) ///< NUL-terminated char* string
     :
-      cstring_(cstring),
-      wstring_(nullptr),
-      file_(nullptr),
-      istream_(nullptr),
-      size_(cstring != nullptr ? std::strlen(cstring) : 0)
+    Input(cstring,cstring != nullptr ? std::strlen(cstring) : 0)
   {
     init();
   }
   /// Construct input character sequence from a std::string.
   Input(const std::string& string) ///< input string
     :
-      cstring_(string.c_str()),
-      wstring_(nullptr),
-      file_(nullptr),
-      istream_(nullptr),
-      size_(string.size())
+      Input(string.c_str(),string.size())
   {
     init();
   }
-  /// Construct input character sequence from a pointer to a std::string.
-  Input(const std::string *string) ///< input string
+  /// Construct input character sequence from a wchar_t* string
+  Input(
+      const wchar_t *wstring, ///< wchar_t string
+      size_t      size)    ///< length of the string
     :
-      cstring_(string != nullptr ? string->c_str() : nullptr),
-      wstring_(nullptr),
-      file_(nullptr),
-      istream_(nullptr),
-      size_(string != nullptr ? string->size() : 0)
+      input_type_(input_type_enum::CWCHAR_P),
+      underlying_input_(wstring),
+      size_(size)
   {
     init();
   }
-  /// Construct input character sequence from a NUL-terminated wide character string.
-  Input(const wchar_t *wstring) ///< NUL-terminated wchar_t* input string
+  /// Construct input character sequence from a NUL-terminated wstring.
+  Input(const wchar_t *wstring) ///< NUL-terminated wchar_t* string
     :
-      cstring_(nullptr),
-      wstring_(wstring),
-      file_(nullptr),
-      istream_(nullptr),
-      size_(0)
+      Input(wstring,wstring != nullptr ? std::wcslen(wstring) : 0)
   {
     init();
   }
-  /// Construct input character sequence from a std::wstring (may contain UTF-16 surrogate pairs).
-  Input(const std::wstring& wstring) ///< input wide string
+  /// Construct input character sequence from a std::wstring.
+  Input(const std::wstring& wstring) ///< input wstring
     :
-      cstring_(nullptr),
-      wstring_(wstring.c_str()),
-      file_(nullptr),
-      istream_(nullptr),
-      size_(0)
-  {
-    init();
-  }
-  /// Construct input character sequence from a pointer to a std::wstring (may contain UTF-16 surrogate pairs).
-  Input(const std::wstring *wstring) ///< input wide string
-    :
-      cstring_(nullptr),
-      wstring_(wstring != nullptr ? wstring->c_str() : nullptr),
-      file_(nullptr),
-      istream_(nullptr),
-      size_(0)
+    Input(wstring.c_str(),wstring.size())
   {
     init();
   }
   /// Construct input character sequence from an open FILE* file descriptor, supports UTF-8 conversion from UTF-16 and UTF-32.
   Input(FILE *file) ///< input file
     :
-      cstring_(nullptr),
-      wstring_(nullptr),
-      file_(file),
-      istream_(nullptr),
+      input_type_(input_type_enum::FILE_P),
+      underlying_input_(file),
       size_(0)
   {
     init();
@@ -458,11 +423,7 @@ class Input {
       file_encoding         enc,         ///< file_encoding (when UTF BOM is not present)
       const unsigned short *page = nullptr) ///< code page for file_encoding::custom
     :
-      cstring_(nullptr),
-      wstring_(nullptr),
-      file_(file),
-      istream_(nullptr),
-      size_(0)
+      Input(file)
   {
     init(enc);
     if (get_file_encoding() == file_encoding::plain)
@@ -471,21 +432,8 @@ class Input {
   /// Construct input character sequence from a std::istream.
   Input(std::istream& istream) ///< input stream
     :
-      cstring_(nullptr),
-      wstring_(nullptr),
-      file_(nullptr),
-      istream_(&istream),
-      size_(0)
-  {
-    init();
-  }
-  /// Construct input character sequence from a pointer to a std::istream.
-  Input(std::istream *istream) ///< input stream
-    :
-      cstring_(nullptr),
-      wstring_(nullptr),
-      file_(nullptr),
-      istream_(istream),
+      input_type_(input_type_enum::STD_ISTREAM_P),
+      underlying_input_(&istream),
       size_(0)
   {
     init();
@@ -493,15 +441,14 @@ class Input {
   /// Copy assignment operator.
   Input& operator=(const Input& input)
   {
-    cstring_ = input.cstring_;
-    wstring_ = input.wstring_;
-    file_ = input.file_;
-    istream_ = input.istream_;
+    input_type_=input.input_type_;
+    underlying_input_=input.underlying_input_;
     size_ = input.size_;
     uidx_ = input.uidx_;
     ulen_ = input.ulen_;
     utfx_ = input.utfx_;
     page_ = input.page_;
+    handler_ = input.handler_;
     std::memcpy(utf8_, input.utf8_, sizeof(utf8_));
     return *this;
   }
@@ -509,25 +456,29 @@ class Input {
   operator const char *() const
     /// @returns remaining unbuffered part of a NUL-terminated string or nullptr
   {
-    return cstring_;
+    assert(input_type_==input_type_enum::CCHAR_P);
+    return underlying_input_.cstring_;
   }
   /// Cast this Input object to a wide character string, returns nullptr when this Input is not a wide string.
   operator const wchar_t *() const
     /// @returns remaining unbuffered part of the NUL-terminated wide character string or nullptr
   {
-    return wstring_;
+    assert(input_type_==input_type_enum::CWCHAR_P);
+    return underlying_input_.wstring_;
   }
   /// Cast this Input object to a file descriptor FILE*, returns nullptr when this Input is not a FILE*.
   operator FILE *() const
     /// @returns pointer to current file descriptor or nullptr
   {
-    return file_;
+    assert(input_type_==input_type_enum::FILE_P);
+    return underlying_input_.file_;
   }
   /// Cast this Input object to a std::istream*, returns nullptr when this Input is not a std::istream.
   operator std::istream *() const
     /// @returns pointer to current std::istream or nullptr
   {
-    return istream_;
+    assert(input_type_==input_type_enum::STD_ISTREAM_P);
+    return underlying_input_.istream_;
   }
   // Cast this Input object to bool, same as checking good().
   operator bool() const
@@ -539,91 +490,98 @@ class Input {
   const char *cstring() const
     /// @returns remaining unbuffered part of the NUL-terminated string or nullptr
   {
-    return cstring_;
+    assert(input_type_==input_type_enum::CCHAR_P);
+    return underlying_input_.cstring_;
   }
   /// Get the remaining wide character string of this Input object, returns nullptr when this Input is not a wide string.
   const wchar_t *wstring() const
     /// @returns remaining unbuffered part of the NUL-terminated wide character string or nullptr
   {
-    return wstring_;
+    assert(input_type_==input_type_enum::CWCHAR_P);
+    return underlying_input_.wstring_;
   }
   /// Get the FILE* of this Input object, returns nullptr when this Input is not a FILE*.
   FILE *file() const
     /// @returns pointer to current file descriptor or nullptr
   {
-    return file_;
+    assert(input_type_==input_type_enum::FILE_P);
+    return underlying_input_.file_;
   }
   /// Get the std::istream of this Input object, returns nullptr when this Input is not a std::istream.
   std::istream *istream() const
     /// @returns pointer to current std::istream or nullptr
   {
-    return istream_;
+    assert(input_type_==input_type_enum::STD_ISTREAM_P);
+    return underlying_input_.istream_;
   }
   /// Get the size of the input character sequence in number of ASCII/UTF-8 bytes (zero if size is not determinable from a `FILE*` or `std::istream` source).
   size_t size()
     /// @returns the nonzero number of ASCII/UTF-8 bytes available to read, or zero when source is empty or if size is not determinable e.g. when reading from standard input
   {
-    if (cstring_)
-      return size_;
-    if (wstring_)
-    {
-      if (size_ == 0)
-        wstring_size();
+    switch(input_type_){
+      case input_type_enum::CCHAR_P :
+        return size_;
+      case input_type_enum::CWCHAR_P :
+        if (size_ == 0)
+          wstring_size();
+        return size_;
+      case input_type_enum::FILE_P :
+        if (size_ == 0)
+          file_size();
+        return size_;
+      case input_type_enum::STD_ISTREAM_P :
+        if (size_ == 0)
+          istream_size();
+        return size_;
+      default :
+        return size_;
     }
-    else if (file_)
-    {
-      if (size_ == 0)
-        file_size();
-    }
-    else if (istream_)
-    {
-      if (size_ == 0)
-        istream_size();
-    }
-    return size_;
   }
   /// Check if this Input object was assigned a character sequence.
   bool assigned() const
     /// @returns true if this Input object was assigned (not default constructed or cleared)
   {
-    return cstring_ || wstring_ || file_ || istream_;
+    return input_type_!=input_type_enum::NIL;
   }
   /// Clear this Input by unassigning it.
   void clear()
   {
-    cstring_ = nullptr;
-    wstring_ = nullptr;
-    file_ = nullptr;
-    istream_ = nullptr;
+    input_type_=input_type_enum::NIL;
     size_ = 0;
   }
   /// Check if input is available.
   bool good() const
     /// @returns true if a non-empty sequence of characters is available to get
   {
-    if (cstring_)
-      return size_ > 0;
-    if (wstring_)
-      return *wstring_ != L'\0';
-    if (file_)
-      return !::feof(file_) && !::ferror(file_);
-    if (istream_)
-      return istream_->good();
-    return false;
+    switch(input_type_){
+      case input_type_enum::CCHAR_P :
+        return size_ > 0;
+      case input_type_enum::CWCHAR_P :
+        return *(underlying_input_.wstring_) != L'\0';
+      case input_type_enum::FILE_P :
+        return !::feof(underlying_input_.file_) && !::ferror(underlying_input_.file_);
+      case input_type_enum::STD_ISTREAM_P :
+        return (underlying_input_.istream_)->good();
+      default :
+        return false;
+    }
   }
   /// Check if input reached EOF.
   bool eof() const
     /// @returns true if input is at EOF and no characters are available
   {
-    if (cstring_)
-      return size_ == 0;
-    if (wstring_)
-      return *wstring_ == L'\0';
-    if (file_)
-      return ::feof(file_) != 0;
-    if (istream_)
-      return istream_->eof();
-    return true;
+    switch(input_type_){
+      case input_type_enum::CCHAR_P :
+        return size_ == 0;
+      case input_type_enum::CWCHAR_P :
+        return *(underlying_input_.wstring_) == L'\0';
+      case input_type_enum::FILE_P :
+        return ::feof(underlying_input_.file_) != 0;
+      case input_type_enum::STD_ISTREAM_P :
+        return (underlying_input_.istream_)->eof();
+      default :
+        return true;
+    }
   }
   /// Get a single character (unsigned char 0..255) or EOF (-1) when end-of-input is reached.
   int get()
@@ -639,98 +597,97 @@ class Input {
       size_t n) ///< size of buffer pointed to by s
     /// @returns the nonzero number of (less or equal to n) 8-bit characters added to buffer s from the current input, or zero when EOF
   {
-    if (cstring_)
-    {
-      size_t k = size_;
-      if (k > n)
-        k = n;
-      std::memcpy(s, cstring_, k);
-      cstring_ += k;
-      size_ -= k;
-      return k;
-    }
-    if (wstring_)
-    {
-      size_t k = n;
-      if (ulen_ > 0)
-      {
-        size_t l = ulen_;
-        if (l > k)
-          l = k;
-        std::memcpy(s, utf8_ + uidx_, l);
-        k -= l;
-        if (k == 0)
-        {
-          uidx_ += static_cast<unsigned short>(l);
-          ulen_ -= static_cast<unsigned short>(l);
-          if (size_ >= n)
-            size_ -= n;
-          return n;
-        }
-        s += l;
-        ulen_ = 0;
-      }
-      wchar_t c;
-      while ((c = *wstring_) != L'\0' && k > 0)
-      {
-        if (c < 0x80)
-        {
-          *s++ = static_cast<char>(c);
-          --k;
-        }
-        else
-        {
-          size_t l;
-          if (c >= 0xD800 && c < 0xE000)
-          {
-            // UTF-16 surrogate pair
-            if (c < 0xDC00 && (wstring_[1] & 0xFC00) == 0xDC00)
-              l = utf8(0x010000 - 0xDC00 + ((c - 0xD800) << 10) + *++wstring_, utf8_);
-            else
-              l = utf8(REFLEX_NONCHAR, utf8_);
-          }
-          else
-          {
-            l = utf8(c, utf8_);
-          }
-          if (k < l)
-          {
-            uidx_ = static_cast<unsigned short>(k);
-            ulen_ = static_cast<unsigned short>(l);
-            std::memcpy(s, utf8_, k);
-            s += k;
-            k = 0;
-          }
-          else
-          {
-            std::memcpy(s, utf8_, l);
-            s += l;
-            k -= l;
-          }
-        }
-        ++wstring_;
-      }
-      if (size_ >= n - k)
-        size_ -= n - k;
-      return n - k;
-    }
-    if (file_)
-    {
-      while (true)
-      {
-        size_t k = file_get(s, n);
-        if (k > 0 || feof(file_) || handler_ == nullptr || (*handler_)() == 0)
-          return k;
-      }
-    }
-    if (istream_)
-    {
-      size_t k = static_cast<size_t>(n == 1 ? istream_->get(s[0]).gcount() : istream_->read(s, static_cast<std::streamsize>(n)) ? n : istream_->gcount());
-      if (size_ >= k)
+    switch(input_type_){
+      case input_type_enum::CCHAR_P : {
+        size_t k = size_;
+        if (k > n)
+          k = n;
+        std::memcpy(s, underlying_input_.cstring_, k);
+        underlying_input_.cstring_ += k;
         size_ -= k;
-      return k;
+        return k;
+      }
+      case input_type_enum::CWCHAR_P : {
+        size_t k = n;
+        if (ulen_ > 0)
+        {
+          size_t l = ulen_;
+          if (l > k)
+            l = k;
+          std::memcpy(s, utf8_ + uidx_, l);
+          k -= l;
+          if (k == 0)
+          {
+            uidx_ += static_cast<unsigned short>(l);
+            ulen_ -= static_cast<unsigned short>(l);
+            if (size_ >= n)
+              size_ -= n;
+            return n;
+          }
+          s += l;
+          ulen_ = 0;
+        }
+        wchar_t c;
+        while ((c = *underlying_input_.wstring_) != L'\0' && k > 0)
+        {
+          if (c < 0x80)
+          {
+            *s++ = static_cast<char>(c);
+            --k;
+          }
+          else
+          {
+            size_t l;
+            if (c >= 0xD800 && c < 0xE000)
+            {
+              // UTF-16 surrogate pair
+              if (c < 0xDC00 && (underlying_input_.wstring_[1] & 0xFC00) == 0xDC00)
+                l = utf8(0x010000 - 0xDC00 + ((c - 0xD800) << 10) + *++underlying_input_.wstring_, utf8_);
+              else
+                l = utf8(REFLEX_NONCHAR, utf8_);
+            }
+            else
+            {
+              l = utf8(c, utf8_);
+            }
+            if (k < l)
+            {
+              uidx_ = static_cast<unsigned short>(k);
+              ulen_ = static_cast<unsigned short>(l);
+              std::memcpy(s, utf8_, k);
+              s += k;
+              k = 0;
+            }
+            else
+            {
+              std::memcpy(s, utf8_, l);
+              s += l;
+              k -= l;
+            }
+          }
+          ++underlying_input_.wstring_;
+        }
+        if (size_ >= n - k)
+          size_ -= n - k;
+        return n - k;
+      } // case input_type_enum::CWCHAR_P
+      case input_type_enum::FILE_P : {
+        while (true)
+        {
+          size_t k = file_get(s, n);
+          if (k > 0 || feof(underlying_input_.file_) || handler_ == nullptr || (*handler_)() == 0)
+            return k;
+        }
+      }
+      case input_type_enum::STD_ISTREAM_P : {
+        size_t k = static_cast<size_t>(n == 1 ? underlying_input_.istream_->get(s[0]).gcount() : underlying_input_.istream_->read(s, static_cast<std::streamsize>(n)) ? n : underlying_input_.istream_->gcount());
+        if (size_ >= k)
+          size_ -= k;
+        return k;
+      }
+      default :
+        return 0;
     }
-    return 0;
   }
   /// Set encoding for `FILE*` input.
   void set_file_encoding(
@@ -750,7 +707,7 @@ class Input {
     uidx_ = 0;
     ulen_ = 0;
     page_ = nullptr;
-    if (file_ != nullptr)
+    if (input_type_==input_type_enum::FILE_P)
       file_init(enc);
   }
   /// Called by init() for a FILE*.
@@ -772,17 +729,25 @@ class Input {
     handler_ = handler;
   }
  protected:
-  const char           *cstring_; ///< char string input (when non-null) of length reflex::Input::size_
-  const wchar_t        *wstring_; ///< NUL-terminated wide string input (when non-null)
-  FILE                 *file_;    ///< FILE* input (when non-null)
-  std::istream         *istream_; ///< stream input (when non-null)
-  size_t                size_;    ///< size of the remaining input in bytes (size_ == 0 may indicate size is not set)
-  char                  utf8_[8]; ///< UTF-8 normalization buffer, >=8 bytes
-  unsigned short        uidx_;    ///< index in utf8_[]
-  unsigned short        ulen_;    ///< length of data in utf8_[] or 0 if no data
-  file_encoding    utfx_;    ///< file_encoding
-  const unsigned short *page_;    ///< custom code page
-  Handler              *handler_; ///< to handle FILE* errors and non-blocking FILE* reads
+  input_type_enum         input_type_ = input_type_enum::NIL;
+  union underlying_input_union_{
+    FILE                 *file_=nullptr;    ///< FILE* input (when non-null)
+    std::istream         *istream_; ///< stream input (when non-null)
+    const char           *cstring_; ///< char string input (when non-null) of length reflex::Input::size_
+    const wchar_t        *wstring_; ///< NUL-terminated wide string input (when non-null)
+    constexpr underlying_input_union_() noexcept = default;
+    constexpr underlying_input_union_(FILE* file_other) noexcept : file_(file_other) {}
+    constexpr underlying_input_union_(std::istream* istream_other) noexcept : istream_(istream_other) {}
+    constexpr underlying_input_union_(const char* cstring_other) noexcept : cstring_(cstring_other) {}
+    constexpr underlying_input_union_(const wchar_t* wstring_other) noexcept : wstring_(wstring_other) {}
+  } underlying_input_;
+  size_t                size_=0;    ///< size of the remaining input in bytes (size_ == 0 may indicate size is not set)
+  char                  utf8_[8]={}; ///< UTF-8 normalization buffer, >=8 bytes
+  unsigned short        uidx_=0;    ///< index in utf8_[]
+  unsigned short        ulen_=0;    ///< length of data in utf8_[] or 0 if no data
+  file_encoding    utfx_=file_encoding::plain;    ///< file_encoding
+  const unsigned short *page_=nullptr;    ///< custom code page
+  Handler              *handler_=nullptr; ///< to handle FILE* errors and non-blocking FILE* reads
 };
 
 /// Stream buffer for reflex::Input, derived from std::streambuf.

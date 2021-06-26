@@ -1,9 +1,7 @@
-AC_INIT(re-flex,3.0)
+AC_INIT([re-flex],[3.0])
 AM_INIT_AUTOMAKE([foreign])
-AM_CONFIG_HEADER(config.h)
+AC_CONFIG_HEADERS(config.h)
 AC_COPYRIGHT([Copyright (C) 2016-2020 Robert van Engelen, Genivia Inc.])
-
-AC_HEADER_TIME
 
 AC_TYPE_SIZE_T
 AC_TYPE_OFF_T
@@ -21,6 +19,8 @@ AM_PROG_AR
 AC_PROG_RANLIB
 AC_PROG_INSTALL
 
+AX_CXX_COMPILE_STDCXX(11,noext,mandatory)
+
 # removed to avoid Max OS X libtool issues, alas...
 # LT_INIT
 
@@ -32,7 +32,7 @@ PLATFORM=${host}
 AC_SUBST(PLATFORM)
 
 AC_ARG_ENABLE(avx,
-  [AC_HELP_STRING([--disable-avx],
+  [AS_HELP_STRING([--disable-avx],
                   [disable AVX optimizations])],
   [with_no_avx="yes"],
   [with_no_avx="no"])
@@ -64,7 +64,7 @@ fi
 
 if test "x$SIMD_FLAGS" = "x"; then
 AC_ARG_ENABLE(sse2,
-  [AC_HELP_STRING([--disable-sse2],
+  [AS_HELP_STRING([--disable-sse2],
                   [disable SSE2 optimizations])],
   [with_no_sse2="yes"],
   [with_no_sse2="no"])
@@ -90,7 +90,7 @@ fi
 
 if test "x$SIMD_FLAGS" = "x"; then
 AC_ARG_ENABLE(neon,
-  [AC_HELP_STRING([--disable-neon],
+  [AS_HELP_STRING([--disable-neon],
                   [disable ARM NEON/AArch64 optimizations])],
   [with_no_neon="yes"],
   [with_no_neon="no"])
