@@ -43,8 +43,8 @@
 
 namespace reflex {
 
-/// RE/flex matcher engine class, implements reflex::PatternMatcher pattern matching interface with scan, find, split functors and iterators.
-class Matcher : public PatternMatcher<reflex::Pattern> {
+/// RE/flex matcher engine class, implements reflex::AbstractMatcher pattern matching interface with scan, find, split functors and iterators.
+class Matcher : public AbstractMatcher<reflex::Pattern> {
  public:
   /// Convert a regex to an acceptable form, given the specified regex library signature `"[decls:]escapes[?+]"`, see reflex::convert.
   template<typename T>
@@ -53,54 +53,25 @@ class Matcher : public PatternMatcher<reflex::Pattern> {
     return reflex::convert(regex, "imsx#=^:abcdefhijklnrstuvwxzABDHLNQSUW<>?", flags);
   }
   /// Default constructor.
-  Matcher() : PatternMatcher<reflex::Pattern>()
+  Matcher() : AbstractMatcher<reflex::Pattern>()
   {
     Matcher::reset();
   }
   /// Construct matcher engine from a pattern, and an input character sequence.
+  template<typename P>
   Matcher(
-      const Pattern *pattern,         ///< points to a reflex::Pattern
+      P&& pattern,         ///< a reflex::Pattern
       const Input&   input = Input(), ///< input character sequence for this matcher
       const char    *opt = nullptr)      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
     :
-      PatternMatcher<reflex::Pattern>(pattern, input, opt)
+      AbstractMatcher<reflex::Pattern>(std::forward<P>(pattern), input, opt)
   {
-    reset(opt);
-  }
-  /// Construct matcher engine from a string regex, and an input character sequence.
-  Matcher(
-      const char   *pattern,         ///< a string regex for this matcher
-      const Input&  input = Input(), ///< input character sequence for this matcher
-      const char   *opt = nullptr)      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
-    :
-      PatternMatcher<reflex::Pattern>(pattern, input, opt)
-  {
-    reset(opt);
-  }
-  /// Construct matcher engine from a pattern, and an input character sequence.
-  Matcher(
-      const Pattern& pattern,         ///< a reflex::Pattern
-      const Input&   input = Input(), ///< input character sequence for this matcher
-      const char    *opt = nullptr)      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
-    :
-      PatternMatcher<reflex::Pattern>(pattern, input, opt)
-  {
-    reset(opt);
-  }
-  /// Construct matcher engine from a string regex, and an input character sequence.
-  Matcher(
-      const std::string& pattern,         ///< a reflex::Pattern or a string regex for this matcher
-      const Input&       input = Input(), ///< input character sequence for this matcher
-      const char        *opt = nullptr)      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
-    :
-      PatternMatcher<reflex::Pattern>(pattern, input, opt)
-  {
-    reset(opt);
+    reset();
   }
   /// Copy constructor.
   Matcher(const Matcher& matcher) ///< matcher to copy with pattern (pattern may be shared)
     :
-      PatternMatcher<reflex::Pattern>(matcher),
+      AbstractMatcher<reflex::Pattern>(matcher),
       ded_(matcher.ded_),
       tab_(matcher.tab_)
   {
@@ -112,7 +83,7 @@ class Matcher : public PatternMatcher<reflex::Pattern> {
   /// Assign a matcher.
   Matcher& operator=(const Matcher& matcher) ///< matcher to copy
   {
-    PatternMatcher<reflex::Pattern>::operator=(matcher);
+    AbstractMatcher<reflex::Pattern>::operator=(matcher);
     ded_ = matcher.ded_;
     tab_ = matcher.tab_;
     bmd_ = matcher.bmd_;
@@ -126,10 +97,19 @@ class Matcher : public PatternMatcher<reflex::Pattern> {
     return new Matcher(*this);
   }
   /// Reset this matcher's state to the initial state.
-  virtual void reset(const char *opt = nullptr)
+  void reset(const AbstractMatcher<reflex::Pattern>::Option& opt)
+  {
+    DBGLOG("Matcher::reset(opt)");
+    AbstractMatcher<reflex::Pattern>::reset(opt);
+    ded_ = 0;
+    tab_.resize(0);
+    bmd_ = 0;
+  }
+  /// Reset this matcher's state to the initial state.
+  void reset()
   {
     DBGLOG("Matcher::reset()");
-    PatternMatcher<reflex::Pattern>::reset(opt);
+    AbstractMatcher<reflex::Pattern>::reset();
     ded_ = 0;
     tab_.resize(0);
     bmd_ = 0;
@@ -412,7 +392,7 @@ scan:
 find:
     int c1 = got_;
     bool bol = at_bol(); // at begin of line?
-    if (pat_->fsm_ != nullptr)
+    if (pat_.fsm_ != nullptr)
       fsm_.c1 = c1;
 #if !defined(WITH_NO_INDENT)
 redo:
@@ -420,22 +400,22 @@ redo:
     lap_.resize(0);
     cap_ = 0;
     bool nul = method == Const::MATCH;
-    if (pat_->fsm_ != nullptr)
+    if (pat_.fsm_ != nullptr)
     {
-      DBGLOG("FSM code %p", pat_->fsm_);
+      DBGLOG("FSM code %p", pat_.fsm_);
       fsm_.bol = bol;
       fsm_.nul = nul;
-      pat_->fsm_(*this);
+      pat_.fsm_(*this);
       nul = fsm_.nul;
       c1 = fsm_.c1;
     }
-    else if (pat_->opc_ != nullptr)
+    else if (pat_.opc_ != nullptr)
     {
-      const Pattern::Opcode *pc = pat_->opc_;
+      const Pattern::Opcode *pc = pat_.opc_;
       while (true)
       {
         Pattern::Opcode opcode = *pc;
-        DBGLOG("Fetch: code[%zu] = 0x%08X", pc - pat_->opc_, opcode);
+        DBGLOG("Fetch: code[%zu] = 0x%08X", pc - pat_.opc_, opcode);
         if (!Pattern::is_opcode_goto(opcode))
         {
           switch (opcode >> 24)
@@ -481,7 +461,7 @@ redo:
                   jump = Pattern::long_index_of(pc[1]);
                 DBGLOG("Dedent ded = %zu", ded_); // unconditional dedent matching \j
                 nul = true;
-                pc = pat_->opc_ + jump;
+                pc = pat_.opc_ + jump;
                 continue;
               }
 #endif
@@ -683,15 +663,15 @@ redo:
             {
               if (back != Pattern::Const::IMAX)
               {
-                pc = pat_->opc_ + back;
+                pc = pat_.opc_ + back;
                 opcode = *pc;
               }
               break;
             }
             DBGLOG("Backtrack: pc = %u", jump);
             if (back == Pattern::Const::IMAX)
-              back = static_cast<Pattern::Index>(pc - pat_->opc_);
-            pc = pat_->opc_ + jump;
+              back = static_cast<Pattern::Index>(pc - pat_.opc_);
+            pc = pat_.opc_ + jump;
             opcode = *pc;
             jump = Pattern::Const::IMAX;
           }
@@ -758,7 +738,7 @@ unrolled:
             break;
           jump = Pattern::long_index_of(pc[1]);
         }
-        pc = pat_->opc_ + jump;
+        pc = pat_.opc_ + jump;
       }
     }
 #if !defined(WITH_NO_INDENT)
@@ -848,9 +828,9 @@ unrolled:
           // we didn't fail on META alone
           if (advance())
           {
-            if (!pat_->one_)
+            if (!pat_.one_)
               goto scan;
-            len_ = pat_->len_;
+            len_ = pat_.len_;
             txt_ = buf_ + cur_;
             set_current(cur_ + len_);
             return cap_ = 1;

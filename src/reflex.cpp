@@ -3026,7 +3026,7 @@ void Reflex::write_lexer()
     {
       if (!options["full"].empty() || !options["fast"].empty())
       {
-        *out << "  static const reflex::Pattern PATTERN_" << conditions[start] << "(reflex_code_" << conditions[start];
+        *out << "  static reflex::Pattern PATTERN_" << conditions[start] << "(reflex_code_" << conditions[start];
         if (!options["find"].empty())
           *out << ", reflex_pred_" << conditions[start];
         *out << ");\n";
@@ -3034,13 +3034,13 @@ void Reflex::write_lexer()
       else
       {
         write_regex(&conditions[start], patterns[start]);
-        *out << "  static const reflex::Pattern PATTERN_" << conditions[start] << "(REGEX_" << conditions[start] << ");\n";
+        *out << "  static reflex::Pattern PATTERN_" << conditions[start] << "(REGEX_" << conditions[start] << ");\n";
       }
     }
     else
     {
       write_regex(&conditions[start], patterns[start]);
-      *out << "  static const " << library->pattern << " PATTERN_" << conditions[start] << "(REGEX_" << conditions[start] << ");\n";
+      *out << "  static " << library->pattern << " PATTERN_" << conditions[start] << "(REGEX_" << conditions[start] << ");\n";
     }
   }
   write_section_lextop();
@@ -3049,10 +3049,10 @@ void Reflex::write_lexer()
     "  {\n";
   if (!options["tabs"].empty())
     *out <<
-      "    matcher(new Matcher(PATTERN_" << conditions[0] << ", " << (options["nostdinit"].empty() ? "stdinit()" : "nostdinit()") << ", this, \"T=" << options["tabs"] << "\"));\n";
+      "    matcher(new Matcher(std::move(PATTERN_" << conditions[0] << "), " << (options["nostdinit"].empty() ? "stdinit()" : "nostdinit()") << ", \"T=" << options["tabs"] << "\"));\n";
   else
     *out <<
-      "    matcher(new Matcher(PATTERN_" << conditions[0] << ", " << (options["nostdinit"].empty() ? "stdinit()" : "nostdinit()") << ", this));\n";
+      "    matcher(new Matcher(std::move(PATTERN_" << conditions[0] << "), " << (options["nostdinit"].empty() ? "stdinit()" : "nostdinit()") << "));\n";
 #ifdef WITH_BOOST_PARTIAL_MATCH_BUG
   if (options["matcher"] == "boost" || options["matcher"] == "boost-perl")
     *out <<

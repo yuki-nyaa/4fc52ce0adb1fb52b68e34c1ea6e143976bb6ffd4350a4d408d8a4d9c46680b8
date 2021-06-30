@@ -490,7 +490,9 @@ void Pattern::parse(
     update_modified('m', modifiers, 0, len - 1);
   if (opt_.s)
     update_modified('s', modifiers, 0, len - 1);
+  #ifdef REFLEX_PATTERN_TIMER
   pms_ = timer_elapsed(t);
+  #endif
 #ifdef DEBUG_REFLEX
   DBGLOGN("startpos = {");
   for (Positions::const_iterator p = startpos.begin(); p != startpos.end(); ++p)
@@ -1293,7 +1295,9 @@ void Pattern::compile(
   // init stats and timers
   vno_ = 0;
   eno_ = 0;
+  #ifdef REFLEX_PATTERN_TIMER
   ems_ = 0.0;
+  #endif
   timer_type vt, et;
   timer_start(vt);
   // construct the DFA
@@ -1433,7 +1437,9 @@ void Pattern::compile(
         }
       }
     }
+    #ifdef REFLEX_PATTERN_TIMER
     ems_ += timer_elapsed(et);
+    #endif
     Moves::iterator end = moves.end();
     for (Moves::iterator i = moves.begin(); i != end; ++i)
     {
@@ -1495,7 +1501,9 @@ void Pattern::compile(
   }
   delete[] table;
   tfa_.clear();
+  #ifdef REFLEX_PATTERN_TIMER
   vms_ = timer_elapsed(vt) - ems_;
+  #endif
   DBGLOG("END compile()");
 }
 
@@ -2062,7 +2070,9 @@ void Pattern::assemble(DFA::State *start)
   export_dfa(start);
   compact_dfa(start);
   encode_dfa(start);
+  #ifdef REFLEX_PATTERN_TIMER
   wms_ = timer_elapsed(t);
+  #endif
   gencode_dfa(start);
   export_code();
   DBGLOG("END assemble()");

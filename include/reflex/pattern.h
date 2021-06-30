@@ -59,7 +59,7 @@
 namespace reflex {
 
 /// Pattern class holds a regex pattern and its compiled FSM opcode table or code for the reflex::Matcher engine.
-class Pattern {
+class Pattern final {
   friend class Matcher;      ///< permit access by the reflex::Matcher engine
   friend class FuzzyMatcher; ///< permit access by the reflex::FuzzyMatcher engine
  public:
@@ -80,85 +80,97 @@ class Pattern {
     static const Hash   HASH = 0x1000;     ///< size of the predict match array
   };
   /// Construct an unset pattern.
-  Pattern()
-    :
-      opc_(nullptr),
-      nop_(0),
-      fsm_(nullptr)
+  Pattern() :
+    opc_(nullptr),
+    nop_(0),
+    fsm_(nullptr)
   { }
   /// Construct a pattern object given a regex string.
-  explicit Pattern(
-      const char *regex,
-      const char *options = nullptr)
-    :
-      rex_(regex),
-      opc_(nullptr),
-      fsm_(nullptr)
+  template<typename R>
+  explicit Pattern(R&& regex, const char *options = nullptr) :
+    rex_(std::forward<R>(regex)),
+    opc_(nullptr),
+    fsm_(nullptr)
   {
     init(options);
   }
   /// Construct a pattern object given a regex string.
-  Pattern(
-      const char        *regex,
-      const std::string& options)
-    :
-      rex_(regex),
-      opc_(nullptr),
-      fsm_(nullptr)
-  {
-    init(options.c_str());
-  }
-  /// Construct a pattern object given a regex string.
-  explicit Pattern(
-      const std::string& regex,
-      const char        *options = nullptr)
-    :
-      rex_(regex),
-      opc_(nullptr),
-      fsm_(nullptr)
-  {
-    init(options);
-  }
-  /// Construct a pattern object given a regex string.
-  Pattern(
-      const std::string& regex,
-      const std::string& options)
-    :
-      rex_(regex),
-      opc_(nullptr),
-      fsm_(nullptr)
+  template<typename R>
+  Pattern(R&& regex, const std::string& options) :
+    rex_(std::forward<R>(regex)),
+    opc_(nullptr),
+    fsm_(nullptr)
   {
     init(options.c_str());
   }
   /// Construct a pattern object given an opcode table.
-  explicit Pattern(
-      const Opcode  *code,
-      const uint8_t *pred = nullptr)
-    :
-      opc_(code),
-      nop_(0),
-      fsm_(nullptr)
+  explicit Pattern(const Opcode *code, const uint8_t *pred = nullptr) :
+    opc_(code),
+    nop_(0),
+    fsm_(nullptr)
   {
     init(nullptr, pred);
   }
   /// Construct a pattern object given a function pointer to FSM code.
-  explicit Pattern(
-      FSM            fsm,
-      const uint8_t *pred = nullptr)
-    :
-      opc_(nullptr),
-      nop_(0),
-      fsm_(fsm)
+  explicit Pattern(FSM fsm, const uint8_t *pred = nullptr) :
+    opc_(nullptr),
+    nop_(0),
+    fsm_(fsm)
   {
     init(nullptr, pred);
   }
   /// Copy constructor.
-  Pattern(const Pattern& pattern) ///< pattern to copy
+  Pattern(const Pattern& pattern) :
+    opt_(pattern.opt_),
+    rex_(pattern.rex_),
+    end_(pattern.end_),
+    acc_(pattern.acc_),
+    vno_(pattern.vno_),
+    eno_(pattern.eno_),
+    opc_(nullptr),
+    nop_(0),
+    fsm_(nullptr)
   {
-    operator=(pattern);
+    if (pattern.nop_ > 0 && pattern.opc_ != nullptr)
+    {
+      nop_ = pattern.nop_;
+      Opcode *code = new Opcode[nop_];
+      for (size_t i = 0; i < nop_; ++i)
+        code[i] = pattern.opc_[i];
+      opc_ = code;
+    }
+    else
+    {
+      fsm_ = pattern.fsm_;
+    }
+  }
+   /// Move constructor.
+  Pattern(Pattern&& pattern) :
+    opt_(std::move(pattern.opt_)),
+    rex_(std::move(pattern.rex_)),
+    end_(std::move(pattern.end_)),
+    acc_(std::move(pattern.acc_)),
+    vno_(std::move(pattern.vno_)),
+    eno_(std::move(pattern.eno_)),
+    opc_(nullptr),
+    nop_(0),
+    fsm_(nullptr)
+  {
+    if (pattern.nop_ > 0 && pattern.opc_ != nullptr)
+    {
+      nop_ = pattern.nop_;
+      opc_ = pattern.opc_;
+      pattern.nop_ = 0;
+      pattern.opc_ = nullptr;
+    }
+    else
+    {
+      fsm_ = pattern.fsm_;
+      pattern.fsm_=nullptr;
+    }
   }
   /// Destructor, deletes internal code array when owned and allocated.
-  virtual ~Pattern()
+  ~Pattern() noexcept
   {
     clear();
   }
@@ -171,6 +183,59 @@ class Pattern {
     opc_ = nullptr;
     nop_ = 0;
     fsm_ = nullptr;
+  }
+  /// Assign a (new) pattern.
+  Pattern& operator=(const Pattern& pattern)
+  {
+    clear();
+    opt_ = pattern.opt_;
+    rex_ = pattern.rex_;
+    end_ = pattern.end_;
+    acc_ = pattern.acc_;
+    vno_ = pattern.vno_;
+    eno_ = pattern.eno_;
+    if (pattern.nop_ > 0 && pattern.opc_ != nullptr)
+    {
+      nop_ = pattern.nop_;
+      Opcode *code = new Opcode[nop_];
+      for (size_t i = 0; i < nop_; ++i)
+        code[i] = pattern.opc_[i];
+      opc_ = code;
+    }
+    else
+    {
+      fsm_ = pattern.fsm_;
+    }
+    return *this;
+  }
+/// Assign a (new) pattern.
+  Pattern& operator=(Pattern&& pattern)
+  {
+    if (nop_ > 0 && opc_ != nullptr)
+      delete[] opc_;
+    opc_ = nullptr;
+    nop_ = 0;
+    fsm_ = nullptr;
+
+    opt_ = std::move(pattern.opt_);
+    rex_ = std::move(pattern.rex_);
+    end_ = std::move(pattern.end_);
+    acc_ = std::move(pattern.acc_);
+    vno_ = std::move(pattern.vno_);
+    eno_ = std::move(pattern.eno_);
+    if (pattern.nop_ > 0 && pattern.opc_ != nullptr)
+    {
+      nop_ = pattern.nop_;
+      opc_ = pattern.opc_;
+      pattern.nop_ = 0;
+      pattern.opc_ = nullptr;
+    }
+    else
+    {
+      fsm_ = pattern.fsm_;
+      pattern.fsm_=nullptr;
+    }
+    return *this;
   }
   /// Assign a (new) pattern.
   Pattern& assign(
@@ -221,34 +286,6 @@ class Pattern {
     clear();
     fsm_ = fsm;
     init(nullptr, pred);
-    return *this;
-  }
-  /// Assign a (new) pattern.
-  Pattern& operator=(const Pattern& pattern)
-  {
-    clear();
-    opt_ = pattern.opt_;
-    rex_ = pattern.rex_;
-    end_ = pattern.end_;
-    acc_ = pattern.acc_;
-    vno_ = pattern.vno_;
-    eno_ = pattern.eno_;
-    pms_ = pattern.pms_;
-    vms_ = pattern.vms_;
-    ems_ = pattern.ems_;
-    wms_ = pattern.wms_;
-    if (pattern.nop_ > 0 && pattern.opc_ != nullptr)
-    {
-      nop_ = pattern.nop_;
-      Opcode *code = new Opcode[nop_];
-      for (size_t i = 0; i < nop_; ++i)
-        code[i] = pattern.opc_[i];
-      opc_ = code;
-    }
-    else
-    {
-      fsm_ = pattern.fsm_;
-    }
     return *this;
   }
   /// Assign a (new) pattern.
@@ -314,22 +351,38 @@ class Pattern {
   /// Get elapsed regex parsing and analysis time.
   float parse_time() const
   {
+    #ifdef REFLEX_PATTERN_TIMER
     return pms_;
+    #else
+    return 0;
+    #endif
   }
   /// Get elapsed DFA vertices construction time.
   float nodes_time() const
   {
+    #ifdef REFLEX_PATTERN_TIMER
     return vms_;
+    #else
+    return 0;
+    #endif
   }
   /// Get elapsed DFA edges construction time.
   float edges_time() const
   {
+    #ifdef REFLEX_PATTERN_TIMER
     return ems_;
+    #else
+    return 0;
+    #endif
   }
   /// Get elapsed code words assembly time.
   float words_time() const
   {
+    #ifdef REFLEX_PATTERN_TIMER
     return wms_;
+    #else
+    return 0;
+    #endif
   }
   /// Returns true when match is predicted, based on s[0..3..e-1] (e >= s + 4).
   static inline bool predict_match(const Pred pmh[], const char *s, size_t n)
@@ -615,6 +668,10 @@ class Pattern {
   /// Global modifier modes, syntax flags, and compiler options.
   struct Option {
     Option() : b(), e(), f(), i(), m(), n(), o(), p(), q(), r(), s(), w(), x(), z() { }
+    Option(const Option&) noexcept = default;
+    Option(Option&&) noexcept = default;
+    Option& operator=(const Option&) noexcept = default;
+    Option& operator=(Option&&) noexcept = default;
     bool                     b; ///< disable escapes in bracket lists
     Char                     e; ///< escape character, or > 255 for none, '\\' default
     std::vector<std::string> f; ///< output to files
@@ -958,8 +1015,6 @@ class Pattern {
     return h & ((Const::HASH - 1) >> 3);
   }
   Option                opt_; ///< pattern compiler options
-  Tree                  tfa_; ///< tree DFA constructed from strings (regex uses firstpos/lastpos/followpos)
-  DFA                   dfa_; ///< DFA constructed from regex with subset construction using firstpos/lastpos/followpos
   std::string           rex_; ///< regular expression string
   std::vector<Location> end_; ///< entries point to the subpattern's ending '|' or '\0'
   std::vector<bool>     acc_; ///< true if subpattern n is accepting (state is reachable)
@@ -968,16 +1023,21 @@ class Pattern {
   const Opcode         *opc_; ///< points to the opcode table
   Index                 nop_; ///< number of opcodes generated
   FSM                   fsm_; ///< function pointer to FSM code
+  #ifdef REFLEX_PATTERN_TIMER
+  float                 pms_; ///< ms elapsed time to parse regex
+  float                 vms_; ///< ms elapsed time to compile DFA vertices
+  float                 ems_; ///< ms elapsed time to compile DFA edges
+  float                 wms_; ///< ms elapsed time to assemble code words
+  #endif
+
+  Tree                  tfa_; ///< tree DFA constructed from strings (regex uses firstpos/lastpos/followpos)
+  DFA                   dfa_; ///< DFA constructed from regex with subset construction using firstpos/lastpos/followpos
   size_t                len_; ///< prefix length of pre_[], less or equal to 255
   size_t                min_; ///< patterns after the prefix are at least this long but no more than 8
   char                  pre_[256];         ///< pattern prefix, shorter or equal to 255 bytes
   Pred                  bit_[256];         ///< bitap array
   Pred                  pmh_[Const::HASH]; ///< predict-match hash array
   Pred                  pma_[Const::HASH]; ///< predict-match array
-  float                 pms_; ///< ms elapsed time to parse regex
-  float                 vms_; ///< ms elapsed time to compile DFA vertices
-  float                 ems_; ///< ms elapsed time to compile DFA edges
-  float                 wms_; ///< ms elapsed time to assemble code words
   bool                  one_; ///< true if matching one string in pre_[] without meta/anchors
 };
 

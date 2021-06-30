@@ -260,7 +260,7 @@ int main()
   for (const Test *test = tests; test->pattern != nullptr; ++test)
   {
     Pattern pattern(test->pattern, test->popts);
-    Matcher matcher(pattern, test->cstring, test->mopts);
+    Matcher matcher(std::move(pattern), test->cstring, test->mopts);
 #ifdef INTERACTIVE
     matcher.interactive();
 #endif
@@ -303,12 +303,12 @@ int main()
   Pattern pattern8("\\w+");
   Pattern pattern9(Matcher::convert("(?u:\\p{L})"));
 
-  Matcher matcher(pattern1);
+  Matcher matcher(std::move(pattern1));
   std::string test;
   //
   banner("TEST FIND");
   //
-  matcher.pattern(pattern8);
+  matcher.pattern(std::move(pattern8));
   matcher.input("an apple a day");
   test = "";
   while (matcher.find())
@@ -319,8 +319,9 @@ int main()
   std::cout << std::endl;
   if (test != "an/apple/a/day/")
     error("find results");
+  pattern8 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern5);
+  matcher.pattern(std::move(pattern5));
   matcher.reset("N");
   matcher.input("a a");
   test = "";
@@ -333,8 +334,9 @@ int main()
   if (test != "///")
     error("find with nullable results");
   matcher.reset("");
+  pattern5 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern6);
+  matcher.pattern(std::move(pattern6));
   matcher.reset("N");
   matcher.input("a a");
   test = "";
@@ -347,10 +349,11 @@ int main()
   if (test != "///")
     error("find with nullable results");
   matcher.reset("");
+  pattern6 = std::move(matcher.pattern());
   //
   banner("TEST SPLIT");
   //
-  matcher.pattern(pattern3);
+  matcher.pattern(std::move(pattern3));
   matcher.input("ab c  d");
   test = "";
   while (matcher.split())
@@ -361,8 +364,9 @@ int main()
   std::cout << std::endl;
   if (test != "ab/c//d/")
     error("split results");
+  pattern3 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern3);
+  matcher.pattern(std::move(pattern3));
   matcher.input("ab c  d ");
   test = "";
   while (matcher.split())
@@ -373,8 +377,9 @@ int main()
   std::cout << std::endl;
   if (test != "ab/c//d//")
     error("split results");
+  pattern3 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern4);
+  matcher.pattern(std::move(pattern4));
   matcher.input("ab c  d");
   test = "";
   while (matcher.split())
@@ -385,8 +390,9 @@ int main()
   std::cout << std::endl;
   if (test != "ab/c/d/")
     error("split results");
+  pattern4 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern5);
+  matcher.pattern(std::move(pattern5));
   matcher.input("ab c  d");
   test = "";
   while (matcher.split())
@@ -397,8 +403,9 @@ int main()
   std::cout << std::endl;
   if (test != "/ab/ /c/  /d//")
     error("split results");
+  pattern5 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern6);
+  matcher.pattern(std::move(pattern6));
   matcher.input("ab c  d");
   test = "";
   while (matcher.split())
@@ -409,8 +416,9 @@ int main()
   std::cout << std::endl;
   if (test != "/a/b/ /c/ / /d//")
     error("split results");
+  pattern6 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern6);
+  matcher.pattern(std::move(pattern6));
   matcher.input("");
   test = "";
   while (matcher.split())
@@ -421,8 +429,9 @@ int main()
   std::cout << std::endl;
   if (test != "/")
     error("split results");
+  pattern6 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern7);
+  matcher.pattern(std::move(pattern7));
   matcher.input("a-b");
   test = "";
   while (matcher.split())
@@ -433,8 +442,9 @@ int main()
   std::cout << std::endl;
   if (test != "/-//")
     error("split results");
+  pattern7 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern7);
+  matcher.pattern(std::move(pattern7));
   matcher.input("a");
   test = "";
   while (matcher.split())
@@ -445,8 +455,9 @@ int main()
   std::cout << std::endl;
   if (test != "//")
     error("split results");
+  pattern7 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern7);
+  matcher.pattern(std::move(pattern7));
   matcher.input("-");
   test = "";
   while (matcher.split())
@@ -457,23 +468,26 @@ int main()
   std::cout << std::endl;
   if (test != "-/")
     error("split results");
+  pattern7 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern4);
+  matcher.pattern(std::move(pattern4));
   matcher.input("ab c  d");
   int n = 2; // split 2
   while (n-- && matcher.split())
     std::cout << matcher.text() << "/";
   std::cout << std::endl << "REST = " << matcher.rest() << std::endl;
+  pattern4 = std::move(matcher.pattern());
   //
   banner("TEST INPUT/UNPUT");
   //
-  matcher.pattern(pattern2);
+  matcher.pattern(std::move(pattern2));
   matcher.input("ab c  d");
   while (!matcher.at_end())
     std::cout << (char)matcher.input() << "/";
   std::cout << std::endl;
+  pattern2 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern2);
+  matcher.pattern(std::move(pattern2));
   matcher.input("ab c  d");
   test = "";
   while (true)
@@ -496,8 +510,9 @@ int main()
   std::cout << std::endl;
   if (test != "ab c  d/")
     error("input");
+  pattern2 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern7);
+  matcher.pattern(std::move(pattern7));
   matcher.input("ab c  d");
   test = "";
   while (true)
@@ -520,8 +535,9 @@ int main()
   std::cout << std::endl;
   if (test != "a/b/?/c/?/?/d/")
     error("input");
+  pattern7 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern7);
+  matcher.pattern(std::move(pattern7));
   matcher.input("ab c  d");
   matcher.unput('a');
   test = "";
@@ -546,8 +562,9 @@ int main()
   std::cout << std::endl;
   if (test != "a/a/b/c/c/d/")
     error("unput");
+  pattern7 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern9);
+  matcher.pattern(std::move(pattern9));
   matcher.input("ab c  d");
   matcher.wunput(L'ä');
   test = "";
@@ -572,11 +589,12 @@ int main()
   std::cout << std::endl;
   if (test != "ä/a/b/ç/c/d/")
     error("wunput");
+  pattern9 = std::move(matcher.pattern());
   //
   banner("TEST WRAP");
   //
   WrappedMatcher wrapped_matcher;
-  wrapped_matcher.pattern(pattern8);
+  wrapped_matcher.pattern(std::move(pattern8));
   test = "";
   while (wrapped_matcher.find())
   {
@@ -586,10 +604,11 @@ int main()
   std::cout << std::endl;
   if (test != "Hello/World/How/now/brown/cow/An/apple/a/day/")
     error("wrap");
+  pattern5 = std::move(wrapped_matcher.pattern());
   //
   banner("TEST REST");
   //
-  matcher.pattern(pattern8);
+  matcher.pattern(std::move(pattern8));
   matcher.input("abc def xyz");
   test = "";
   if (matcher.find())
@@ -600,10 +619,11 @@ int main()
   std::cout << std::endl;
   if (test != "abc/" || strcmp(matcher.rest(), " def xyz") != 0)
     error("rest");
+  pattern8 = std::move(matcher.pattern());
   //
   banner("TEST SKIP");
   //
-  matcher.pattern(pattern8);
+  matcher.pattern(std::move(pattern8));
   matcher.input("abc  \ndef xyz");
   test = "";
   if (matcher.scan())
@@ -621,6 +641,7 @@ int main()
   std::cout << std::endl;
   if (test != "abc/def/")
     error("skip");
+  pattern8 = std::move(matcher.pattern());
   //
   matcher.input("abc  ¶def¶");
   test = "";
@@ -658,7 +679,7 @@ int main()
 #ifdef WITH_SPAN
   banner("TEST SPAN");
   //
-  matcher.pattern(pattern8);
+  matcher.pattern(std::move(pattern8));
   matcher.input("##a#b#c##\ndef##\n##ghi\n##xyz");
   test = "";
   while (matcher.find())
@@ -671,8 +692,9 @@ int main()
     error("span");
   //
   banner("TEST LINE");
+  pattern8 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern8);
+  matcher.pattern(std::move(pattern8));
   matcher.input("##a#b#c##\ndef##\n##ghi\n##xyz");
   test = "";
   while (matcher.find())
@@ -683,11 +705,12 @@ int main()
   std::cout << std::endl;
   if (test != "##a#b#c##/##a#b#c##/##a#b#c##/def##/##ghi/##xyz/")
     error("line");
+  pattern8 = std::move(matcher.pattern());
 #endif
   //
   banner("TEST MORE");
   //
-  matcher.pattern(pattern7);
+  matcher.pattern(std::move(pattern7));
   matcher.input("abc");
   test = "";
   while (matcher.scan())
@@ -699,10 +722,11 @@ int main()
   std::cout << std::endl;
   if (test != "a/ab/abc/")
     error("more");
+  pattern7 = std::move(matcher.pattern());
   //
   banner("TEST LESS");
   //
-  matcher.pattern(pattern1);
+  matcher.pattern(std::move(pattern1));
   matcher.input("abc");
   test = "";
   while (matcher.scan())
@@ -714,6 +738,7 @@ int main()
   std::cout << std::endl;
   if (test != "a/b/c/")
     error("less");
+  pattern1 = std::move(matcher.pattern());
   //
   banner("TEST MATCHES");
   //
@@ -728,37 +753,41 @@ int main()
     error("match results");
   std::cout << std::endl;
   //
-  matcher.pattern(pattern1);
+  matcher.pattern(std::move(pattern1));
   matcher.input("abc");
   if (matcher.matches())
     std::cout << "OK";
   else
     error("match results");
   std::cout << std::endl;
+  pattern1 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern2);
+  matcher.pattern(std::move(pattern2));
   matcher.input("abc");
   if (matcher.matches())
     std::cout << "OK";
   else
     error("match results");
   std::cout << std::endl;
+  pattern2 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern6);
+  matcher.pattern(std::move(pattern6));
   matcher.input("");
   if (matcher.matches())
     std::cout << "OK";
   else
     error("match results");
   std::cout << std::endl;
+  pattern6 = std::move(matcher.pattern());
   //
-  matcher.pattern(pattern2);
+  matcher.pattern(std::move(pattern2));
   matcher.input("---");
   if (!matcher.matches())
     std::cout << "OK";
   else
     error("match results");
   std::cout << std::endl;
+  pattern2 = std::move(matcher.pattern());
   //
   banner("DONE");
   return 0;

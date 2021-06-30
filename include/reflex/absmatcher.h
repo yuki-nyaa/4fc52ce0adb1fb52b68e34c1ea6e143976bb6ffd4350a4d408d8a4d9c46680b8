@@ -88,10 +88,12 @@ got_ // buf_[cur_-1] or txt_[-1] character before this match (assigned before ea
 eof_ // true if no more data can/should be fetched to fill the buffer
 ```
 */
+template<typename P>
 class AbstractMatcher {
  protected:
   typedef int Method; ///< a method is one of Const::SCAN, Const::FIND, Const::SPLIT, Const::MATCH
  public:
+  typedef P Pattern;
   /// AbstractMatcher::Const common constants.
   struct Const {
     static const Method SCAN  = 0;          ///< AbstractMatcher::match method is to scan input (tokenizer)
@@ -129,21 +131,45 @@ class AbstractMatcher {
  protected:
   /// AbstractMatcher::Options for matcher engines.
   struct Option {
-    Option()
-      :
-        A(false),
-        N(false),
-        W(false),
-        T(8)
-    { }
-    bool A; ///< accept any/all (?^X) negative patterns as Const::REDO accept index codes
-    bool N; ///< nullable, find may return empty match (N/A to scan, split, matches)
-    bool W; ///< half-check for "whole words", check only left of \< and right of \> for non-word character
-    char T; ///< tab size, must be a power of 2, default is 8, for column count and indent \i, \j, and \k
+    Option() = default;
+    Option(const char* opt){
+      if(opt){
+        for (const char *s = opt; *s != '\0'; ++s)
+        {
+          switch (*s)
+          {
+            case 'A':
+              A = true;
+              break;
+            case 'N':
+              N = true;
+              break;
+            case 'W':
+              W = true;
+              break;
+            case 'T':
+              T = isdigit(*(s += (s[1] == '=') + 1)) ? static_cast<char>(*s - '0') : 0;
+              break;
+          }
+        }
+      }
+    }
+    bool A = false; ///< accept any/all (?^X) negative patterns as Const::REDO accept index codes
+    bool N = false; ///< nullable, find may return empty match (N/A to scan, split, matches)
+    bool W = false; ///< half-check for "whole words", check only left of \< and right of \> for non-word character
+    char T = 8; ///< tab size, must be a power of 2, default is 8, for column count and indent \i, \j, and \k
   };
   /// AbstractMatcher::Iterator class for scanning, searching, and splitting input character sequences.
   template<typename T> /// @tparam <T> AbstractMatcher or const AbstractMatcher
-  class Iterator : public std::iterator<std::input_iterator_tag,T> {
+  class Iterator{
+    static_assert(std::is_same<T,AbstractMatcher>::value || std::is_same<T,const AbstractMatcher>::value,"");
+
+    typedef std::input_iterator_tag iterator_category;
+    typedef T value_type;
+    typedef std::ptrdiff_t difference_type;
+    typedef T* pointer;
+    typedef T& reference;
+
     friend class AbstractMatcher;
     friend class Iterator<typename std::add_const<T>::type>;
     friend class Iterator<typename std::remove_const<T>::type>;
@@ -240,6 +266,7 @@ class AbstractMatcher {
     size_t operator()() const
       /// @returns value of accept() >= 1 for match or 0 for end of matches
     {
+      assert(matcher_);
       return matcher_->match(method_);
     }
     /// AbstractMatcher::Operation.begin() returns a std::input_iterator to the start of the matches.
@@ -271,29 +298,33 @@ class AbstractMatcher {
     Method           method_;  ///< the method for pattern matching by this functor's matcher
   };
   /// Construct a base abstract matcher.
-  AbstractMatcher(
-      const Input& input, ///< input character sequence for this matcher
-      const char  *opt)   ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
+  AbstractMatcher()
     :
       scan(this, Const::SCAN),
       find(this, Const::FIND),
-      split(this, Const::SPLIT)
+      split(this, Const::SPLIT),
+      in(),
+      own_(false),
+      pat_()
   {
-    in = input;
-    init(opt);
+    reset();
   }
   /// Construct a base abstract matcher.
+  template<typename P2>
   AbstractMatcher(
+      P2&& pat,
       const Input&  input, ///< input character sequence for this matcher
       const Option& opt)   ///< options
     :
       scan(this, Const::SCAN),
       find(this, Const::FIND),
-      split(this, Const::SPLIT)
+      split(this, Const::SPLIT),
+      in(input),
+      opt_(opt),
+      own_(false),
+      pat_(std::forward<P2>(pat))
   {
-    in = input;
-    init();
-    opt_ = opt;
+    reset();
   }
   /// Delete abstract matcher, deletes this matcher's internal buffer.
   virtual ~AbstractMatcher()
@@ -312,41 +343,32 @@ class AbstractMatcher {
 #endif
     }
   }
+  /// Returns the pattern associated with this matcher.
+  Pattern pattern() const
+    /// @returns pattern
+  {
+    return pat_;
+  }
+  /// Set the pattern to use with this matcher (the given pattern is shared and must be persistent).
+  AbstractMatcher& pattern(Pattern&& pattern) ///< pattern object for this matcher
+    /// @returns this matcher
+  {
+    DBGLOG("PatternMatcher::pattern()");
+    pat_=std::move(pattern);
+    return *this;
+  }
   /// Polymorphic cloning.
   virtual AbstractMatcher *clone() = 0;
-  /// Reset this matcher's state to the initial state and set options (when provided).
-  virtual void reset(const char *opt = nullptr)
+  /// Reset this matcher's state to the initial state and set options.
+  void reset(const Option& opt){
+    opt_=opt;
+    reset();
+  }
+  /// Reset this matcher's state to the initial state.
+  void reset()
   {
-    DBGLOG("AbstractMatcher::reset(%s)", opt ? opt : "(null)");
-    if (opt)
-    {
-      opt_.A = false; // when true: accept any/all (?^X) negative patterns as Const::REDO accept index codes
-      opt_.N = false; // when true: find may return empty match (N/A to scan, split, matches)
-      opt_.W = false; // when true: half-check for "whole words", check only left of \< and right of \> for non-word character
-      opt_.T = 8;     // tab size 1, 2, 4, or 8
-      if (opt)
-      {
-        for (const char *s = opt; *s != '\0'; ++s)
-        {
-          switch (*s)
-          {
-            case 'A':
-              opt_.A = true;
-              break;
-            case 'N':
-              opt_.N = true;
-              break;
-            case 'W':
-              opt_.W = true;
-              break;
-            case 'T':
-              opt_.T = isdigit(*(s += (s[1] == '=') + 1)) ? static_cast<char>(*s - '0') : 0;
-              break;
-          }
-        }
-      }
-    }
-    if (!own_)
+    DBGLOG("AbstractMatcher::reset()");
+    if (own_==false)
     {
       max_ = 2 * Const::BLOCK;
 #if defined(WITH_REALLOC)
@@ -1441,13 +1463,6 @@ class AbstractMatcher {
   Operation split; ///< functor to split input
   Input in;        ///< input character sequence being matched by this matcher
  protected:
-  /// Initialize the base abstract matcher at construction.
-  virtual void init(const char *opt = nullptr) ///< options
-  {
-    DBGLOG("AbstractMatcher::init(%s)", opt ? opt : "");
-    own_ = false; // require allocation of a buffer
-    reset(opt);
-  }
   /// The abstract match operation implemented by pattern matching engines derived from AbstractMatcher.
   virtual size_t match(Method method)
     /// @returns nonzero when input matched the pattern using method Const::SCAN, Const::FIND, Const::SPLIT, or Const::MATCH
@@ -1673,313 +1688,32 @@ class AbstractMatcher {
 #if defined(WITH_SPAN)
   char     *bol_; ///< begin of line pointer in buffer
   Handler  *evh_; ///< event handler functor to invoke when buffer contents are shifted out
+#else
+  size_t    cno_; ///< column number count (cached)
 #endif
   char     *lpb_; ///< line pointer in buffer, updated when counting line numbers with lineno()
   size_t    lno_; ///< line number count (cached)
-#if !defined(WITH_SPAN)
-  size_t    cno_; ///< column number count (cached)
-#endif
   size_t    num_; ///< character count of the input till bol_
   bool      own_; ///< true if AbstractMatcher::buf_ was allocated and should be deleted
   bool      eof_; ///< input has reached EOF
   bool      mat_; ///< true if AbstractMatcher::matches() was successful
-};
 
-/// The pattern matcher class template extends abstract matcher base class.
-template<typename P> /// @tparam <P> pattern class to instantiate a matcher
-class PatternMatcher : public AbstractMatcher {
- public:
-  typedef P Pattern; ///< pattern class of this matcher, a typedef of the PatternMatcher template parameter
-  /// Copy constructor, the underlying pattern object is shared (not deep copied).
-  PatternMatcher(const PatternMatcher& matcher) ///< matcher with pattern to use (pattern may be shared)
-    :
-      AbstractMatcher(matcher.in, matcher.opt_),
-      pat_(matcher.pat_),
-      own_(false)
-  {
-    DBGLOG("PatternMatcher::PatternMatcher(matcher)");
-  }
-  /// Delete matcher, deletes pattern when owned
-  virtual ~PatternMatcher()
-  {
-    DBGLOG("PatternMatcher::~PatternMatcher()");
-    if (own_ && pat_ != nullptr)
-      delete pat_;
-  }
-  /// Assign a matcher, the underlying pattern object is shared (not deep copied).
-  PatternMatcher& operator=(const PatternMatcher& matcher) ///< matcher with pattern to use (pattern may be shared)
-  {
-    scan.init(this, Const::SCAN);
-    find.init(this, Const::FIND);
-    split.init(this, Const::SPLIT);
-    in = matcher.in;
-    reset();
-    opt_ = matcher.opt_;
-    pat_ = matcher.pat_,
-    own_ = false;
-    return *this;
-  }
-  /// Set the pattern to use with this matcher as a shared pointer to another matcher pattern.
-  virtual PatternMatcher& pattern(const PatternMatcher& matcher) ///< the other matcher
-    /// @returns this matcher
-  {
-    opt_ = matcher.opt_;
-    return this->pattern(matcher.pattern());
-  }
-  /// Set the pattern to use with this matcher (the given pattern is shared and must be persistent).
-  virtual PatternMatcher& pattern(const Pattern& pattern) ///< pattern object for this matcher
-    /// @returns this matcher
-  {
-    DBGLOG("PatternMatcher::pattern()");
-    if (pat_ != &pattern)
-    {
-      if (own_ && pat_ != nullptr)
-        delete pat_;
-      pat_ = &pattern;
-      own_ = false;
-    }
-    return *this;
-  }
-  /// Set the pattern to use with this matcher (the given pattern is shared and must be persistent).
-  virtual PatternMatcher& pattern(const Pattern *pattern) ///< pattern object for this matcher
-    /// @returns this matcher
-  {
-    DBGLOG("PatternMatcher::pattern()");
-    if (pat_ != pattern)
-    {
-      if (own_ && pat_ != nullptr)
-        delete pat_;
-      pat_ = pattern;
-      own_ = false;
-    }
-    return *this;
-  }
-  /// Set the pattern from a regex string to use with this matcher.
-  virtual PatternMatcher& pattern(const char *pattern) ///< regex string to instantiate internal pattern object
-    /// @returns this matcher
-  {
-    DBGLOG("PatternMatcher::pattern(\"%s\")", pattern);
-    if (own_ && pat_ != nullptr)
-      delete pat_;
-    pat_ = new Pattern(pattern);
-    own_ = true;
-    return *this;
-  }
-  /// Set the pattern from a regex string to use with this matcher.
-  virtual PatternMatcher& pattern(const std::string& pattern) ///< regex string to instantiate internal pattern object
-    /// @returns this matcher
-  {
-    DBGLOG("PatternMatcher::pattern(\"%s\")", pattern.c_str());
-    if (own_ && pat_ != nullptr)
-      delete pat_;
-    pat_ = new Pattern(pattern);
-    own_ = true;
-    return *this;
-  }
-  /// Returns true if this matcher has a pattern.
-  bool has_pattern() const
-    /// @returns true if this matcher has a pattern
-  {
-    return pat_ != nullptr;
-  }
-  /// Returns true if this matcher has its own pattern not received from another matcher (responsible to delete).
-  bool own_pattern() const
-    /// @returns true if this matcher has its own pattern
-  {
-    return own_ && pat_ != nullptr;
-  }
-  /// Returns a reference to the pattern object associated with this matcher.
-  const Pattern& pattern() const
-    /// @returns reference to pattern object
-  {
-    assert(pat_ != nullptr);
-    return *pat_;
-  }
- protected:
-  /// Construct a base abstract matcher from a pointer to a persistent pattern object (that is shared with this class) and an input character sequence.
-  PatternMatcher(
-      const Pattern *pattern = nullptr,  ///< points to pattern object for this matcher
-      const Input&   input = Input(), ///< input character sequence for this matcher
-      const char    *opt = nullptr)      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
-    :
-      AbstractMatcher(input, opt),
-      pat_(pattern),
-      own_(false)
-  { }
-  /// Construct a base abstract matcher from a persistent pattern object (that is shared with this class) and an input character sequence.
-  PatternMatcher(
-      const Pattern& pattern,         ///< pattern object for this matcher
-      const Input&   input = Input(), ///< input character sequence for this matcher
-      const char    *opt = nullptr)      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
-    :
-      AbstractMatcher(input, opt),
-      pat_(&pattern),
-      own_(false)
-  { }
-  /// Construct a base abstract matcher from a regex pattern string and an input character sequence.
-  PatternMatcher(
-      const char  *pattern,         ///< regex string instantiates pattern object for this matcher
-      const Input& input = Input(), ///< input character sequence for this matcher
-      const char  *opt = nullptr)      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
-    :
-      AbstractMatcher(input, opt),
-      pat_(new Pattern(pattern)),
-      own_(true)
-  { }
-  /// Construct a base abstract matcher from a regex pattern string and an input character sequence.
-  PatternMatcher(
-      const std::string& pattern,         ///< regex string instantiates pattern object for this matcher
-      const Input&       input = Input(), ///< input character sequence for this matcher
-      const char        *opt = nullptr)      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
-    :
-      AbstractMatcher(input, opt),
-      pat_(new Pattern(pattern)),
-      own_(true)
-  { }
-  const Pattern *pat_; ///< points to the pattern object used by the matcher
-  bool           own_; ///< true if PatternMatcher::pat_ was allocated and should be deleted
-};
-
-/// A specialization of the pattern matcher class template for std::string, extends abstract matcher base class.
-template<>
-class PatternMatcher<std::string> : public AbstractMatcher {
- public:
-  typedef std::string Pattern; ///< pattern class of this matcher
-  /// Copy constructor, the underlying pattern string is copied.
-  PatternMatcher(const PatternMatcher& matcher) ///< matcher with pattern to copy and use
-    :
-      AbstractMatcher(matcher.in, matcher.opt_),
-      pat_(matcher.pat_ != nullptr ? new Pattern(*matcher.pat_) : nullptr),
-      own_(matcher.pat_ != nullptr)
-  { }
-  /// Delete matcher, deletes pattern when owned
-  virtual ~PatternMatcher()
-  {
-    DBGLOG("PatternMatcher::~PatternMatcher()");
-    if (own_ && pat_ != nullptr)
-      delete pat_;
-  }
-  /// Assign a matcher, the underlying pattern string is shared (not deep copied).
-  PatternMatcher& operator=(const PatternMatcher& matcher) ///< matcher with pattern to use (pattern may be shared)
-  {
-    scan.init(this, Const::SCAN);
-    find.init(this, Const::FIND);
-    split.init(this, Const::SPLIT);
-    in = matcher.in;
-    reset();
-    opt_ = matcher.opt_;
-    pat_ = matcher.pat_,
-    own_ = false;
-    return *this;
-  }
-  /// Set the pattern to use with this matcher as a shared pointer to another matcher pattern.
-  virtual PatternMatcher& pattern(const PatternMatcher& matcher) ///< the other matcher
-    /// @returns this matcher
-  {
-    opt_ = matcher.opt_;
-    return this->pattern(matcher.pattern());
-  }
-  /// Set the pattern to use with this matcher (the given pattern is shared and must be persistent).
-  virtual PatternMatcher& pattern(const Pattern *pattern) ///< pattern string for this matcher
-    /// @returns this matcher
-  {
-    DBGLOG("Patternatcher::pattern()");
-    if (pat_ != pattern)
-    {
-      if (own_ && pat_ != nullptr)
-        delete pat_;
-      pat_ = pattern;
-      own_ = false;
-    }
-    return *this;
-  }
-  /// Set the pattern from a regex string to use with this matcher.
-  virtual PatternMatcher& pattern(const char *pattern) ///< regex string to instantiate internal pattern string
-    /// @returns this matcher
-  {
-    DBGLOG("Patternatcher::pattern(\"%s\")", pattern);
-    if (own_ && pat_ != nullptr)
-      delete pat_;
-    pat_ = new Pattern(pattern);
-    own_ = true;
-    return *this;
-  }
-  /// Set the pattern from a regex string to use with this matcher.
-  virtual PatternMatcher& pattern(const std::string& pattern) ///< regex string to instantiate internal pattern string
-    /// @returns this matcher
-  {
-    DBGLOG("Patternatcher::pattern(\"%s\")", pattern.c_str());
-    if (own_ && pat_ != nullptr)
-      delete pat_;
-    pat_ = new Pattern(pattern);
-    own_ = true;
-    return *this;
-  }
-  /// Returns true if this matcher has a pattern.
-  bool has_pattern() const
-    /// @returns true if this matcher has a pattern
-  {
-    return pat_ != nullptr;
-  }
-  /// Returns true if this matcher has its own pattern not received from another matcher (responsible to delete).
-  bool own_pattern() const
-    /// @returns true if this matcher has its own pattern
-  {
-    return own_ && pat_ != nullptr;
-  }
-  /// Returns a reference to the pattern string associated with this matcher.
-  const Pattern& pattern() const
-    /// @returns reference to pattern string
-  {
-    assert(pat_ != nullptr);
-    return *pat_;
-  }
- protected:
-  /// Construct a base abstract matcher from a pointer to a persistent pattern string (that is shared with this class) and an input character sequence.
-  PatternMatcher(
-      const Pattern *pattern = nullptr,  ///< points to pattern string for this matcher
-      const Input&   input = Input(), ///< input character sequence for this matcher
-      const char    *opt = nullptr)      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
-    :
-      AbstractMatcher(input, opt),
-      pat_(pattern),
-      own_(false)
-  { }
-  /// Construct a base abstract matcher from a regex pattern string and an input character sequence.
-  PatternMatcher(
-      const char  *pattern,         ///< regex string instantiates pattern string for this matcher
-      const Input& input = Input(), ///< input character sequence for this matcher
-      const char  *opt = nullptr)      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
-    :
-      AbstractMatcher(input, opt),
-      pat_(new Pattern(pattern)),
-      own_(true)
-  { }
-  /// Construct a base abstract matcher from a regex pattern string and an input character sequence.
-  PatternMatcher(
-      const std::string& pattern,         ///< regex string instantiates pattern string for this matcher
-      const Input&       input = Input(), ///< input character sequence for this matcher
-      const char        *opt = nullptr)      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
-    :
-      AbstractMatcher(input, opt),
-      pat_(new Pattern(pattern)),
-      own_(true)
-  { }
-  const Pattern *pat_; ///< points to the pattern string used by the matcher
-  bool           own_; ///< true if PatternMatcher::pat_ was allocated and should be deleted
+  P         pat_;
 };
 
 } // namespace reflex
 
 /// Write matched text to a stream.
-inline std::ostream& operator<<(std::ostream& os, const reflex::AbstractMatcher& matcher)
+template<typename P>
+inline std::ostream& operator<<(std::ostream& os, const reflex::AbstractMatcher<P>& matcher)
 {
   os.write(matcher.begin(), matcher.size());
   return os;
 }
 
 /// Read stream and store all content in the matcher's buffer.
-inline std::istream& operator>>(std::istream& is, reflex::AbstractMatcher& matcher)
+template<typename P>
+inline std::istream& operator>>(std::istream& is, reflex::AbstractMatcher<P>& matcher)
 {
   matcher.input(is).buffer();
   return is;

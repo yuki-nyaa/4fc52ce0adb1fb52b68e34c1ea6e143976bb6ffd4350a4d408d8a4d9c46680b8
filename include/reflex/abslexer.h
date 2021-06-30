@@ -46,42 +46,11 @@
 namespace reflex {
 
 /// The abstract lexer class template that is the abstract root class of all reflex-generated scanners.
-template<typename M> /// @tparam <M> matcher class derived from reflex::AbstractMatcher
+template<typename M> /// @tparam <M> matcher class derived from reflex::AbstractMatcher<M::Pattern>
 class AbstractLexer {
+  static_assert(std::is_base_of<reflex::AbstractMatcher<typename M::Pattern>,M>::value,"M must be derived from `reflex::AbstractMatcher<M::Pattern>`!");
  public:
-  /// Extend matcher class M with a member pointing to the instantiating lexer class.
-  class Matcher : public M {
-   public:
-    /// Construct a lexer matcher from a matcher's pattern type.
-    Matcher(
-        const typename M::Pattern& pattern,    ///< regex pattern to instantiate matcher class M(pattern, input)
-        const Input&               input,      ///< the reflex::Input to instantiate matcher class M(pattern, input)
-        AbstractLexer             *lexer,      ///< points to the instantiating lexer class
-        const char                *opt = nullptr) ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
-      :
-        M(pattern, input, opt),
-        lexer_(lexer)
-    { }
-    /// Construct a lexer matcher from a string pattern.
-    Matcher(
-        const char    *pattern,    ///< regex pattern to instantiate matcher class M(pattern, input)
-        const Input&   input,      ///< the reflex::Input to instantiate matcher class M(pattern, input)
-        AbstractLexer *lexer,      ///< points to the instantiating lexer class
-        const char    *opt = nullptr) ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
-      :
-        M(pattern, input, opt),
-        lexer_(lexer)
-    { }
-   protected:
-    /// Returns true if matcher should wrap input after EOF (lexer wrap() should return 0 to wrap input after EOF).
-    virtual bool wrap()
-      /// @returns true if reflex::AbstractLexer::wrap() == 0 indicating that input is wrapped after EOF
-    {
-      return lexer_->wrap() == 0;
-    }
-    /// Points to the lexer class that instantiated this Matcher.
-    AbstractLexer *lexer_;
-  };
+  typedef M Matcher;
   /// Construct abstract lexer to scan an input character sequence and echo the text matches to output.
   AbstractLexer(
       const Input&  input, ///< reflex::Input character sequence to read from
@@ -118,11 +87,12 @@ class AbstractLexer {
   /// Dummy performance reporter, to prevent link errors when reflex option -p is omitted.
   void perf_report()
   { }
-  /// The default wrap operation at EOF: do not wrap input.
-  virtual int wrap()
-    /// @returns 1 (override to return 0 to indicate that new input is available after this invocation so that wrap after EOF is OK)
+  /// The default wrap operation at EOF: same as the underlying matcher.
+  bool wrap()
+    /// @returns matcher_->wrap()
   {
-    return 1;
+    assert(matcher_);
+    return matcher_->wrap();
   }
   /// Reset the matcher and start scanning from the given input character sequence I.
   template<typename I>
@@ -209,7 +179,7 @@ class AbstractLexer {
     return matcher_ != nullptr;
   }
   /// Set the matcher (and its current state) for scanning.
-  inline AbstractLexer& matcher(Matcher *matcher) ///< points to a matcher object
+  inline AbstractLexer& matcher(M *matcher) ///< points to a matcher object
     /// @returns reference to *this
   {
     matcher_ = matcher;
@@ -222,29 +192,29 @@ class AbstractLexer {
     return *this;
   }
   /// Returns a reference to the current matcher.
-  inline Matcher& matcher() const
+  inline M& matcher() const
     /// @returns reference to the current matcher
   {
     assert(has_matcher());
     return *matcher_;
   }
   /// Returns a pointer to the current matcher, nullptr if none was set.
-  inline Matcher *ptr_matcher() const
+  inline M *ptr_matcher() const
     /// @returns pointer to the current matcher or nullptr if no matcher was set
   {
     return matcher_;
   }
   /// Returns a new copy of the matcher for the given input.
-  virtual Matcher *new_matcher(
+  virtual M *new_matcher(
       const Input& input = Input(), ///< reflex::Input character sequence to match
       const char *opt    = nullptr)    ///< options, if any
-    /// @returns pointer to new reflex::AbstractLexer::Matcher
+    /// @returns pointer to new M
   {
     char tabs[4] = "T=n";
-    return new Matcher(matcher().pattern(), input, this, opt ? opt : (tabs[2] = matcher().tabs() + '0', tabs));
+    return new M(matcher().pattern(), input, opt ? opt : (tabs[2] = matcher().tabs() + '0', tabs));
   }
   /// Delete a matcher.
-  void del_matcher(Matcher *matcher)
+  void del_matcher(M *matcher)
   {
     if (matcher != nullptr)
       delete matcher;
@@ -252,7 +222,7 @@ class AbstractLexer {
       matcher_ = nullptr;
   }
   /// Push the current matcher on the stack and use the given matcher for scanning.
-  void push_matcher(Matcher *matcher) ///< points to a matcher object
+  void push_matcher(M *matcher) ///< points to a matcher object
   {
     stack_.push(matcher_);
     matcher_ = matcher;
@@ -421,10 +391,10 @@ class AbstractLexer {
   std::ostream        *os_;      ///< the output stream to echo text matches to
   char                *base_;    ///< the buffer to scan in place, if non-nullptr
   size_t               size_;    ///< the size of the buffer to scan in place, if nonzero
-  Matcher             *matcher_; ///< the matcher used for scanning
+  M                   *matcher_; ///< the matcher used for scanning
   int                  start_;   ///< the current start condition state
   int                  debug_;   ///< 1 if -d (--debug) 0 otherwise:
-  std::stack<Matcher*> stack_;   ///< a stack of pointers to matchers
+  std::stack<M*>       stack_;   ///< a stack of pointers to matchers
   std::stack<int>      state_;   ///< a stack of start condition states
 };
 
