@@ -200,7 +200,6 @@ following files:
     |       |__ setop.h
     |       |__ stdmatcher.h
     |       |__ timer.h
-    |       |__ traits.h
     |       |__ unicode.h
     |       |__ utf8.h
     |
@@ -264,7 +263,7 @@ License and copyright
 ---------------------
 
 RE/flex by Robert van Engelen, Genivia Inc.
-Copyright (c) 2016-2020, All rights reserved.   
+Copyright (c) 2016-2020, All rights reserved.
 
 RE/flex is distributed under the BSD-3 license LICENSE.txt.
 Use, modification, and distribution are subject to the BSD-3 license.

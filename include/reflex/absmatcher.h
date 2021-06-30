@@ -49,7 +49,7 @@
 #include<reflex/convert.h>
 #include<reflex/debug.h>
 #include<reflex/input.h>
-#include<reflex/traits.h>
+#include<type_traits>
 #include<cassert>
 #include<cstdlib>
 #include<cctype>
@@ -145,8 +145,8 @@ class AbstractMatcher {
   template<typename T> /// @tparam <T> AbstractMatcher or const AbstractMatcher
   class Iterator : public std::iterator<std::input_iterator_tag,T> {
     friend class AbstractMatcher;
-    friend class Iterator<typename reflex::TypeOp<T>::ConstType>;
-    friend class Iterator<typename reflex::TypeOp<T>::NonConstType>;
+    friend class Iterator<typename std::add_const<T>::type>;
+    friend class Iterator<typename std::remove_const<T>::type>;
    public:
     /// Construct an AbstractMatcher::Iterator such that Iterator() == AbstractMatcher::Operation(*this, method).end().
     Iterator()
@@ -155,7 +155,7 @@ class AbstractMatcher {
         method_()
     { }
     /// Copy constructor.
-    Iterator(const Iterator<typename reflex::TypeOp<T>::NonConstType>& it)
+    Iterator(const Iterator<typename std::remove_const<T>::type>& it)
       :
         matcher_(it.matcher_),
         method_(it.method_)
@@ -173,13 +173,13 @@ class AbstractMatcher {
       return matcher_;
     }
     /// AbstractMatcher::Iterator equality.
-    bool operator==(const Iterator<typename reflex::TypeOp<T>::ConstType>& rhs) const
+    bool operator==(const Iterator<typename std::add_const<T>::type>& rhs) const
       /// @returns true if iterator equals RHS
     {
       return matcher_ == rhs.matcher_;
     }
     /// AbstractMatcher::Iterator inequality.
-    bool operator!=(const Iterator<typename reflex::TypeOp<T>::ConstType>& rhs) const
+    bool operator!=(const Iterator<typename std::add_const<T>::type>& rhs) const
       /// @returns true if iterator does not equal RHS
     {
       return matcher_ != rhs.matcher_;
