@@ -161,7 +161,7 @@ void Pattern::error(regex_error_type code, size_t pos) const
     throw err;
 }
 
-void Pattern::init(const char *options, const uint8_t *pred)
+void Pattern::init(const char *options, const uint_least8_t *pred)
 {
   init_options(options);
   nop_ = 0;
@@ -1303,7 +1303,7 @@ void Pattern::compile(
   // construct the DFA
   acc_.resize(end_.size(), false);
   trim_lazy(start);
-  // hash table with 64K entries (uint16_t indexed)
+  // hash table with 64K entries (uint_least16_t indexed)
   DFA::State **table = new DFA::State*[65536];
   for (int i = 0; i < 65536; ++i)
     table[i] = nullptr;
@@ -1409,7 +1409,7 @@ void Pattern::compile(
         if (opt_.i)
         {
           // normalize by removing upper case if option i (case insensitivem matching) is enabled
-          static const uint64_t upper[5] = { 0x0000000000000000, 0x0000000007FFFFFE, 0, 0, 0 };
+          static const uint_least64_t upper[5] = { 0x0000000000000000, 0x0000000007FFFFFE, 0, 0, 0 };
           chars -= Chars(upper);
         }
         if (chars.any())
@@ -1446,7 +1446,7 @@ void Pattern::compile(
       Positions& pos = i->second;
       if (!pos.empty())
       {
-        uint16_t h = hash_pos(&pos);
+        uint_least16_t h = hash_pos(&pos);
         DFA::State **branch_ptr = &table[h];
         DFA::State *target_state = *branch_ptr;
         // binary search the target state for a possible matching state in the hash table overflow tree
@@ -1796,12 +1796,12 @@ void Pattern::compile_transition(
               case '.':
                 if (is_modified('s', modifiers, loc))
                 {
-                  static const uint64_t dot[5] = { 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 0 };
+                  static const uint_least64_t dot[5] = { 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 0 };
                   chars |= Chars(dot);
                 }
                 else
                 {
-                  static const uint64_t dot[5] = { 0xFFFFFFFFFFFFFBFFULL, 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 0 };
+                  static const uint_least64_t dot[5] = { 0xFFFFFFFFFFFFFBFFULL, 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 0 };
                   chars |= Chars(dot);
                 }
                 break;
@@ -2037,7 +2037,7 @@ void Pattern::compile_list(Location loc, Chars& chars, const Map& modifiers) con
 void Pattern::posix(size_t index, Chars& chars) const
 {
   DBGLOG("posix(%lu)", index);
-  static const uint64_t posix_chars[14][5] = {
+  static const uint_least64_t posix_chars[14][5] = {
     { 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 0ULL, 0ULL, 0ULL }, // ASCII
     { 0x0000000100003E00ULL, 0x0000000000000000ULL, 0ULL, 0ULL, 0ULL }, // Space: \t-\r, ' '
     { 0x03FF000000000000ULL, 0x0000007E0000007EULL, 0ULL, 0ULL, 0ULL }, // XDigit: 0-9, A-F, a-f
@@ -3051,7 +3051,7 @@ void Pattern::predict_match_dfa(DFA::State *start)
         one_ = false;
         break;
       }
-      pre_[len_++] = static_cast<uint8_t>(lo);
+      pre_[len_++] = static_cast<uint_least8_t>(lo);
     }
     else
     {
@@ -3211,7 +3211,7 @@ void Pattern::gen_predict_match_transitions(size_t level, DFA::State *state, ORa
         {
           for (lo = edge->first; lo <= hi; ++lo)
           {
-            Hash h = hash(label_lo, static_cast<uint8_t>(lo));
+            Hash h = hash(label_lo, static_cast<uint_least8_t>(lo));
             pmh_[h] &= ~(1 << level);
             if (level < 4)
             {
@@ -3231,25 +3231,25 @@ void Pattern::gen_predict_match_transitions(size_t level, DFA::State *state, ORa
 void Pattern::write_predictor(FILE *file) const
 {
   ::fprintf(file, "extern const reflex::Pattern::Pred reflex_pred_%s[%zu] = {", opt_.n.empty() ? "FSM" : opt_.n.c_str(), 2 + len_ + (min_ > 1 && len_ == 0) * 256 + (min_ > 0) * Const::HASH);
-  ::fprintf(file, "\n  %3hhu,%3hhu,", static_cast<uint8_t>(len_), (static_cast<uint8_t>(min_ | (one_ << 4))));
+  ::fprintf(file, "\n  %3hhu,%3hhu,", static_cast<uint_least8_t>(len_), (static_cast<uint_least8_t>(min_ | (one_ << 4))));
   for (size_t i = 0; i < len_; ++i)
-    ::fprintf(file, "%s%3hhu,", ((i + 2) & 0xF) ? "" : "\n  ", static_cast<uint8_t>(pre_[i]));
+    ::fprintf(file, "%s%3hhu,", ((i + 2) & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(pre_[i]));
   if (min_ > 0)
   {
     if (min_ > 1 && len_ == 0)
     {
       for (Char i = 0; i < 256; ++i)
-        ::fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", static_cast<uint8_t>(~bit_[i]));
+        ::fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(~bit_[i]));
     }
     if (min_ >= 4)
     {
       for (Hash i = 0; i < Const::HASH; ++i)
-        ::fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", static_cast<uint8_t>(~pmh_[i]));
+        ::fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(~pmh_[i]));
     }
     else
     {
       for (Hash i = 0; i < Const::HASH; ++i)
-        ::fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", static_cast<uint8_t>(~pma_[i]));
+        ::fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(~pma_[i]));
     }
   }
   ::fprintf(file, "\n};\n\n");

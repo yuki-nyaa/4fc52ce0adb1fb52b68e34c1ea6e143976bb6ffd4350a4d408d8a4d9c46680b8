@@ -1137,43 +1137,43 @@ class BufferedInput::dos_streambuf : public std::streambuf {
 
 #ifdef _MSC_VER
 #pragma intrinsic(_BitScanForward)
-inline uint32_t ctz(uint32_t x)
+inline uint_least32_t ctz(uint_least32_t x)
 {
   unsigned long r;
   _BitScanForward(&r, x);
   return r;
 }
-inline uint32_t popcount(uint32_t x)
+inline uint_least32_t popcount(uint_least32_t x)
 {
   return __popcnt(x);
 }
 #ifdef _WIN64
 #pragma intrinsic(_BitScanForward64)
-inline uint32_t ctzl(uint64_t x)
+inline uint_least32_t ctzl(uint_least64_t x)
 {
   unsigned long r;
   _BitScanForward64(&r, x);
   return r;
 }
-inline uint32_t popcountl(uint64_t x)
+inline uint_least32_t popcountl(uint_least64_t x)
 {
-  return static_cast<uint32_t>(__popcnt64(x));
+  return static_cast<uint_least32_t>(__popcnt64(x));
 }
 #endif
 #else
-inline uint32_t ctz(uint32_t x)
+inline uint_least32_t ctz(uint_least32_t x)
 {
   return __builtin_ctz(x);
 }
-inline uint32_t ctzl(uint64_t x)
+inline uint_least32_t ctzl(uint_least64_t x)
 {
   return __builtin_ctzl(x);
 }
-inline uint32_t popcount(uint32_t x)
+inline uint_least32_t popcount(uint_least32_t x)
 {
   return __builtin_popcount(x);
 }
-inline uint32_t popcountl(uint64_t x)
+inline uint_least32_t popcountl(uint_least64_t x)
 {
   return __builtin_popcountl(x);
 }
@@ -1181,7 +1181,7 @@ inline uint32_t popcountl(uint64_t x)
 
 #endif
 
-extern uint64_t HW;
+extern uint_least64_t HW;
 
 inline bool have_HW_AVX512BW()
 {

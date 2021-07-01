@@ -47,9 +47,9 @@ namespace reflex {
 class FuzzyMatcher : public Matcher {
  public:
   /// Optional flags for the max parameter to constrain fuzzy matching, otherwise no constraints
-  static const uint16_t INS = 0x1000; ///< fuzzy match allows character insertions
-  static const uint16_t DEL = 0x2000; ///< fuzzy match allows character deletions
-  static const uint16_t SUB = 0x4000; ///< character substitutions count as one edit, not two (insert+delete)
+  static const uint_least16_t INS = 0x1000; ///< fuzzy match allows character insertions
+  static const uint_least16_t DEL = 0x2000; ///< fuzzy match allows character deletions
+  static const uint_least16_t SUB = 0x4000; ///< character substitutions count as one edit, not two (insert+delete)
   /// Default constructor.
   FuzzyMatcher()
     :
@@ -82,12 +82,12 @@ class FuzzyMatcher : public Matcher {
   template<typename P> /// @tparam <P> a reflex::Pattern or a string regex
   FuzzyMatcher(
       const P     *pattern,         ///< points to a reflex::Pattern or a string regex for this matcher
-      uint16_t     max,             ///< max errors
+      uint_least16_t     max,             ///< max errors
       const Input& input = Input(), ///< input character sequence for this matcher
       const char  *opt = nullptr)      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
     :
       Matcher(pattern, input, opt),
-      max_(static_cast<uint8_t>(max)),
+      max_(static_cast<uint_least8_t>(max)),
       err_(0),
       ins_(max <= 0xFF || (max & INS)),
       del_(max <= 0xFF || (max & DEL)),
@@ -115,12 +115,12 @@ class FuzzyMatcher : public Matcher {
   template<typename P> /// @tparam <P> a reflex::Pattern or a string regex
   FuzzyMatcher(
       const P&     pattern,         ///< a reflex::Pattern or a string regex for this matcher
-      uint16_t     max,             ///< max errors
+      uint_least16_t     max,             ///< max errors
       const Input& input = Input(), ///< input character sequence for this matcher
       const char  *opt = nullptr)      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
     :
       Matcher(pattern, input, opt),
-      max_(static_cast<uint8_t>(max)),
+      max_(static_cast<uint_least8_t>(max)),
       err_(0),
       ins_(max <= 0xFF || (max & INS)),
       del_(max <= 0xFF || (max & DEL)),
@@ -158,7 +158,7 @@ class FuzzyMatcher : public Matcher {
     return new FuzzyMatcher(*this);
   }
   /// Returns the number of edits made for the match, edits() <= max, not guaranteed to be the minimum edit distance.
-  uint8_t edits()
+  uint_least8_t edits()
     /// @returns 0 to max edit distance
     const
   {
@@ -187,7 +187,7 @@ class FuzzyMatcher : public Matcher {
     size_t  pos;
     size_t  ded;
     bool    mrk;
-    uint8_t err;
+    uint_least8_t err;
   };
   /// Backtrack point.
   struct BacktrackPoint {
@@ -203,7 +203,7 @@ class FuzzyMatcher : public Matcher {
     const Pattern::Opcode *pc0; ///< start of opcode
     const Pattern::Opcode *pc1; ///< pointer to opcode to rerun on backtracking
     size_t                 len; ///< length of string matched so far
-    uint8_t                err; ///< to restore errors
+    uint_least8_t                err; ///< to restore errors
     bool                   alt; ///< true if alternating between pattern char substitution and insertion, otherwise insertion only
     bool                   sub; ///< flag alternates between pattern char substitution (true) and insertion (false)
   };
@@ -319,7 +319,7 @@ redo:
     if (pat_->opc_ != nullptr)
     {
       err_ = 0;
-      uint8_t stack = 0;
+      uint_least8_t stack = 0;
       const Pattern::Opcode *pc = pat_->opc_;
       while (true)
       {
@@ -780,7 +780,7 @@ unrolled:
         if (pat_->min_ > 0)
         {
           const Pattern::Pred *pma = pat_->pma_;
-          while (s < e && (pma[static_cast<uint8_t>(*s)] & 0xc0) == 0xc0)
+          while (s < e && (pma[static_cast<uint_least8_t>(*s)] & 0xc0) == 0xc0)
             ++s;
           if (s < e)
           {
@@ -938,7 +938,7 @@ unrolled:
               {
                 const char *s = buf_ + loc;
                 const char *e = buf_ + end_;
-                while (s < e && (pma[static_cast<uint8_t>(*s)] & 0xc0) == 0xc0)
+                while (s < e && (pma[static_cast<uint_least8_t>(*s)] & 0xc0) == 0xc0)
                   ++s;
                 if (s < e)
                 {
@@ -1036,8 +1036,8 @@ unrolled:
     return cap_;
   }
   std::vector<BacktrackPoint> bpt_; ///< vector of backtrack points, max_ size
-  uint8_t max_;                     ///< max errors
-  uint8_t err_;                     ///< accumulated edit distance (not guaranteed minimal)
+  uint_least8_t max_;                     ///< max errors
+  uint_least8_t err_;                     ///< accumulated edit distance (not guaranteed minimal)
   bool ins_;                        ///< fuzzy match inserted chars (extra chars)
   bool del_;                        ///< fuzzy match deleted chars (missing chars)
   bool sub_;                        ///< fuzzy match substituted chars

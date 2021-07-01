@@ -185,7 +185,6 @@ following files:
     |   |__ reflex/
     |       |__ abslexer.h
     |       |__ absmatcher.h
-    |       |__ bits.h
     |       |__ boostmatcher.h
     |       |__ convert.h
     |       |__ debug.h

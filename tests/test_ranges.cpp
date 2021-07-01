@@ -1,6 +1,5 @@
 // test ranges.h
 
-#include <reflex/bits.h>
 #include <reflex/ranges.h>
 #include <reflex/timer.h>
 #include <bitset>
@@ -27,10 +26,10 @@ int main()
 {
 
   ORanges<Pos> positions(0, 3);
-  
+
   typedef ORanges<int> ints;
 
-  ints A(0, 3);   // A = 0 - - 3 
+  ints A(0, 3);   // A = 0 - - 3
   ints B(0, 4);   // B = 0 - - - 4
   ints C(0, 5);   // C = 0 - - - - 5
   ints D(2, 6);   // D = - - 2 - - - 6
@@ -289,16 +288,16 @@ Set of 1 open-ended ranges:
   dt = timer_elapsed(t);
   fprintf(stderr, "elapsed real time = %g ms\n", dt);
 
-  std::cerr << "Raw 0..255 bits insertion timings" << std::endl;
-  timer_start(t);
-  for (int run = 0; run < 10000; ++run)
-  {
-    Bits bits;
-    for (int i = 0; i < 256; ++i)
-      bits[i] = true;
-  }
-  dt = timer_elapsed(t);
-  fprintf(stderr, "elapsed real time = %g ms\n", dt);
+  //std::cerr << "Raw 0..255 bits insertion timings" << std::endl;
+  //timer_start(t);
+  //for (int run = 0; run < 10000; ++run)
+  //{
+  //  Bits bits;
+  //  for (int i = 0; i < 256; ++i)
+  //    bits[i] = true;
+  //}
+  //dt = timer_elapsed(t);
+  //fprintf(stderr, "elapsed real time = %g ms\n", dt);
 
   std::cerr << "Raw 0..255 std::set insertion timings" << std::endl;
   timer_start(t);

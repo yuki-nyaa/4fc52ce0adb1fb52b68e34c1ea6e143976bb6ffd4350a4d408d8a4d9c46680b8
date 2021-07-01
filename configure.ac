@@ -3,12 +3,7 @@ AM_INIT_AUTOMAKE([foreign])
 AC_CONFIG_HEADERS(config.h)
 AC_COPYRIGHT([Copyright (C) 2016-2020 Robert van Engelen, Genivia Inc.])
 
-AC_TYPE_SIZE_T
 AC_TYPE_OFF_T
-AC_TYPE_UINT8_T
-AC_TYPE_UINT16_T
-AC_TYPE_UINT32_T
-AC_TYPE_UINT64_T
 
 # if CXXFLAGS is undefined, set it to our preferred default flags
 : ${CXXFLAGS="-Wextra -Wunused -O2"}

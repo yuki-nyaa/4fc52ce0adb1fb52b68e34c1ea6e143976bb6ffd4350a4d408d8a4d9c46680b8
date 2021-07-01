@@ -36,7 +36,7 @@
 See `debug.h` for details.
 */
 
-#include <stdio.h>
+#include <cstdio>
 #include <cstring>
 
 FILE *REFLEX_DBGFD_ = nullptr;

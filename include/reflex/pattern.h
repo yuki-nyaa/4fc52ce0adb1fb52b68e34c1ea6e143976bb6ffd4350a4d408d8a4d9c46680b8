@@ -37,7 +37,6 @@
 #ifndef REFLEX_PATTERN_H
 #define REFLEX_PATTERN_H
 
-#include <reflex/bits.h>
 #include <reflex/debug.h>
 #include <reflex/error.h>
 #include <reflex/input.h>
@@ -63,11 +62,11 @@ class Pattern final {
   friend class Matcher;      ///< permit access by the reflex::Matcher engine
   friend class FuzzyMatcher; ///< permit access by the reflex::FuzzyMatcher engine
  public:
-  typedef uint8_t  Pred;   ///< predict match bits
-  typedef uint16_t Hash;   ///< hash value type, max value is Const::HASH
-  typedef uint32_t Index;  ///< index into opcodes array Pattern::opc_ and subpattern indexing
-  typedef uint32_t Accept; ///< group capture index
-  typedef uint32_t Opcode; ///< 32 bit opcode word
+  typedef uint_least8_t  Pred;   ///< predict match bits
+  typedef uint_least16_t Hash;   ///< hash value type, max value is Const::HASH
+  typedef uint_least32_t Index;  ///< index into opcodes array Pattern::opc_ and subpattern indexing
+  typedef uint_least32_t Accept; ///< group capture index
+  typedef uint_least32_t Opcode; ///< 32 bit opcode word
   typedef void (*FSM)(class Matcher&); ///< function pointer to FSM code
   /// Common constants.
   struct Const {
@@ -104,7 +103,7 @@ class Pattern final {
     init(options.c_str());
   }
   /// Construct a pattern object given an opcode table.
-  explicit Pattern(const Opcode *code, const uint8_t *pred = nullptr) :
+  explicit Pattern(const Opcode *code, const uint_least8_t *pred = nullptr) :
     opc_(code),
     nop_(0),
     fsm_(nullptr)
@@ -112,7 +111,7 @@ class Pattern final {
     init(nullptr, pred);
   }
   /// Construct a pattern object given a function pointer to FSM code.
-  explicit Pattern(FSM fsm, const uint8_t *pred = nullptr) :
+  explicit Pattern(FSM fsm, const uint_least8_t *pred = nullptr) :
     opc_(nullptr),
     nop_(0),
     fsm_(fsm)
@@ -271,7 +270,7 @@ class Pattern final {
   /// Assign a (new) pattern.
   Pattern& assign(
       const Opcode  *code,
-      const uint8_t *pred = nullptr)
+      const uint_least8_t *pred = nullptr)
   {
     clear();
     opc_ = code;
@@ -281,7 +280,7 @@ class Pattern final {
   /// Assign a (new) pattern.
   Pattern& assign(
       FSM            fsm,
-      const uint8_t *pred = nullptr)
+      const uint_least8_t *pred = nullptr)
   {
     clear();
     fsm_ = fsm;
@@ -387,23 +386,23 @@ class Pattern final {
   /// Returns true when match is predicted, based on s[0..3..e-1] (e >= s + 4).
   static inline bool predict_match(const Pred pmh[], const char *s, size_t n)
   {
-    Hash h = static_cast<uint8_t>(*s);
+    Hash h = static_cast<uint_least8_t>(*s);
     if (pmh[h] & 1)
       return false;
-    h = hash(h, static_cast<uint8_t>(*++s));
+    h = hash(h, static_cast<uint_least8_t>(*++s));
     if (pmh[h] & 2)
       return false;
-    h = hash(h, static_cast<uint8_t>(*++s));
+    h = hash(h, static_cast<uint_least8_t>(*++s));
     if (pmh[h] & 4)
       return false;
-    h = hash(h, static_cast<uint8_t>(*++s));
+    h = hash(h, static_cast<uint_least8_t>(*++s));
     if (pmh[h] & 8)
       return false;
     Pred m = 16;
     const char *e = s + n - 3;
     while (++s < e)
     {
-      h = hash(h, static_cast<uint8_t>(*s));
+      h = hash(h, static_cast<uint_least8_t>(*s));
       if (pmh[h] & m)
         return false;
       m <<= 1;
@@ -413,10 +412,10 @@ class Pattern final {
   /// Returns zero when match is predicted or nonzero shift value, based on s[0..3].
   static inline size_t predict_match(const Pred pma[], const char *s)
   {
-    uint8_t b0 = s[0];
-    uint8_t b1 = s[1];
-    uint8_t b2 = s[2];
-    uint8_t b3 = s[3];
+    uint_least8_t b0 = s[0];
+    uint_least8_t b1 = s[1];
+    uint_least8_t b2 = s[2];
+    uint_least8_t b3 = s[3];
     Hash h1 = hash(b0, b1);
     Hash h2 = hash(h1, b2);
     Hash h3 = hash(h2, b3);
@@ -443,19 +442,19 @@ class Pattern final {
       size_t           pos = 0) ///< optional location of the error in regex string Pattern::rex_
     const;
  private:
-  typedef uint16_t                Char; // 8 bit char and meta chars up to META_MAX-1
-  typedef uint8_t                 Lazy;
-  typedef uint16_t                Iter;
-  typedef uint16_t                Lookahead;
+  typedef uint_least16_t                Char; // 8 bit char and meta chars up to META_MAX-1
+  typedef uint_least8_t                 Lazy;
+  typedef uint_least16_t                Iter;
+  typedef uint_least16_t                Lookahead;
   typedef std::set<Lookahead>     Lookaheads;
-  typedef uint32_t                Location;
+  typedef uint_least32_t                Location;
   typedef ORanges<Location>       Locations;
   typedef std::map<int,Locations> Map;
   /// Set of chars and meta chars
   struct Chars {
     Chars()                                 { clear(); }
     Chars(const Chars& c)                   { b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3]; b[4] = c.b[4]; }
-    Chars(const uint64_t c[5])              { b[0] = c[0]; b[1] = c[1]; b[2] = c[2]; b[3] = c[3]; b[4] = c[4]; }
+    Chars(const uint_least64_t c[5])              { b[0] = c[0]; b[1] = c[1]; b[2] = c[2]; b[3] = c[3]; b[4] = c[4]; }
     void   clear()                          { b[0] = b[1] = b[2] = b[3] = b[4] = 0ULL; }
     bool   any()                      const { return b[0] || b[1] || b[2] || b[3] || b[4]; }
     bool   intersects(const Chars& c) const { return (b[0] & c.b[0]) || (b[1] & c.b[1]) || (b[2] & c.b[2]) || (b[3] & c.b[3]) || (b[4] & c.b[4]); }
@@ -486,11 +485,11 @@ class Pattern final {
     bool   operator>=(const Chars& c) const { return !(*this < c); }
     Char   lo()                       const { for (Char i = 0; i < 5; ++i) if (b[i]) for (Char j = 0; j < 64; ++j) if (b[i] & (1ULL << j)) return (i << 6) + j; return 0; }
     Char   hi()                       const { for (Char i = 0; i < 5; ++i) if (b[4-i]) for (Char j = 0; j < 64; ++j) if (b[4-i] & (1ULL << (63-j))) return ((4-i) << 6) + (63-j); return 0; }
-    uint64_t b[5]; ///< 256 bits to store a set of 8-bit chars + extra bits for meta
+    uint_least64_t b[5]; ///< 256 bits to store a set of 8-bit chars + extra bits for meta
   };
   /// Finite state machine construction position information.
   struct Position {
-    typedef uint64_t        value_type;
+    typedef uint_least64_t        value_type;
     static const Iter       MAXITER = 0xFFFF;
     static const Location   MAXLOC  = 0xFFFFFFFFUL;
     static const value_type NPOS    = 0xFFFFFFFFFFFFFFFFULL;
@@ -546,7 +545,7 @@ class Pattern final {
       Accept accept;    ///< nonzero if final state, the index of an accepted/captured subpattern
     };
     typedef std::list<Node*> List;
-    static const uint16_t ALLOC = 64; ///< allocate 64 nodes at a time, to improve performance
+    static const uint_least16_t ALLOC = 64; ///< allocate 64 nodes at a time, to improve performance
     Tree()
       :
         tree(nullptr),
@@ -585,7 +584,7 @@ class Pattern final {
     }
     Node    *tree; ///< root of the tree or nullptr
     List     list; ///< block allocation list
-    uint16_t next; ///< block allocation, next available slot in last block
+    uint_least16_t next; ///< block allocation, next available slot in last block
   };
   /// DFA created by subset construction from regex patterns.
   struct DFA {
@@ -626,7 +625,7 @@ class Pattern final {
       bool        redo;   ///< true if this is a final state of a negative pattern
     };
     typedef std::list<State*> List;
-    static const uint16_t ALLOC = 256; ///< allocate 256 states at a time, to improve performance.
+    static const uint_least16_t ALLOC = 256; ///< allocate 256 states at a time, to improve performance.
     DFA()
       :
         next(ALLOC)
@@ -663,7 +662,7 @@ class Pattern final {
       return list.back()[next++].assign(node, pos);
     }
     List     list; ///< block allocation list
-    uint16_t next; ///< block allocation, next available slot in last block
+    uint_least16_t next; ///< block allocation, next available slot in last block
   };
   /// Global modifier modes, syntax flags, and compiler options.
   struct Option {
@@ -708,7 +707,7 @@ class Pattern final {
   /// Initialize the pattern at construction.
   void init(
       const char    *options,
-      const uint8_t *pred = nullptr);
+      const uint_least8_t *pred = nullptr);
   void init_options(const char *options);
   void parse(
       Positions& startpos,
@@ -878,11 +877,11 @@ class Pattern final {
       modifiers[mode].insert(from, to);
     }
   }
-  static inline uint16_t hash_pos(const Positions *pos)
+  static inline uint_least16_t hash_pos(const Positions *pos)
   {
-    uint16_t h = 0;
+    uint_least16_t h = 0;
     for (Positions::const_iterator i = pos->begin(); i != pos->end(); ++i)
-      h += static_cast<uint16_t>(*i ^ (*i >> 24)); // (Position(*i).iter() << 4) unique hash for up to 16 chars iterated (abc...p){iter}
+      h += static_cast<uint_least16_t>(*i ^ (*i >> 24)); // (Position(*i).iter() << 4) unique hash for up to 16 chars iterated (abc...p){iter}
     return h;
   }
   static inline bool valid_goto_index(Index index)
@@ -1006,7 +1005,7 @@ class Pattern final {
   {
     return static_cast<unsigned char>(c ^ 0x20);
   }
-  static inline Hash hash(Hash h, uint8_t b)
+  static inline Hash hash(Hash h, uint_least8_t b)
   {
     return ((h << 3) ^ b) & (Const::HASH - 1);
   }

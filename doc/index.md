@@ -4133,7 +4133,7 @@ permit nested `#include` directives up to a depth of as much as 99 files:
 <div class="alt">
 ~~~{.cpp}
     %top{
-      #include <stdio.h>
+      #include <cstdio>
     }
 
     %class{
@@ -4189,7 +4189,7 @@ C-based classic Flex example specification that works with RE/flex too:
 <div class="alt">
 ~~~{.cpp}
     %{
-      #include <stdio.h>
+      #include <cstdio>
       int depth = 0;
     %}
 
@@ -5901,7 +5901,7 @@ scanner class `yyFlexLexer` that is compatible with the Flex scanner class
 <div class="alt">
 ~~~{.cpp}
     %{
-      #include <stdio.h>
+      #include <cstdio>
       int ch = 0, wd = 0, nl = 0;
     %}
 
@@ -5997,7 +5997,7 @@ regexes.
 <div class="alt">
 ~~~{.cpp}
     %top{
-      #include <stdio.h>
+      #include <cstdio>
     }
 
     %class{
@@ -6074,7 +6074,7 @@ free space mode to enhance readability.
 <div class="alt">
 ~~~{.cpp}
     %{
-      #include <stdio.h>
+      #include <cstdio>
     %}
 
     %o flex freespace main
@@ -6135,7 +6135,7 @@ This example defines a search engine to find C/C++ directives, such as
 <div class="alt">
 ~~~{.cpp}
     %{
-      #include <stdio.h>
+      #include <cstdio>
     %}
 
     %o fast find main
@@ -8889,8 +8889,8 @@ constructor and in the `wrap()` method as follows:
 <div class="alt">
 ~~~{.cpp}
     %top{
-      #include <stdlib.h>
-      #include <stdio.h>
+      #include <cstdlib>
+      #include <cstdio>
       #include <readline/readline.h>
       #include <readline/history.h>
     }

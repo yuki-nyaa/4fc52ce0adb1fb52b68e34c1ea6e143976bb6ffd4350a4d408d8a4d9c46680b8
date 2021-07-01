@@ -41,8 +41,8 @@ int main(int argc, char **argv)
       if (argc > 2)
       {
         const char *text = argv[2];
-        uint8_t max = 1;
-        uint16_t flags = 0;
+        uint_least8_t max = 1;
+        uint_least16_t flags = 0;
         if (argc > 3)
         {
           unsigned long n = strtoul(argv[3], nullptr, 10);
@@ -51,7 +51,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "max_error too large\n\n");
             exit(EXIT_FAILURE);
           }
-          max = static_cast<uint8_t>(n);
+          max = static_cast<uint_least8_t>(n);
           if (argc > 4)
           {
             if (strchr(argv[4], 'i') != nullptr)

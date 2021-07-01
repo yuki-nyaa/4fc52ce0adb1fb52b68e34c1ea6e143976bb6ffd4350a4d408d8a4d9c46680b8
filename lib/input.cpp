@@ -35,7 +35,7 @@
 */
 
 #include <reflex/input.h>
-#include <stdio.h>
+#include <cstdio>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -1369,7 +1369,7 @@ void Input::set_file_encoding(file_encoding enc, const unsigned short *page)
 # define cpuidex(CPUInfo, id, subid) __cpuid_count(id, subid, CPUInfo[0], CPUInfo[1], CPUInfo[2], CPUInfo[3])
 #endif
 
-static uint64_t get_HW()
+static uint_least64_t get_HW()
 {
   int CPUInfo1[4] = { 0, 0, 0, 0 };
   int CPUInfo7[4] = { 0, 0, 0, 0 };
@@ -1380,18 +1380,18 @@ static uint64_t get_HW()
   cpuidex(CPUInfo1, 1, 0); // cpuid EAX=1
   if (n >= 7)
     cpuidex(CPUInfo7, 7, 0); // cpuid EAX=7, ECX=0
-  return static_cast<uint32_t>(CPUInfo1[2]) | (static_cast<uint64_t>(static_cast<uint32_t>(CPUInfo7[1])) << 32);
+  return static_cast<uint_least32_t>(CPUInfo1[2]) | (static_cast<uint_least64_t>(static_cast<uint_least32_t>(CPUInfo7[1])) << 32);
 }
 
 #else
 
-static uint64_t get_HW()
+static uint_least64_t get_HW()
 {
   return 0ULL;
 }
 
 #endif
 
-uint64_t HW = get_HW();
+uint_least64_t HW = get_HW();
 
 } // namespace reflex

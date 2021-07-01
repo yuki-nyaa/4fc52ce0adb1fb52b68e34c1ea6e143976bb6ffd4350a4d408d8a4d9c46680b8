@@ -42,30 +42,30 @@ void Matcher::boyer_moore_init(const char *pat, size_t len)
 {
   // Relative frequency table of English letters, source code, and UTF-8 bytes
   static unsigned char freq[256] = "\0\0\0\0\0\0\0\0\0\73\4\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\73\70\70\1\1\2\2\70\70\70\2\2\70\70\70\2\3\3\3\3\3\3\3\3\3\3\70\70\70\70\70\70\2\35\14\24\26\37\20\17\30\33\11\12\25\22\32\34\15\7\27\31\36\23\13\21\10\16\6\70\1\70\2\70\1\67\46\56\60\72\52\51\62\65\43\44\57\54\64\66\47\41\61\63\71\55\45\53\42\50\40\70\2\70\2\0\47\47\47\47\47\47\47\47\47\47\47\47\47\47\47\47\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\44\44\44\44\44\44\44\44\44\44\44\44\44\44\44\44\0\0\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\46\56\56\56\56\56\56\56\56\56\56\56\56\46\56\56\73\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
-  uint8_t n = static_cast<uint8_t>(len); // okay to cast: actually never more than 255
-  uint16_t i;
+  uint_least8_t n = static_cast<uint_least8_t>(len); // okay to cast: actually never more than 255
+  uint_least16_t i;
   for (i = 0; i < 256; ++i)
     bms_[i] = n;
   lcp_ = 0;
   lcs_ = n > 1;
   for (i = 0; i < n; ++i)
   {
-    uint8_t pch = static_cast<uint8_t>(pat[i]);
-    bms_[pch] = static_cast<uint8_t>(n - i - 1);
+    uint_least8_t pch = static_cast<uint_least8_t>(pat[i]);
+    bms_[pch] = static_cast<uint_least8_t>(n - i - 1);
     if (i > 0)
     {
-      if (freq[static_cast<uint8_t>(pat[lcp_])] > freq[pch])
+      if (freq[static_cast<uint_least8_t>(pat[lcp_])] > freq[pch])
       {
         lcs_ = lcp_;
         lcp_ = i;
       }
-      else if (freq[static_cast<uint8_t>(pat[lcs_])] > freq[pch])
+      else if (freq[static_cast<uint_least8_t>(pat[lcs_])] > freq[pch])
       {
         lcs_ = i;
       }
     }
   }
-  uint16_t j;
+  uint_least16_t j;
   for (i = n - 1, j = i; j > 0; --j)
     if (pat[j - 1] == pat[i])
       break;
@@ -73,9 +73,9 @@ void Matcher::boyer_moore_init(const char *pat, size_t len)
 #if !defined(HAVE_NEON)
   size_t score = 0;
   for (i = 0; i < n; ++i)
-    score += bms_[static_cast<uint8_t>(pat[i])];
+    score += bms_[static_cast<uint_least8_t>(pat[i])];
   score /= n;
-  uint8_t fch = freq[static_cast<uint8_t>(pat[lcp_])];
+  uint_least8_t fch = freq[static_cast<uint_least8_t>(pat[lcp_])];
   if (!have_HW_SSE2() && !have_HW_AVX2() && !have_HW_AVX512BW())
   {
     // if scoring is high and freq is high, then use our improved Boyer-Moore instead of memchr()
@@ -120,7 +120,7 @@ bool Matcher::advance()
         const char *e = buf_ + end_;
         while (s < e)
         {
-          state = (state << 1) | bit[static_cast<uint8_t>(*s)];
+          state = (state << 1) | bit[static_cast<uint_least8_t>(*s)];
           if ((state & mask) == 0)
             break;
           ++s;
@@ -158,7 +158,7 @@ bool Matcher::advance()
         const char *e = buf_ + end_;
         while (s < e)
         {
-          state = (state << 1) | bit[static_cast<uint8_t>(*s)];
+          state = (state << 1) | bit[static_cast<uint_least8_t>(*s)];
           if ((state & 4) == 0)
             break;
           ++s;
@@ -195,7 +195,7 @@ bool Matcher::advance()
         const char *e = buf_ + end_;
         while (s < e)
         {
-          state = (state << 1) | bit[static_cast<uint8_t>(*s)];
+          state = (state << 1) | bit[static_cast<uint_least8_t>(*s)];
           if ((state & 2) == 0)
             break;
           ++s;
@@ -226,7 +226,7 @@ bool Matcher::advance()
     {
       const char *s = buf_ + loc;
       const char *e = buf_ + end_;
-      while (s < e && (pma[static_cast<uint8_t>(*s)] & 0xc0) == 0xc0)
+      while (s < e && (pma[static_cast<uint_least8_t>(*s)] & 0xc0) == 0xc0)
         ++s;
       if (s < e)
       {
@@ -296,10 +296,10 @@ bool Matcher::advance()
         {
           __m512i vlcpm = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(s));
           __m512i vlcsm = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(s + lcs_ - lcp_));
-          uint64_t mask = _mm512_cmpeq_epi8_mask(vlcp, vlcpm) & _mm512_cmpeq_epi8_mask(vlcs, vlcsm);
+          uint_least64_t mask = _mm512_cmpeq_epi8_mask(vlcp, vlcpm) & _mm512_cmpeq_epi8_mask(vlcs, vlcsm);
           while (mask != 0)
           {
-            uint32_t offset = ctzl(mask);
+            uint_least32_t offset = ctzl(mask);
             if (std::memcmp(s - lcp_ + offset, pre, len) == 0)
             {
               loc = s - lcp_ + offset - buf_;
@@ -333,10 +333,10 @@ bool Matcher::advance()
           __m256i vlcsm = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(s + lcs_ - lcp_));
           __m256i vlcpeq = _mm256_cmpeq_epi8(vlcp, vlcpm);
           __m256i vlcseq = _mm256_cmpeq_epi8(vlcs, vlcsm);
-          uint32_t mask = _mm256_movemask_epi8(_mm256_and_si256(vlcpeq, vlcseq));
+          uint_least32_t mask = _mm256_movemask_epi8(_mm256_and_si256(vlcpeq, vlcseq));
           while (mask != 0)
           {
-            uint32_t offset = ctz(mask);
+            uint_least32_t offset = ctz(mask);
             if (std::memcmp(s - lcp_ + offset, pre, len) == 0)
             {
               loc = s - lcp_ + offset - buf_;
@@ -370,10 +370,10 @@ bool Matcher::advance()
           __m128i vlcsm = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s + lcs_ - lcp_));
           __m128i vlcpeq = _mm_cmpeq_epi8(vlcp, vlcpm);
           __m128i vlcseq = _mm_cmpeq_epi8(vlcs, vlcsm);
-          uint32_t mask = _mm_movemask_epi8(_mm_and_si128(vlcpeq, vlcseq));
+          uint_least32_t mask = _mm_movemask_epi8(_mm_and_si128(vlcpeq, vlcseq));
           while (mask != 0)
           {
-            uint32_t offset = ctz(mask);
+            uint_least32_t offset = ctz(mask);
             if (std::memcmp(s - lcp_ + offset, pre, len) == 0)
             {
               loc = s - lcp_ + offset - buf_;
@@ -408,10 +408,10 @@ bool Matcher::advance()
           __m256i vlcsm = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(s + lcs_ - lcp_));
           __m256i vlcpeq = _mm256_cmpeq_epi8(vlcp, vlcpm);
           __m256i vlcseq = _mm256_cmpeq_epi8(vlcs, vlcsm);
-          uint32_t mask = _mm256_movemask_epi8(_mm256_and_si256(vlcpeq, vlcseq));
+          uint_least32_t mask = _mm256_movemask_epi8(_mm256_and_si256(vlcpeq, vlcseq));
           while (mask != 0)
           {
-            uint32_t offset = ctz(mask);
+            uint_least32_t offset = ctz(mask);
             if (std::memcmp(s - lcp_ + offset, pre, len) == 0)
             {
               loc = s - lcp_ + offset - buf_;
@@ -445,10 +445,10 @@ bool Matcher::advance()
           __m128i vlcsm = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s + lcs_ - lcp_));
           __m128i vlcpeq = _mm_cmpeq_epi8(vlcp, vlcpm);
           __m128i vlcseq = _mm_cmpeq_epi8(vlcs, vlcsm);
-          uint32_t mask = _mm_movemask_epi8(_mm_and_si128(vlcpeq, vlcseq));
+          uint_least32_t mask = _mm_movemask_epi8(_mm_and_si128(vlcpeq, vlcseq));
           while (mask != 0)
           {
-            uint32_t offset = ctz(mask);
+            uint_least32_t offset = ctz(mask);
             if (std::memcmp(s - lcp_ + offset, pre, len) == 0)
             {
               loc = s - lcp_ + offset - buf_;
@@ -483,10 +483,10 @@ bool Matcher::advance()
           __m128i vlcsm = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s + lcs_ - lcp_));
           __m128i vlcpeq = _mm_cmpeq_epi8(vlcp, vlcpm);
           __m128i vlcseq = _mm_cmpeq_epi8(vlcs, vlcsm);
-          uint32_t mask = _mm_movemask_epi8(_mm_and_si128(vlcpeq, vlcseq));
+          uint_least32_t mask = _mm_movemask_epi8(_mm_and_si128(vlcpeq, vlcseq));
           while (mask != 0)
           {
-            uint32_t offset = ctz(mask);
+            uint_least32_t offset = ctz(mask);
             if (std::memcmp(s - lcp_ + offset, pre, len) == 0)
             {
               loc = s - lcp_ + offset - buf_;
@@ -515,13 +515,13 @@ bool Matcher::advance()
       uint8x16_t vlcs = vdupq_n_u8(pre[lcs_]);
       while (s + 16 <= e)
       {
-        uint8x16_t vlcpm = vld1q_u8(reinterpret_cast<const uint8_t*>(s));
-        uint8x16_t vlcsm = vld1q_u8(reinterpret_cast<const uint8_t*>(s) + lcs_ - lcp_);
+        uint8x16_t vlcpm = vld1q_u8(reinterpret_cast<const uint_least8_t*>(s));
+        uint8x16_t vlcsm = vld1q_u8(reinterpret_cast<const uint_least8_t*>(s) + lcs_ - lcp_);
         uint8x16_t vlcpeq = vceqq_u8(vlcp, vlcpm);
         uint8x16_t vlcseq = vceqq_u8(vlcs, vlcsm);
         uint8x16_t vmask8 = vandq_u8(vlcpeq, vlcseq);
         uint64x2_t vmask64 = vreinterpretq_u64_u8(vmask8);
-        uint64_t mask = vgetq_lane_u64(vmask64, 0);
+        uint_least64_t mask = vgetq_lane_u64(vmask64, 0);
         if (mask != 0)
         {
           for (int i = 0; i < 8; ++i)
@@ -620,7 +620,7 @@ bool Matcher::advance()
       {
         size_t k = 0;
         do
-          s += k = bms_[static_cast<uint8_t>(*s)];
+          s += k = bms_[static_cast<uint_least8_t>(*s)];
         while (k > 0 ? s < e : s[lcp_ - len + 1] != pre[lcp_] && (s += bmd_) < e);
         if (s >= e)
           break;
@@ -654,7 +654,7 @@ bool Matcher::advance()
         }
         else
         {
-          size_t k = bms_[static_cast<uint8_t>(*q)];
+          size_t k = bms_[static_cast<uint_least8_t>(*q)];
           if (p + k > t + bmd_)
             s += k - (t - p);
           else

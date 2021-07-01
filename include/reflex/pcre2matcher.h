@@ -70,7 +70,7 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
       const P     *pattern,         ///< points to a string regex for this matcher
       const Input& input = Input(), ///< input character sequence for this matcher
       const char  *opt = nullptr,      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
-      uint32_t     options = 0)     ///< pcre2_compile() options
+      uint_least32_t     options = 0)     ///< pcre2_compile() options
     :
       PatternMatcher<std::string>(pattern, input, opt),
       cop_(options),
@@ -88,7 +88,7 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
       const P&     pattern,         ///< a string regex for this matcher
       const Input& input = Input(), ///< input character sequence for this matcher
       const char  *opt = nullptr,      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
-      uint32_t     options = 0)     ///< pcre2_compile() options
+      uint_least32_t     options = 0)     ///< pcre2_compile() options
     :
       PatternMatcher<std::string>(pattern, input, opt),
       cop_(options),
@@ -270,7 +270,7 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
       {
         --name_count;
         PCRE2_SPTR p = name_table + name_count * name_entry_size;
-        if ((static_cast<size_t>(static_cast<uint8_t>(p[0]) << 8) | static_cast<uint8_t>(p[1])) == grp_)
+        if ((static_cast<size_t>(static_cast<uint_least8_t>(p[0]) << 8) | static_cast<uint_least8_t>(p[1])) == grp_)
           return std::pair<size_t,const char*>(grp_, reinterpret_cast<const char*>(p + 2));
       }
     }
@@ -366,7 +366,7 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
   {
     if (pos_ == end_ && !eof_)
       (void)peek_more();
-    uint32_t flg = flg_;
+    uint_least32_t flg = flg_;
     if (!eof_)
       flg |= PCRE2_PARTIAL_HARD;
     if (!at_bol())
@@ -451,8 +451,8 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
       }
     }
   }
-  uint32_t             cop_; ///< PCRE2 compiled options
-  uint32_t             flg_; ///< PCRE2 match flags
+  uint_least32_t             cop_; ///< PCRE2 compiled options
+  uint_least32_t             flg_; ///< PCRE2 match flags
   pcre2_code          *opc_; ///< compiled PCRE2 code
   pcre2_match_data    *dat_; ///< PCRE2 match data
   pcre2_match_context *ctx_; ///< PCRE2 match context;

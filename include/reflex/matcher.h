@@ -947,10 +947,10 @@ unrolled:
   std::vector<int>  lap_;      ///< lookahead position in input that heads a lookahead match (indexed by lookahead number)
   std::stack<Stops> stk_;      ///< stack to push/pop stops
   FSM               fsm_;      ///< local state for FSM code
-  uint16_t          lcp_;      ///< primary least common character position in the pattern prefix or 0xffff for pure Boyer-Moore
-  uint16_t          lcs_;      ///< secondary least common character position in the pattern prefix or 0xffff for pure Boyer-Moore
+  uint_least16_t          lcp_;      ///< primary least common character position in the pattern prefix or 0xffff for pure Boyer-Moore
+  uint_least16_t          lcs_;      ///< secondary least common character position in the pattern prefix or 0xffff for pure Boyer-Moore
   size_t            bmd_;      ///< Boyer-Moore jump distance on mismatch, B-M is enabled when bmd_ > 0
-  uint8_t           bms_[256]; ///< Boyer-Moore skip array
+  uint_least8_t           bms_[256]; ///< Boyer-Moore skip array
   bool              mrk_;      ///< indent \i or dedent \j in pattern found: should check and update indent stops
   bool              anc_;      ///< match is anchored, advance slowly to retry when searching
 };

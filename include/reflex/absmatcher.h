@@ -683,7 +683,7 @@ class AbstractMatcher {
         while (s + 63 <= t)
         {
           __m512i vlcm = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(s));
-          uint64_t mask = _mm512_cmpeq_epi8_mask(vlcm, vlcn);
+          uint_least64_t mask = _mm512_cmpeq_epi8_mask(vlcm, vlcn);
           n += popcountl(mask);
           s += 64;
         }
@@ -695,7 +695,7 @@ class AbstractMatcher {
         {
           __m256i vlcm = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(s));
           __m256i vlceq = _mm256_cmpeq_epi8(vlcm, vlcn);
-          uint32_t mask = _mm256_movemask_epi8(vlceq);
+          uint_least32_t mask = _mm256_movemask_epi8(vlceq);
           n += popcount(mask);
           s += 32;
         }
@@ -707,7 +707,7 @@ class AbstractMatcher {
         {
           __m128i vlcm = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s));
           __m128i vlceq = _mm_cmpeq_epi8(vlcm, vlcn);
-          uint32_t mask = _mm_movemask_epi8(vlceq);
+          uint_least32_t mask = _mm_movemask_epi8(vlceq);
           n += popcount(mask);
           s += 16;
         }
@@ -720,7 +720,7 @@ class AbstractMatcher {
         {
           __m256i vlcm = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(s));
           __m256i vlceq = _mm256_cmpeq_epi8(vlcm, vlcn);
-          uint32_t mask = _mm256_movemask_epi8(vlceq);
+          uint_least32_t mask = _mm256_movemask_epi8(vlceq);
           n += popcount(mask);
           s += 32;
         }
@@ -732,7 +732,7 @@ class AbstractMatcher {
         {
           __m128i vlcm = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s));
           __m128i vlceq = _mm_cmpeq_epi8(vlcm, vlcn);
-          uint32_t mask = _mm_movemask_epi8(vlceq);
+          uint_least32_t mask = _mm_movemask_epi8(vlceq);
           n += popcount(mask);
           s += 16;
         }
@@ -745,7 +745,7 @@ class AbstractMatcher {
         {
           __m128i vlcm = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s));
           __m128i vlceq = _mm_cmpeq_epi8(vlcm, vlcn);
-          uint32_t mask = _mm_movemask_epi8(vlceq);
+          uint_least32_t mask = _mm_movemask_epi8(vlceq);
           n += popcount(mask);
           s += 16;
         }
@@ -755,7 +755,7 @@ class AbstractMatcher {
         // ARM AArch64/NEON SIMD optimized loop? - no code found yet that runs faster than the code below
       }
 #endif
-      uint32_t n0 = 0, n1 = 0, n2 = 0, n3 = 0;
+      uint_least32_t n0 = 0, n1 = 0, n2 = 0, n3 = 0;
       // clang/gcc 4-way vectorizable loop
       while (s + 3 <= t)
       {
