@@ -93,7 +93,7 @@ Etiam interdum porta libero, sed lobortis sapien porta sed. Curabitur ullamcorpe
 \
 Mauris dignissim mattis dui, feugiat lobortis diam mattis non. Curabitur neque mi, scelerisque in convallis quis, imperdiet consectetur lorem. Vestibulum non mi ac justo facilisis consequat in sit amet ligula. Quisque urna sem, tristique non ligula consectetur amet.\n");
 
-void test_lorem(const char *title, AbstractMatcher &tokenizer, AbstractMatcher &filter, AbstractMatcher &splitter)
+void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filter, AbstractLexer &splitter)
 {
   FILE *file;
   size_t hits;

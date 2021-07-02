@@ -302,7 +302,7 @@ class FuzzyMatcher : public Matcher {
     anc_ = false; // no word boundary anchor found and applied
 scan:
     txt_ = buf_ + cur_;
-#if !defined(WITH_NO_INDENT)
+#if !defined(REFLEX_WITH_NO_INDENT)
     mrk_ = false;
     ind_ = pos_; // ind scans input in buf[] in newline() up to pos - 1
     col_ = 0; // count columns for indent matching
@@ -310,7 +310,7 @@ scan:
 find:
     int c1 = got_;
     bool bol = at_bol(); // at begin of line?
-#if !defined(WITH_NO_INDENT)
+#if !defined(REFLEX_WITH_NO_INDENT)
 redo:
 #endif
     lap_.resize(0);
@@ -365,7 +365,7 @@ redo:
                   ++pc;
                   continue;
                 }
-#if !defined(WITH_NO_INDENT)
+#if !defined(REFLEX_WITH_NO_INDENT)
               case Pattern::META_DED - Pattern::META_MIN:
                 if (ded_ > 0)
                 {
@@ -423,7 +423,7 @@ redo:
                   case 0xFB: // HEAD
                     opcode = *++pc;
                     continue;
-#if !defined(WITH_NO_INDENT)
+#if !defined(REFLEX_WITH_NO_INDENT)
                   case Pattern::META_DED - Pattern::META_MIN:
                     DBGLOG("DED? %d", c1);
                     if (jump == Pattern::Const::IMAX && back == Pattern::Const::IMAX && bol && dedent())
@@ -842,7 +842,7 @@ unrolled:
       size_t shift = sst.loc - loc;
       len_ = loc - sst.txt + shift;
     }
-#if !defined(WITH_NO_INDENT)
+#if !defined(REFLEX_WITH_NO_INDENT)
     if (mrk_ && cap_ != Const::REDO)
     {
       if (col_ > 0 && (tab_.empty() || tab_.back() < col_))

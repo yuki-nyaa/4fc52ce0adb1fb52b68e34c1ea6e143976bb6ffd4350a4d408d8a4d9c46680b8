@@ -2,9 +2,9 @@
 // To use lazy optional ?? in strings, trigraphs should be disabled or we
 // simply use ?\?
 // Or disable trigraphs by enabling the GNU standard:
-// c++ -std=gnu++11 -Wall test.cpp pattern.cpp matcher.cpp
+// c++ -std=gnu++11 -Wall test.cpp pattern.cpp lexer.cpp
 
-#include <reflex/matcher.h>
+#include <reflex/lexer.h>
 
 // #define INTERACTIVE // for interactive mode testing
 
@@ -28,9 +28,9 @@ static void error(const char *text)
 
 using namespace reflex;
 
-class WrappedMatcher : public Matcher {
+class WrappedLexer : public Lexer {
  public:
-  WrappedMatcher() : Matcher(), source(0)
+  WrappedLexer() : Lexer(), source(0)
   { }
  private:
   virtual bool wrap()
@@ -220,7 +220,7 @@ Test tests[] = {
   { "abc(?=\\w+|(?^def))|xyzabcdef", "", "", "abcxyzabcdef", { 1, 2 } },
   // Negative patterns and option A (all)
   { "(?^ab)|\\w+| ", "", "", "aa ab abab ababba", { 2, 3, 3, 2, 3, 2 } },
-  { "(?^ab)|\\w+| ", "", "A", "aa ab abab ababba", { 2, 3, reflex::Matcher::Const::REDO, 3, 2, 3, 2 } },
+  { "(?^ab)|\\w+| ", "", "A", "aa ab abab ababba", { 2, 3, reflex::Lexer::Const::REDO, 3, 2, 3, 2 } },
   { "\\w+|(?^ab)| ", "", "", "aa ab abab ababba", { 1, 3, 3, 1, 3, 1 } }, // non-reachable warning is given, but works
   { "\\w+|(?^\\s)", "", "", "99 Luftballons", { 1, 1 } },
   { "(\\w+|(?^ab(?=\\w*)))| ", "", "", "aa ab abab ababba", { 1, 2, 2, 2, 1 } },
@@ -236,7 +236,7 @@ Test tests[] = {
   { "\\b(-|a)(-|a)\\b| ", "", "", "aa aa", { 1, 2, 1 } },
   { "\\B(-|a)(-|a)\\B|b|#", "", "", "baab#--#", { 2, 1, 2, 3, 1, 3 } },
   { "\\<.*ab\\>|[ab]*|-|\\n", "", "", "-aaa-aaba-aab-\n-aaa", { 3, 1, 3, 4, 3, 2 } },
-  // Indent and matcher option T (Tab)
+  // Indent and lexer option T (Tab)
   { "(?m)^[ \\t]+|[ \\t]+\\i|[ \\t]*\\j|a|[ \\n]", "m", "", "a\n  a\n  a\n    a\n", { 4, 5, 2, 4, 5, 1, 4, 5, 2, 4, 5, 3, 3 } },
   { "(?m)^[ \\t]+|^[ \\t]*\\i|^[ \\t]*\\j|\\j|a|[ \\n]", "m", "", "a\n  a\n  a\n    a\n", { 5, 6, 2, 5, 6, 1, 5, 6, 2, 5, 6, 4, 4 } },
   { "(?m)^[ \\t]+|[ \\t]*\\i|[ \\t]*\\j|a|[ \\n]", "m", "", "a\n  a\n  a\n    a\na\n", { 4, 5, 2, 4, 5, 1, 4, 5, 2, 4, 5, 3, 3, 4, 5 } },
@@ -260,32 +260,33 @@ int main()
   for (const Test *test = tests; test->pattern != nullptr; ++test)
   {
     Pattern pattern(test->pattern, test->popts);
-    Matcher matcher(std::move(pattern), test->cstring, test->mopts);
+    Lexer lexer(test->cstring, test->mopts);
+    lexer.patterns.push_back(std::move(pattern));
 #ifdef INTERACTIVE
-    matcher.interactive();
+    lexer.interactive();
 #endif
     printf("Test \"%s\" against \"%s\"\n", test->pattern, test->cstring);
     if (*test->popts)
       printf("With pattern options \"%s\"\n", test->popts);
     if (*test->mopts)
-      printf("With matcher options \"%s\"\n", test->mopts);
+      printf("With lexer options \"%s\"\n", test->mopts);
     for (Pattern::Index i = 1; i <= pattern.size(); ++i)
       if (!pattern.reachable(i))
         printf("WARNING: pattern[%u]=\"%s\" not reachable\n", i, pattern[i].c_str());
     size_t i = 0;
-    while (matcher.scan())
+    while (lexer.scan())
     {
-      printf("  At %zu,%zu;[%zu,%zu]: \"%s\" matches pattern[%zu]=\"%s\" from %u choice(s)\n", matcher.lineno(), matcher.columno(), matcher.first(), matcher.last(), matcher.text(), matcher.accept(), pattern[matcher.accept()].c_str(), pattern.size());
-      if (matcher.accept() != test->accepts[i])
+      printf("  At %zu,%zu;[%zu,%zu]: \"%s\" matches pattern[%zu]=\"%s\" from %u choice(s)\n", lexer.lineno(), lexer.columno(), lexer.first(), lexer.last(), lexer.text(), lexer.accept(), pattern[lexer.accept()].c_str(), pattern.size());
+      if (lexer.accept() != test->accepts[i])
         break;
       ++i;
     }
-    if (matcher.accept() != 0 || test->accepts[i] != 0 || !matcher.at_end())
+    if (lexer.accept() != 0 || test->accepts[i] != 0 || !lexer.at_end())
     {
-      if (!matcher.at_end())
-        printf("ERROR: remaining input rest = '%s'; dumping dump.gv and dump.cpp\n", matcher.rest());
+      if (!lexer.at_end())
+        printf("ERROR: remaining input rest = '%s'; dumping dump.gv and dump.cpp\n", lexer.rest());
       else
-        printf("ERROR: accept = %zu text = '%s'; dumping dump.gv and dump.cpp\n", matcher.accept(), matcher.text());
+        printf("ERROR: accept = %zu text = '%s'; dumping dump.gv and dump.cpp\n", lexer.accept(), lexer.text());
       std::string options(test->popts);
       options.append(";f=dump.gv,dump.cpp");
       Pattern(test->pattern, options);
@@ -293,213 +294,208 @@ int main()
     }
     printf("OK\n\n");
   }
-  Pattern pattern1("\\w+|\\W", "f=dump.cpp");
-  Pattern pattern2("\\<.*\\>", "f=dump.gv");
-  Pattern pattern3(" ");
-  Pattern pattern4("[ \\t]+");
-  Pattern pattern5("\\b", "f=dump.gv,dump.cpp");
-  Pattern pattern6("");
-  Pattern pattern7("[[:alpha:]]");
-  Pattern pattern8("\\w+");
-  Pattern pattern9(Matcher::convert("(?u:\\p{L})"));
+  Pattern pattern0("\\w+|\\W", "f=dump.cpp");
+  Pattern pattern1("\\<.*\\>", "f=dump.gv");
+  Pattern pattern2(" ");
+  Pattern pattern3("[ \\t]+");
+  Pattern pattern4("\\b", "f=dump.gv,dump.cpp");
+  Pattern pattern5("");
+  Pattern pattern6("[[:alpha:]]");
+  Pattern pattern7("\\w+");
+  Pattern pattern8(Lexer::convert("(?u:\\p{L})"));
 
-  Matcher matcher(std::move(pattern1));
+  Lexer lexer;
+  lexer.patterns.push_back(std::move(pattern0));
+  lexer.patterns.push_back(std::move(pattern1));
+  lexer.patterns.push_back(std::move(pattern2));
+  lexer.patterns.push_back(std::move(pattern3));
+  lexer.patterns.push_back(std::move(pattern4));
+  lexer.patterns.push_back(std::move(pattern5));
+  lexer.patterns.push_back(std::move(pattern6));
+  lexer.patterns.push_back(std::move(pattern7));
+  lexer.patterns.push_back(std::move(pattern8));
   std::string test;
   //
   banner("TEST FIND");
   //
-  matcher.pattern(std::move(pattern8));
-  matcher.input("an apple a day");
+  lexer.pattern_current=8;
+  lexer.input("an apple a day");
   test = "";
-  while (matcher.find())
+  while (lexer.find())
   {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
   }
   std::cout << std::endl;
   if (test != "an/apple/a/day/")
     error("find results");
-  pattern8 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern5));
-  matcher.reset("N");
-  matcher.input("a a");
+  lexer.pattern_current=6;
+  lexer.reset("N");
+  lexer.input("a a");
   test = "";
-  while (matcher.find())
+  while (lexer.find())
   {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
   }
   std::cout << std::endl;
   if (test != "///")
     error("find with nullable results");
-  matcher.reset("");
-  pattern5 = std::move(matcher.pattern());
+  lexer.reset("");
   //
-  matcher.pattern(std::move(pattern6));
-  matcher.reset("N");
-  matcher.input("a a");
+  lexer.pattern_current=7;
+  lexer.reset("N");
+  lexer.input("a a");
   test = "";
-  while (matcher.find())
+  while (lexer.find())
   {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
   }
   std::cout << std::endl;
   if (test != "///")
     error("find with nullable results");
-  matcher.reset("");
-  pattern6 = std::move(matcher.pattern());
+  lexer.reset("");
   //
   banner("TEST SPLIT");
   //
-  matcher.pattern(std::move(pattern3));
-  matcher.input("ab c  d");
+  lexer.pattern_current=3;
+  lexer.input("ab c  d");
   test = "";
-  while (matcher.split())
+  while (lexer.split())
   {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
   }
   std::cout << std::endl;
   if (test != "ab/c//d/")
     error("split results");
-  pattern3 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern3));
-  matcher.input("ab c  d ");
+  lexer.pattern_current=3;
+  lexer.input("ab c  d ");
   test = "";
-  while (matcher.split())
+  while (lexer.split())
   {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
   }
   std::cout << std::endl;
   if (test != "ab/c//d//")
     error("split results");
-  pattern3 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern4));
-  matcher.input("ab c  d");
+  lexer.pattern_current=4;
+  lexer.input("ab c  d");
   test = "";
-  while (matcher.split())
+  while (lexer.split())
   {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
   }
   std::cout << std::endl;
   if (test != "ab/c/d/")
     error("split results");
-  pattern4 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern5));
-  matcher.input("ab c  d");
+  lexer.pattern_current=5;
+  lexer.input("ab c  d");
   test = "";
-  while (matcher.split())
+  while (lexer.split())
   {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
   }
   std::cout << std::endl;
   if (test != "/ab/ /c/  /d//")
     error("split results");
-  pattern5 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern6));
-  matcher.input("ab c  d");
+  lexer.pattern_current=6;
+  lexer.input("ab c  d");
   test = "";
-  while (matcher.split())
+  while (lexer.split())
   {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
   }
   std::cout << std::endl;
   if (test != "/a/b/ /c/ / /d//")
     error("split results");
-  pattern6 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern6));
-  matcher.input("");
+  lexer.pattern_current=6;
+  lexer.input("");
   test = "";
-  while (matcher.split())
+  while (lexer.split())
   {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
   }
   std::cout << std::endl;
   if (test != "/")
     error("split results");
-  pattern6 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern7));
-  matcher.input("a-b");
+  lexer.pattern_current=7;
+  lexer.input("a-b");
   test = "";
-  while (matcher.split())
+  while (lexer.split())
   {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
   }
   std::cout << std::endl;
   if (test != "/-//")
     error("split results");
-  pattern7 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern7));
-  matcher.input("a");
+  lexer.pattern_current=7;
+  lexer.input("a");
   test = "";
-  while (matcher.split())
+  while (lexer.split())
   {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
   }
   std::cout << std::endl;
   if (test != "//")
     error("split results");
-  pattern7 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern7));
-  matcher.input("-");
+  lexer.pattern_current=7;
+  lexer.input("-");
   test = "";
-  while (matcher.split())
+  while (lexer.split())
   {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
   }
   std::cout << std::endl;
   if (test != "-/")
     error("split results");
-  pattern7 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern4));
-  matcher.input("ab c  d");
+  lexer.pattern_current=4;
+  lexer.input("ab c  d");
   int n = 2; // split 2
-  while (n-- && matcher.split())
-    std::cout << matcher.text() << "/";
-  std::cout << std::endl << "REST = " << matcher.rest() << std::endl;
-  pattern4 = std::move(matcher.pattern());
+  while (n-- && lexer.split())
+    std::cout << lexer.text() << "/";
+  std::cout << std::endl << "REST = " << lexer.rest() << std::endl;
   //
   banner("TEST INPUT/UNPUT");
   //
-  matcher.pattern(std::move(pattern2));
-  matcher.input("ab c  d");
-  while (!matcher.at_end())
-    std::cout << (char)matcher.input() << "/";
+  lexer.pattern_current=2;
+  lexer.input("ab c  d");
+  while (!lexer.at_end())
+    std::cout << (char)lexer.input() << "/";
   std::cout << std::endl;
-  pattern2 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern2));
-  matcher.input("ab c  d");
+  lexer.pattern_current=2;
+  lexer.input("ab c  d");
   test = "";
   while (true)
   {
-    if (matcher.scan())
+    if (lexer.scan())
     {
-      std::cout << matcher.text() << "/";
-      test.append(matcher.text()).append("/");
+      std::cout << lexer.text() << "/";
+      test.append(lexer.text()).append("/");
     }
-    else if (!matcher.at_end())
+    else if (!lexer.at_end())
     {
-      std::cout << (char)matcher.input() << "?/";
+      std::cout << (char)lexer.input() << "?/";
       test.append("?/");
     }
     else
@@ -510,21 +506,20 @@ int main()
   std::cout << std::endl;
   if (test != "ab c  d/")
     error("input");
-  pattern2 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern7));
-  matcher.input("ab c  d");
+  lexer.pattern_current=7;
+  lexer.input("ab c  d");
   test = "";
   while (true)
   {
-    if (matcher.scan())
+    if (lexer.scan())
     {
-      std::cout << matcher.text() << "/";
-      test.append(matcher.text()).append("/");
+      std::cout << lexer.text() << "/";
+      test.append(lexer.text()).append("/");
     }
-    else if (!matcher.at_end())
+    else if (!lexer.at_end())
     {
-      std::cout << (char)matcher.input() << "?/";
+      std::cout << (char)lexer.input() << "?/";
       test.append("?/");
     }
     else
@@ -535,24 +530,23 @@ int main()
   std::cout << std::endl;
   if (test != "a/b/?/c/?/?/d/")
     error("input");
-  pattern7 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern7));
-  matcher.input("ab c  d");
-  matcher.unput('a');
+  lexer.pattern_current=7;
+  lexer.input("ab c  d");
+  lexer.unput('a');
   test = "";
   while (true)
   {
-    if (matcher.scan())
+    if (lexer.scan())
     {
-      std::cout << matcher.text() << "/";
-      test.append(matcher.text()).append("/");
-      if (*matcher.text() == 'b')
-        matcher.unput('c');
+      std::cout << lexer.text() << "/";
+      test.append(lexer.text()).append("/");
+      if (*lexer.text() == 'b')
+        lexer.unput('c');
     }
-    else if (!matcher.at_end())
+    else if (!lexer.at_end())
     {
-      std::cout << (char)matcher.input() << "?/";
+      std::cout << (char)lexer.input() << "?/";
     }
     else
     {
@@ -562,24 +556,23 @@ int main()
   std::cout << std::endl;
   if (test != "a/a/b/c/c/d/")
     error("unput");
-  pattern7 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern9));
-  matcher.input("ab c  d");
-  matcher.wunput(L'ä');
+  lexer.pattern_current=9;
+  lexer.input("ab c  d");
+  lexer.wunput(L'ä');
   test = "";
   while (true)
   {
-    if (matcher.scan())
+    if (lexer.scan())
     {
-      std::cout << matcher.text() << "/";
-      test.append(matcher.text()).append("/");
-      if (*matcher.text() == 'b')
-        matcher.wunput(L'ç');
+      std::cout << lexer.text() << "/";
+      test.append(lexer.text()).append("/");
+      if (*lexer.text() == 'b')
+        lexer.wunput(L'ç');
     }
-    else if (!matcher.at_end())
+    else if (!lexer.at_end())
     {
-      std::cout << (char)matcher.winput() << "?/";
+      std::cout << (char)lexer.winput() << "?/";
     }
     else
     {
@@ -589,205 +582,194 @@ int main()
   std::cout << std::endl;
   if (test != "ä/a/b/ç/c/d/")
     error("wunput");
-  pattern9 = std::move(matcher.pattern());
   //
   banner("TEST WRAP");
   //
-  WrappedMatcher wrapped_matcher;
-  wrapped_matcher.pattern(std::move(pattern8));
+  WrappedLexer wrapped_lexer;
+  wrapped_lexer.patterns.push_back(lexer.patterns[7]);
   test = "";
-  while (wrapped_matcher.find())
+  while (wrapped_lexer.find())
   {
-    std::cout << wrapped_matcher.text() << "/";
-    test.append(wrapped_matcher.text()).append("/");
+    std::cout << wrapped_lexer.text() << "/";
+    test.append(wrapped_lexer.text()).append("/");
   }
   std::cout << std::endl;
   if (test != "Hello/World/How/now/brown/cow/An/apple/a/day/")
     error("wrap");
-  pattern5 = std::move(wrapped_matcher.pattern());
   //
   banner("TEST REST");
   //
-  matcher.pattern(std::move(pattern8));
-  matcher.input("abc def xyz");
+  lexer.pattern_current=8;
+  lexer.input("abc def xyz");
   test = "";
-  if (matcher.find())
+  if (lexer.find())
   {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
   }
   std::cout << std::endl;
-  if (test != "abc/" || strcmp(matcher.rest(), " def xyz") != 0)
+  if (test != "abc/" || strcmp(lexer.rest(), " def xyz") != 0)
     error("rest");
-  pattern8 = std::move(matcher.pattern());
   //
   banner("TEST SKIP");
   //
-  matcher.pattern(std::move(pattern8));
-  matcher.input("abc  \ndef xyz");
+  lexer.pattern_current=8;
+  lexer.input("abc  \ndef xyz");
   test = "";
-  if (matcher.scan())
+  if (lexer.scan())
   {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
-    matcher.skip('\n');
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
+    lexer.skip('\n');
   }
-  if (matcher.scan())
+  if (lexer.scan())
   {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
-    matcher.skip('\n');
-  }
-  std::cout << std::endl;
-  if (test != "abc/def/")
-    error("skip");
-  pattern8 = std::move(matcher.pattern());
-  //
-  matcher.input("abc  ¶def¶");
-  test = "";
-  if (matcher.scan())
-  {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
-    matcher.skip(L'¶');
-  }
-  if (matcher.scan())
-  {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
-    matcher.skip(L'¶');
-  }
-  //
-  matcher.input("abc  xxydef xx");
-  test = "";
-  if (matcher.scan())
-  {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
-    matcher.skip("xy");
-  }
-  if (matcher.scan())
-  {
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
-    matcher.skip("xy");
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
+    lexer.skip('\n');
   }
   std::cout << std::endl;
   if (test != "abc/def/")
     error("skip");
   //
-#ifdef WITH_SPAN
+  lexer.input("abc  ¶def¶");
+  test = "";
+  if (lexer.scan())
+  {
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
+    lexer.skip(L'¶');
+  }
+  if (lexer.scan())
+  {
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
+    lexer.skip(L'¶');
+  }
+  //
+  lexer.input("abc  xxydef xx");
+  test = "";
+  if (lexer.scan())
+  {
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
+    lexer.skip("xy");
+  }
+  if (lexer.scan())
+  {
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
+    lexer.skip("xy");
+  }
+  std::cout << std::endl;
+  if (test != "abc/def/")
+    error("skip");
+  //
+#ifdef REFLEX_WITH_SPAN
   banner("TEST SPAN");
   //
-  matcher.pattern(std::move(pattern8));
-  matcher.input("##a#b#c##\ndef##\n##ghi\n##xyz");
+  lexer.pattern_current=8;
+  lexer.input("##a#b#c##\ndef##\n##ghi\n##xyz");
   test = "";
-  while (matcher.find())
+  while (lexer.find())
   {
-    std::cout << matcher.span() << "/";
-    test.append(matcher.span()).append("/");
+    std::cout << lexer.span() << "/";
+    test.append(lexer.span()).append("/");
   }
   std::cout << std::endl;
   if (test != "##a#b#c##/def##/##ghi/##xyz/")
     error("span");
   //
   banner("TEST LINE");
-  pattern8 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern8));
-  matcher.input("##a#b#c##\ndef##\n##ghi\n##xyz");
+  lexer.pattern_current=8;
+  lexer.input("##a#b#c##\ndef##\n##ghi\n##xyz");
   test = "";
-  while (matcher.find())
+  while (lexer.find())
   {
-    std::cout << matcher.line() << "/";
-    test.append(matcher.line()).append("/");
+    std::cout << lexer.line() << "/";
+    test.append(lexer.line()).append("/");
   }
   std::cout << std::endl;
   if (test != "##a#b#c##/##a#b#c##/##a#b#c##/def##/##ghi/##xyz/")
     error("line");
-  pattern8 = std::move(matcher.pattern());
 #endif
   //
   banner("TEST MORE");
   //
-  matcher.pattern(std::move(pattern7));
-  matcher.input("abc");
+  lexer.pattern_current=7;
+  lexer.input("abc");
   test = "";
-  while (matcher.scan())
+  while (lexer.scan())
   {
-    std::cout << matcher.text() << "/";
-    matcher.more();
-    test.append(matcher.text()).append("/");
+    std::cout << lexer.text() << "/";
+    lexer.more();
+    test.append(lexer.text()).append("/");
   }
   std::cout << std::endl;
   if (test != "a/ab/abc/")
     error("more");
-  pattern7 = std::move(matcher.pattern());
   //
   banner("TEST LESS");
   //
-  matcher.pattern(std::move(pattern1));
-  matcher.input("abc");
+  lexer.pattern_current=1;
+  lexer.input("abc");
   test = "";
-  while (matcher.scan())
+  while (lexer.scan())
   {
-    matcher.less(1);
-    std::cout << matcher.text() << "/";
-    test.append(matcher.text()).append("/");
+    lexer.less(1);
+    std::cout << lexer.text() << "/";
+    test.append(lexer.text()).append("/");
   }
   std::cout << std::endl;
   if (test != "a/b/c/")
     error("less");
-  pattern1 = std::move(matcher.pattern());
   //
   banner("TEST MATCHES");
   //
-  if (Matcher("\\w+", "hello").matches()) // on the fly string matching
+  if (Lexer("\\w+", "hello").matches()) // on the fly string matching
     std::cout << "OK";
   else
     error("match results");
   std::cout << std::endl;
-  if (Matcher("\\d", "0").matches())
+  if (Lexer("\\d", "0").matches())
     std::cout << "OK";
   else
     error("match results");
   std::cout << std::endl;
   //
-  matcher.pattern(std::move(pattern1));
-  matcher.input("abc");
-  if (matcher.matches())
+  lexer.pattern_current=1;
+  lexer.input("abc");
+  if (lexer.matches())
     std::cout << "OK";
   else
     error("match results");
   std::cout << std::endl;
-  pattern1 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern2));
-  matcher.input("abc");
-  if (matcher.matches())
+  lexer.pattern_current=2;
+  lexer.input("abc");
+  if (lexer.matches())
     std::cout << "OK";
   else
     error("match results");
   std::cout << std::endl;
-  pattern2 = std::move(matcher.pattern());
   //
-  matcher.pattern(std::move(pattern6));
-  matcher.input("");
-  if (matcher.matches())
+  lexer.pattern_current=6;
+  lexer.input("");
+  if (lexer.matches())
     std::cout << "OK";
   else
     error("match results");
   std::cout << std::endl;
-  pattern6 = std::move(matcher.pattern());
+
   //
-  matcher.pattern(std::move(pattern2));
-  matcher.input("---");
-  if (!matcher.matches())
+  lexer.pattern_current=2;
+  lexer.input("---");
+  if (!lexer.matches())
     std::cout << "OK";
   else
     error("match results");
   std::cout << std::endl;
-  pattern2 = std::move(matcher.pattern());
   //
   banner("DONE");
   return 0;

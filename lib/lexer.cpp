@@ -34,11 +34,11 @@
 @copyright (c) BSD-3 License - see LICENSE.txt
 */
 
-#include <reflex/matcher.h>
+#include <reflex/lexer.h>
 
 namespace reflex {
 /// Boyer-Moore preprocessing of the given pattern prefix pat of length len (<=255), generates bmd_ > 0 and bms_[] shifts.
-void Matcher::boyer_moore_init(const char *pat, size_t len)
+void Lexer::boyer_moore_init(const char *pat, size_t len)
 {
   // Relative frequency table of English letters, source code, and UTF-8 bytes
   static unsigned char freq[256] = "\0\0\0\0\0\0\0\0\0\73\4\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\73\70\70\1\1\2\2\70\70\70\2\2\70\70\70\2\3\3\3\3\3\3\3\3\3\3\70\70\70\70\70\70\2\35\14\24\26\37\20\17\30\33\11\12\25\22\32\34\15\7\27\31\36\23\13\21\10\16\6\70\1\70\2\70\1\67\46\56\60\72\52\51\62\65\43\44\57\54\64\66\47\41\61\63\71\55\45\53\42\50\40\70\2\70\2\0\47\47\47\47\47\47\47\47\47\47\47\47\47\47\47\47\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\45\44\44\44\44\44\44\44\44\44\44\44\44\44\44\44\44\0\0\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\5\46\56\56\56\56\56\56\56\56\56\56\56\56\46\56\56\73\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
@@ -93,11 +93,11 @@ void Matcher::boyer_moore_init(const char *pat, size_t len)
 }
 
 // advance input cursor position after mismatch to align input for the next match
-bool Matcher::advance()
+bool Lexer::advance()
 {
   size_t loc = cur_ + 1;
-  size_t min = pat_.min_;
-  if (pat_.len_ == 0)
+  size_t min = patterns[pattern_current].min_;
+  if (patterns[pattern_current].len_ == 0)
   {
     if (min == 0)
       return false;
@@ -111,7 +111,7 @@ bool Matcher::advance()
     }
     if (min >= 4)
     {
-      const Pattern::Pred *bit = pat_.bit_;
+      const Pattern::Pred *bit = patterns[pattern_current].bit_;
       Pattern::Pred state = ~0;
       Pattern::Pred mask = (1 << (min - 1));
       while (true)
@@ -129,7 +129,7 @@ bool Matcher::advance()
         {
           s -= min - 1;
           loc = s - buf_;
-          if (Pattern::predict_match(pat_.pmh_, s, min))
+          if (Pattern::predict_match(patterns[pattern_current].pmh_, s, min))
           {
             set_current(loc);
             return true;
@@ -147,10 +147,10 @@ bool Matcher::advance()
         }
       }
     }
-    const Pattern::Pred *pma = pat_.pma_;
+    const Pattern::Pred *pma = patterns[pattern_current].pma_;
     if (min == 3)
     {
-      const Pattern::Pred *bit = pat_.bit_;
+      const Pattern::Pred *bit = patterns[pattern_current].bit_;
       Pattern::Pred state = ~0;
       while (true)
       {
@@ -187,7 +187,7 @@ bool Matcher::advance()
     }
     if (min == 2)
     {
-      const Pattern::Pred *bit = pat_.bit_;
+      const Pattern::Pred *bit = patterns[pattern_current].bit_;
       Pattern::Pred state = ~0;
       while (true)
       {
@@ -255,8 +255,8 @@ bool Matcher::advance()
       }
     }
   }
-  const char *pre = pat_.pre_;
-  size_t len = pat_.len_; // actually never more than 255
+  const char *pre = patterns[pattern_current].pre_;
+  size_t len = patterns[pattern_current].len_; // actually never more than 255
   if (len == 1)
   {
     while (true)
@@ -308,12 +308,12 @@ bool Matcher::advance()
                 return true;
               if (min >= 4)
               {
-                if (loc + len + min > end_ || Pattern::predict_match(pat_.pmh_, &buf_[loc + len], min))
+                if (loc + len + min > end_ || Pattern::predict_match(patterns[pattern_current].pmh_, &buf_[loc + len], min))
                   return true;
               }
               else
               {
-                if (loc + len + 4 > end_ || Pattern::predict_match(pat_.pma_, &buf_[loc + len]) == 0)
+                if (loc + len + 4 > end_ || Pattern::predict_match(patterns[pattern_current].pma_, &buf_[loc + len]) == 0)
                   return true;
               }
             }
@@ -345,12 +345,12 @@ bool Matcher::advance()
                 return true;
               if (min >= 4)
               {
-                if (loc + len + min > end_ || Pattern::predict_match(pat_.pmh_, &buf_[loc + len], min))
+                if (loc + len + min > end_ || Pattern::predict_match(patterns[pattern_current].pmh_, &buf_[loc + len], min))
                   return true;
               }
               else
               {
-                if (loc + len + 4 > end_ || Pattern::predict_match(pat_.pma_, &buf_[loc + len]) == 0)
+                if (loc + len + 4 > end_ || Pattern::predict_match(patterns[pattern_current].pma_, &buf_[loc + len]) == 0)
                   return true;
               }
             }
@@ -382,12 +382,12 @@ bool Matcher::advance()
                 return true;
               if (min >= 4)
               {
-                if (loc + len + min > end_ || Pattern::predict_match(pat_.pmh_, &buf_[loc + len], min))
+                if (loc + len + min > end_ || Pattern::predict_match(patterns[pattern_current].pmh_, &buf_[loc + len], min))
                   return true;
               }
               else
               {
-                if (loc + len + 4 > end_ || Pattern::predict_match(pat_.pma_, &buf_[loc + len]) == 0)
+                if (loc + len + 4 > end_ || Pattern::predict_match(patterns[pattern_current].pma_, &buf_[loc + len]) == 0)
                   return true;
               }
             }
@@ -420,12 +420,12 @@ bool Matcher::advance()
                 return true;
               if (min >= 4)
               {
-                if (loc + len + min > end_ || Pattern::predict_match(pat_.pmh_, &buf_[loc + len], min))
+                if (loc + len + min > end_ || Pattern::predict_match(patterns[pattern_current].pmh_, &buf_[loc + len], min))
                   return true;
               }
               else
               {
-                if (loc + len + 4 > end_ || Pattern::predict_match(pat_.pma_, &buf_[loc + len]) == 0)
+                if (loc + len + 4 > end_ || Pattern::predict_match(patterns[pattern_current].pma_, &buf_[loc + len]) == 0)
                   return true;
               }
             }
@@ -457,12 +457,12 @@ bool Matcher::advance()
                 return true;
               if (min >= 4)
               {
-                if (loc + len + min > end_ || Pattern::predict_match(pat_.pmh_, &buf_[loc + len], min))
+                if (loc + len + min > end_ || Pattern::predict_match(patterns[pattern_current].pmh_, &buf_[loc + len], min))
                   return true;
               }
               else
               {
-                if (loc + len + 4 > end_ || Pattern::predict_match(pat_.pma_, &buf_[loc + len]) == 0)
+                if (loc + len + 4 > end_ || Pattern::predict_match(patterns[pattern_current].pma_, &buf_[loc + len]) == 0)
                   return true;
               }
             }
@@ -495,12 +495,12 @@ bool Matcher::advance()
                 return true;
               if (min >= 4)
               {
-                if (loc + len + min > end_ || Pattern::predict_match(pat_.pmh_, &buf_[loc + len], min))
+                if (loc + len + min > end_ || Pattern::predict_match(patterns[pattern_current].pmh_, &buf_[loc + len], min))
                   return true;
               }
               else
               {
-                if (loc + len + 4 > end_ || Pattern::predict_match(pat_.pma_, &buf_[loc + len]) == 0)
+                if (loc + len + 4 > end_ || Pattern::predict_match(patterns[pattern_current].pma_, &buf_[loc + len]) == 0)
                   return true;
               }
             }
@@ -534,12 +534,12 @@ bool Matcher::advance()
                 return true;
               if (min >= 4)
               {
-                if (loc + len + min > end_ || Pattern::predict_match(pat_.pmh_, &buf_[loc + len], min))
+                if (loc + len + min > end_ || Pattern::predict_match(patterns[pattern_current].pmh_, &buf_[loc + len], min))
                   return true;
               }
               else
               {
-                if (loc + len + 4 > end_ || Pattern::predict_match(pat_.pma_, &buf_[loc + len]) == 0)
+                if (loc + len + 4 > end_ || Pattern::predict_match(patterns[pattern_current].pma_, &buf_[loc + len]) == 0)
                   return true;
               }
             }
@@ -559,12 +559,12 @@ bool Matcher::advance()
                 return true;
               if (min >= 4)
               {
-                if (loc + len + min > end_ || Pattern::predict_match(pat_.pmh_, &buf_[loc + len], min))
+                if (loc + len + min > end_ || Pattern::predict_match(patterns[pattern_current].pmh_, &buf_[loc + len], min))
                   return true;
               }
               else
               {
-                if (loc + len + 4 > end_ || Pattern::predict_match(pat_.pma_, &buf_[loc + len]) == 0)
+                if (loc + len + 4 > end_ || Pattern::predict_match(patterns[pattern_current].pma_, &buf_[loc + len]) == 0)
                   return true;
               }
             }
@@ -592,12 +592,12 @@ bool Matcher::advance()
             return true;
           if (min >= 4)
           {
-            if (loc + len + min > end_ || Pattern::predict_match(pat_.pmh_, &buf_[loc + len], min))
+            if (loc + len + min > end_ || Pattern::predict_match(patterns[pattern_current].pmh_, &buf_[loc + len], min))
               return true;
           }
           else
           {
-            if (loc + len + 4 > end_ || Pattern::predict_match(pat_.pma_, &buf_[loc + len]) == 0)
+            if (loc + len + 4 > end_ || Pattern::predict_match(patterns[pattern_current].pma_, &buf_[loc + len]) == 0)
               return true;
           }
         }
@@ -639,12 +639,12 @@ bool Matcher::advance()
             return true;
           if (min >= 4)
           {
-            if (loc + len + min > end_ || Pattern::predict_match(pat_.pmh_, &buf_[loc + len], min))
+            if (loc + len + min > end_ || Pattern::predict_match(patterns[pattern_current].pmh_, &buf_[loc + len], min))
               return true;
           }
           else
           {
-            if (loc + len + 4 > end_ || Pattern::predict_match(pat_.pma_, &buf_[loc + len]) == 0)
+            if (loc + len + 4 > end_ || Pattern::predict_match(patterns[pattern_current].pma_, &buf_[loc + len]) == 0)
               return true;
           }
         }

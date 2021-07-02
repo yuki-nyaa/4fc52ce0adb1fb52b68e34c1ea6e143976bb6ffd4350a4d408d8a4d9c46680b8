@@ -325,7 +325,7 @@ and `reflex::StdPosixMatcher` classes respectively.  The std::regex syntax is
 therefore a lot more limited compared to Boost.Regex, PCRE2, and RE/flex.
 
 The RE/flex regex common interface API is implemented in an abstract base class
-template `reflex::AbstractMatcher` from which regex matchers are derived.  This
+template `reflex::AbstractLexer` from which regex matchers are derived.  This
 regex API offers a common interface that is used in the generated scanner.  You
 can also use this API in your C++ application for pattern matching.
 
@@ -598,10 +598,10 @@ that apply filtering tokenization, and splitting:
   `scan.begin()`...`scan.end()`   | tokenizer | continuous matches
   `split.begin()`...`split.end()` | splitter  | text between matches
 
-The type `reflex::AbstractMatcher::Operation` is a functor that defines `find`,
+The type `reflex::AbstractLexer::Operation` is a functor that defines `find`,
 `scan`, and `split`.  The functor operation returns true upon success.  The use
 of an iterator is simply supported by invoking `begin()` and `end()` methods of
-the functor, which return `reflex::AbstractMatcher::iterator`.  Likewise, there
+the functor, which return `reflex::AbstractLexer::iterator`.  Likewise, there
 are also `cbegin()` and `cend()` methods that return a `const_iterator`.
 
 We can use these RE/flex iterators in C++ for many tasks, including to populate
@@ -1081,7 +1081,7 @@ digraph build {
 
 The RE/flex-generated scanners use the RE/flex regex library API for pattern
 matching.  The RE/flex regex library API is defined by the abstract class
-`reflex::AbstractMatcher`.
+`reflex::AbstractLexer`.
 
 There are three regex matching engines to choose from for the generated scanner:
 the Boost.Regex library, the PCRE2 linrary, or the built-in RE/flex POSIX
@@ -1656,7 +1656,7 @@ This suppresses the default rule that echoes all unmatched input text when no
 rule matches.  With the `−−flex` option, the scanner reports "scanner jammed"
 when no rule matches by calling `yyFlexLexer::LexerError("scanner jammed")`.
 Without the `−−flex` and `−−debug` options, a `std::runtime` exception is
-raised by invoking `AbstractLexer::lexer_error("scanner jammed")`.  To throw a
+raised by invoking `AbstractLexer_old::lexer_error("scanner jammed")`.  To throw a
 custom exception instead, use option `−−exception` or override the virtual
 method `lexer_error` in a derived lexer class.  The virtual methods
 `LexerError` and `lexer_error` may be redefined by a user-specified derived
@@ -2222,7 +2222,7 @@ pointer or call `str()` or `wstr()` to obtain a string copy of the match:
 ~~~
 The start of a line is truncated when the line is too long.  The length of the
 line's contents before the pattern match on the line is restricted to 8KB,
-which is the size specified by `reflex::AbstractMatcher::Const::BLOCK`.  When
+which is the size specified by `reflex::AbstractLexer::Const::BLOCK`.  When
 this length is exceeded, the line's length before the match is truncated to
 8KB.  This ensures that pattern matching binary files or files with very long
 lines cannot cause memory allocation exceptions.
@@ -3468,7 +3468,7 @@ This produces the following Lexer class with the template parts filled in:
 ~~~{.cpp}
     #include <reflex/abslexer.h>
     namespace NAMESPACE {
-      class LEXER : public reflex::AbstractLexer<reflex::Matcher> {
+      class LEXER : public reflex::AbstractLexer_old<reflex::Matcher> {
         MEMBERS
        public:
         LEXER(
@@ -3476,7 +3476,7 @@ This produces the following Lexer class with the template parts filled in:
             const reflex::Input& input = reflex::Input(),
             std::ostream&        os    = std::cout)
           :
-            AbstractLexer(input, os)
+            AbstractLexer_old(input, os)
         {
           INIT
         }
@@ -4081,7 +4081,7 @@ not have to be saved and restored when switching buffers).  See also section
 
 To implement a custom input handler you can use a proper object-oriented
 approach: create a derived class of `reflex::Matcher` (or another matcher
-class derived from `reflex::AbstractMatcher`) and in the derived class override
+class derived from `reflex::AbstractLexer`) and in the derived class override
 the `size_t reflex::Matcher::get(char *s, size_t n)` method for input handling.
 This function is called with a string buffer `s` of size `n` bytes.  Fill the
 string buffer `s` up to `n` bytes and return the number of bytes stored in `s`.
@@ -6222,7 +6222,7 @@ encapsulate regex engines in a standard API for scanning, tokenizing,
 searching, and splitting of strings, wide strings, files, and streams.
 
 The RE/flex regex library is a class hierarchy that has at the root an abstract
-class `reflex::AbstractMatcher`.  Pattern types may differ between for matchers
+class `reflex::AbstractLexer`.  Pattern types may differ between for matchers
 so the `reflex::PatternMatcher` template class takes a pattern type and creates
 a class that is complete except for the implementation of the `reflex::match()`
 virtual method that requires a regex engine, such as Boost.Regex, PCRE2, or the
@@ -7207,7 +7207,7 @@ copy of the match:
 ~~~
 The start of a line is truncated when the line is too long.  The length of the
 line's contents before the pattern match on the line is restricted to 8KB,
-which is the size specified by `reflex::AbstractMatcher::Const::BLOCK`.  When
+which is the size specified by `reflex::AbstractLexer::Const::BLOCK`.  When
 this length is exceeded, the line's length before the match is truncated to
 8KB.  This ensures that pattern matching binary files or files with very long
 lines cannot cause memory allocation exceptions.
@@ -7274,9 +7274,9 @@ Four public data members of a matcher object are accesible:
   Variable | Usage
   -------- | ------------------------------------------------------------------
   `in`     | the `reflex::Input` object used by the matcher
-  `find`   | the `reflex::AbstractMatcher::Operation` functor for searching
-  `scan`   | the `reflex::AbstractMatcher::Operation` functor for scanning
-  `split`  | the `reflex::AbstractMatcher::Operation` functor for splitting
+  `find`   | the `reflex::AbstractLexer::Operation` functor for searching
+  `scan`   | the `reflex::AbstractLexer::Operation` functor for scanning
+  `split`  | the `reflex::AbstractLexer::Operation` functor for splitting
 
 Normally only the `in` variable should be used which holds the current input
 object of the matcher.  See \ref regex-input for details.

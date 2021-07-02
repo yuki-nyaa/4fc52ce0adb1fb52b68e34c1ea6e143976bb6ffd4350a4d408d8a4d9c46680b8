@@ -140,7 +140,7 @@ libreflex_a_LIBADD =
 am__dirstamp = $(am__leading_dot)dirstamp
 am_libreflex_a_OBJECTS = libreflex_a-convert.$(OBJEXT) \
 	libreflex_a-debug.$(OBJEXT) libreflex_a-error.$(OBJEXT) \
-	libreflex_a-input.$(OBJEXT) libreflex_a-matcher.$(OBJEXT) \
+	libreflex_a-input.$(OBJEXT) libreflex_a-lexer.$(OBJEXT) \
 	libreflex_a-pattern.$(OBJEXT) libreflex_a-posix.$(OBJEXT) \
 	libreflex_a-unicode.$(OBJEXT) libreflex_a-utf8.$(OBJEXT) \
 	$(top_builddir)/unicode/libreflex_a-block_scripts.$(OBJEXT) \
@@ -151,7 +151,7 @@ libreflexmin_a_AR = $(AR) $(ARFLAGS)
 libreflexmin_a_LIBADD =
 am_libreflexmin_a_OBJECTS = libreflexmin_a-debug.$(OBJEXT) \
 	libreflexmin_a-error.$(OBJEXT) libreflexmin_a-input.$(OBJEXT) \
-	libreflexmin_a-matcher.$(OBJEXT) \
+	libreflexmin_a-lexer.$(OBJEXT) \
 	libreflexmin_a-pattern.$(OBJEXT) libreflexmin_a-utf8.$(OBJEXT)
 libreflexmin_a_OBJECTS = $(am_libreflexmin_a_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
@@ -176,7 +176,7 @@ am__depfiles_remade = $(top_builddir)/unicode/$(DEPDIR)/libreflex_a-block_script
 	./$(DEPDIR)/libreflex_a-debug.Po \
 	./$(DEPDIR)/libreflex_a-error.Po \
 	./$(DEPDIR)/libreflex_a-input.Po \
-	./$(DEPDIR)/libreflex_a-matcher.Po \
+	./$(DEPDIR)/libreflex_a-lexer.Po \
 	./$(DEPDIR)/libreflex_a-pattern.Po \
 	./$(DEPDIR)/libreflex_a-posix.Po \
 	./$(DEPDIR)/libreflex_a-unicode.Po \
@@ -184,7 +184,7 @@ am__depfiles_remade = $(top_builddir)/unicode/$(DEPDIR)/libreflex_a-block_script
 	./$(DEPDIR)/libreflexmin_a-debug.Po \
 	./$(DEPDIR)/libreflexmin_a-error.Po \
 	./$(DEPDIR)/libreflexmin_a-input.Po \
-	./$(DEPDIR)/libreflexmin_a-matcher.Po \
+	./$(DEPDIR)/libreflexmin_a-lexer.Po \
 	./$(DEPDIR)/libreflexmin_a-pattern.Po \
 	./$(DEPDIR)/libreflexmin_a-utf8.Po
 am__mv = mv -f
@@ -346,12 +346,12 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = subdir-objects
 reflexincludedir = $(includedir)/reflex
-reflexinclude_HEADERS = $(top_srcdir)/include/reflex/abslexer.h $(top_srcdir)/include/reflex/absmatcher.h $(top_srcdir)/include/reflex/boostmatcher.h $(top_srcdir)/include/reflex/convert.h $(top_srcdir)/include/reflex/debug.h $(top_srcdir)/include/reflex/error.h $(top_srcdir)/include/reflex/flexlexer.h $(top_srcdir)/include/reflex/input.h $(top_srcdir)/include/reflex/matcher.h $(top_srcdir)/include/reflex/pattern.h $(top_srcdir)/include/reflex/posix.h $(top_srcdir)/include/reflex/ranges.h $(top_srcdir)/include/reflex/setop.h $(top_srcdir)/include/reflex/stdmatcher.h $(top_srcdir)/include/reflex/timer.h $(top_srcdir)/include/reflex/unicode.h $(top_srcdir)/include/reflex/utf8.h
+reflexinclude_HEADERS = $(top_srcdir)/include/reflex/lexer.h $(top_srcdir)/include/reflex/abslexer.h $(top_srcdir)/include/reflex/boostmatcher.h $(top_srcdir)/include/reflex/convert.h $(top_srcdir)/include/reflex/debug.h $(top_srcdir)/include/reflex/error.h $(top_srcdir)/include/reflex/flexlexer.h $(top_srcdir)/include/reflex/input.h $(top_srcdir)/include/reflex/pattern.h $(top_srcdir)/include/reflex/posix.h $(top_srcdir)/include/reflex/ranges.h $(top_srcdir)/include/reflex/setop.h $(top_srcdir)/include/reflex/stdmatcher.h $(top_srcdir)/include/reflex/timer.h $(top_srcdir)/include/reflex/unicode.h $(top_srcdir)/include/reflex/utf8.h
 lib_LIBRARIES = libreflex.a libreflexmin.a
 libreflex_a_CPPFLAGS = -I$(top_srcdir)/include $(SIMD_FLAGS)
-libreflex_a_SOURCES = convert.cpp debug.cpp error.cpp input.cpp matcher.cpp pattern.cpp posix.cpp unicode.cpp utf8.cpp $(top_srcdir)/unicode/block_scripts.cpp $(top_srcdir)/unicode/language_scripts.cpp $(top_srcdir)/unicode/letter_scripts.cpp
+libreflex_a_SOURCES = convert.cpp debug.cpp error.cpp input.cpp lexer.cpp pattern.cpp posix.cpp unicode.cpp utf8.cpp $(top_srcdir)/unicode/block_scripts.cpp $(top_srcdir)/unicode/language_scripts.cpp $(top_srcdir)/unicode/letter_scripts.cpp
 libreflexmin_a_CPPFLAGS = -I$(top_srcdir)/include $(SIMD_FLAGS)
-libreflexmin_a_SOURCES = debug.cpp error.cpp input.cpp matcher.cpp pattern.cpp utf8.cpp
+libreflexmin_a_SOURCES = debug.cpp error.cpp input.cpp lexer.cpp pattern.cpp utf8.cpp
 all: all-am
 
 .SUFFIXES:
@@ -456,7 +456,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libreflex_a-debug.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libreflex_a-error.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libreflex_a-input.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libreflex_a-matcher.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libreflex_a-lexer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libreflex_a-pattern.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libreflex_a-posix.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libreflex_a-unicode.Po@am__quote@ # am--include-marker
@@ -464,7 +464,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libreflexmin_a-debug.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libreflexmin_a-error.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libreflexmin_a-input.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libreflexmin_a-matcher.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libreflexmin_a-lexer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libreflexmin_a-pattern.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libreflexmin_a-utf8.Po@am__quote@ # am--include-marker
 
@@ -546,19 +546,19 @@ libreflex_a-input.obj: input.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflex_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libreflex_a-input.obj `if test -f 'input.cpp'; then $(CYGPATH_W) 'input.cpp'; else $(CYGPATH_W) '$(srcdir)/input.cpp'; fi`
 
-libreflex_a-matcher.o: matcher.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflex_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libreflex_a-matcher.o -MD -MP -MF $(DEPDIR)/libreflex_a-matcher.Tpo -c -o libreflex_a-matcher.o `test -f 'matcher.cpp' || echo '$(srcdir)/'`matcher.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libreflex_a-matcher.Tpo $(DEPDIR)/libreflex_a-matcher.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='matcher.cpp' object='libreflex_a-matcher.o' libtool=no @AMDEPBACKSLASH@
+libreflex_a-lexer.o: lexer.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflex_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libreflex_a-lexer.o -MD -MP -MF $(DEPDIR)/libreflex_a-lexer.Tpo -c -o libreflex_a-lexer.o `test -f 'lexer.cpp' || echo '$(srcdir)/'`lexer.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libreflex_a-lexer.Tpo $(DEPDIR)/libreflex_a-lexer.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='lexer.cpp' object='libreflex_a-lexer.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflex_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libreflex_a-matcher.o `test -f 'matcher.cpp' || echo '$(srcdir)/'`matcher.cpp
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflex_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libreflex_a-lexer.o `test -f 'lexer.cpp' || echo '$(srcdir)/'`lexer.cpp
 
-libreflex_a-matcher.obj: matcher.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflex_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libreflex_a-matcher.obj -MD -MP -MF $(DEPDIR)/libreflex_a-matcher.Tpo -c -o libreflex_a-matcher.obj `if test -f 'matcher.cpp'; then $(CYGPATH_W) 'matcher.cpp'; else $(CYGPATH_W) '$(srcdir)/matcher.cpp'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libreflex_a-matcher.Tpo $(DEPDIR)/libreflex_a-matcher.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='matcher.cpp' object='libreflex_a-matcher.obj' libtool=no @AMDEPBACKSLASH@
+libreflex_a-lexer.obj: lexer.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflex_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libreflex_a-lexer.obj -MD -MP -MF $(DEPDIR)/libreflex_a-lexer.Tpo -c -o libreflex_a-lexer.obj `if test -f 'lexer.cpp'; then $(CYGPATH_W) 'lexer.cpp'; else $(CYGPATH_W) '$(srcdir)/lexer.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libreflex_a-lexer.Tpo $(DEPDIR)/libreflex_a-lexer.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='lexer.cpp' object='libreflex_a-lexer.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflex_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libreflex_a-matcher.obj `if test -f 'matcher.cpp'; then $(CYGPATH_W) 'matcher.cpp'; else $(CYGPATH_W) '$(srcdir)/matcher.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflex_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libreflex_a-lexer.obj `if test -f 'lexer.cpp'; then $(CYGPATH_W) 'lexer.cpp'; else $(CYGPATH_W) '$(srcdir)/lexer.cpp'; fi`
 
 libreflex_a-pattern.o: pattern.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflex_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libreflex_a-pattern.o -MD -MP -MF $(DEPDIR)/libreflex_a-pattern.Tpo -c -o libreflex_a-pattern.o `test -f 'pattern.cpp' || echo '$(srcdir)/'`pattern.cpp
@@ -700,19 +700,19 @@ libreflexmin_a-input.obj: input.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflexmin_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libreflexmin_a-input.obj `if test -f 'input.cpp'; then $(CYGPATH_W) 'input.cpp'; else $(CYGPATH_W) '$(srcdir)/input.cpp'; fi`
 
-libreflexmin_a-matcher.o: matcher.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflexmin_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libreflexmin_a-matcher.o -MD -MP -MF $(DEPDIR)/libreflexmin_a-matcher.Tpo -c -o libreflexmin_a-matcher.o `test -f 'matcher.cpp' || echo '$(srcdir)/'`matcher.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libreflexmin_a-matcher.Tpo $(DEPDIR)/libreflexmin_a-matcher.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='matcher.cpp' object='libreflexmin_a-matcher.o' libtool=no @AMDEPBACKSLASH@
+libreflexmin_a-lexer.o: lexer.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflexmin_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libreflexmin_a-lexer.o -MD -MP -MF $(DEPDIR)/libreflexmin_a-lexer.Tpo -c -o libreflexmin_a-lexer.o `test -f 'lexer.cpp' || echo '$(srcdir)/'`lexer.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libreflexmin_a-lexer.Tpo $(DEPDIR)/libreflexmin_a-lexer.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='lexer.cpp' object='libreflexmin_a-lexer.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflexmin_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libreflexmin_a-matcher.o `test -f 'matcher.cpp' || echo '$(srcdir)/'`matcher.cpp
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflexmin_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libreflexmin_a-lexer.o `test -f 'lexer.cpp' || echo '$(srcdir)/'`lexer.cpp
 
-libreflexmin_a-matcher.obj: matcher.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflexmin_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libreflexmin_a-matcher.obj -MD -MP -MF $(DEPDIR)/libreflexmin_a-matcher.Tpo -c -o libreflexmin_a-matcher.obj `if test -f 'matcher.cpp'; then $(CYGPATH_W) 'matcher.cpp'; else $(CYGPATH_W) '$(srcdir)/matcher.cpp'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libreflexmin_a-matcher.Tpo $(DEPDIR)/libreflexmin_a-matcher.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='matcher.cpp' object='libreflexmin_a-matcher.obj' libtool=no @AMDEPBACKSLASH@
+libreflexmin_a-lexer.obj: lexer.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflexmin_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libreflexmin_a-lexer.obj -MD -MP -MF $(DEPDIR)/libreflexmin_a-lexer.Tpo -c -o libreflexmin_a-lexer.obj `if test -f 'lexer.cpp'; then $(CYGPATH_W) 'lexer.cpp'; else $(CYGPATH_W) '$(srcdir)/lexer.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libreflexmin_a-lexer.Tpo $(DEPDIR)/libreflexmin_a-lexer.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='lexer.cpp' object='libreflexmin_a-lexer.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflexmin_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libreflexmin_a-matcher.obj `if test -f 'matcher.cpp'; then $(CYGPATH_W) 'matcher.cpp'; else $(CYGPATH_W) '$(srcdir)/matcher.cpp'; fi`
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflexmin_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libreflexmin_a-lexer.obj `if test -f 'lexer.cpp'; then $(CYGPATH_W) 'lexer.cpp'; else $(CYGPATH_W) '$(srcdir)/lexer.cpp'; fi`
 
 libreflexmin_a-pattern.o: pattern.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libreflexmin_a_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libreflexmin_a-pattern.o -MD -MP -MF $(DEPDIR)/libreflexmin_a-pattern.Tpo -c -o libreflexmin_a-pattern.o `test -f 'pattern.cpp' || echo '$(srcdir)/'`pattern.cpp
@@ -899,7 +899,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libreflex_a-debug.Po
 	-rm -f ./$(DEPDIR)/libreflex_a-error.Po
 	-rm -f ./$(DEPDIR)/libreflex_a-input.Po
-	-rm -f ./$(DEPDIR)/libreflex_a-matcher.Po
+	-rm -f ./$(DEPDIR)/libreflex_a-lexer.Po
 	-rm -f ./$(DEPDIR)/libreflex_a-pattern.Po
 	-rm -f ./$(DEPDIR)/libreflex_a-posix.Po
 	-rm -f ./$(DEPDIR)/libreflex_a-unicode.Po
@@ -907,7 +907,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libreflexmin_a-debug.Po
 	-rm -f ./$(DEPDIR)/libreflexmin_a-error.Po
 	-rm -f ./$(DEPDIR)/libreflexmin_a-input.Po
-	-rm -f ./$(DEPDIR)/libreflexmin_a-matcher.Po
+	-rm -f ./$(DEPDIR)/libreflexmin_a-lexer.Po
 	-rm -f ./$(DEPDIR)/libreflexmin_a-pattern.Po
 	-rm -f ./$(DEPDIR)/libreflexmin_a-utf8.Po
 	-rm -f Makefile
@@ -962,7 +962,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libreflex_a-debug.Po
 	-rm -f ./$(DEPDIR)/libreflex_a-error.Po
 	-rm -f ./$(DEPDIR)/libreflex_a-input.Po
-	-rm -f ./$(DEPDIR)/libreflex_a-matcher.Po
+	-rm -f ./$(DEPDIR)/libreflex_a-lexer.Po
 	-rm -f ./$(DEPDIR)/libreflex_a-pattern.Po
 	-rm -f ./$(DEPDIR)/libreflex_a-posix.Po
 	-rm -f ./$(DEPDIR)/libreflex_a-unicode.Po
@@ -970,7 +970,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libreflexmin_a-debug.Po
 	-rm -f ./$(DEPDIR)/libreflexmin_a-error.Po
 	-rm -f ./$(DEPDIR)/libreflexmin_a-input.Po
-	-rm -f ./$(DEPDIR)/libreflexmin_a-matcher.Po
+	-rm -f ./$(DEPDIR)/libreflexmin_a-lexer.Po
 	-rm -f ./$(DEPDIR)/libreflexmin_a-pattern.Po
 	-rm -f ./$(DEPDIR)/libreflexmin_a-utf8.Po
 	-rm -f Makefile
@@ -1014,10 +1014,10 @@ uninstall-am: uninstall-libLIBRARIES uninstall-reflexincludeHEADERS
 # lib_LTLIBRARIES       = libreflex.la libreflexmin.a
 #
 # libreflex_la_CPPFLAGS = -I$(top_srcdir)/include
-# libreflex_la_SOURCES  = convert.cpp debug.cpp error.cpp input.cpp matcher.cpp pattern.cpp posix.cpp unicode.cpp utf8.cpp $(top_srcdir)/unicode/block_scripts.cpp $(top_srcdir)/unicode/language_scripts.cpp $(top_srcdir)/unicode/letter_scripts.cpp
+# libreflex_la_SOURCES  = convert.cpp debug.cpp error.cpp input.cpp lexer.cpp pattern.cpp posix.cpp unicode.cpp utf8.cpp $(top_srcdir)/unicode/block_scripts.cpp $(top_srcdir)/unicode/language_scripts.cpp $(top_srcdir)/unicode/letter_scripts.cpp
 #
 # libreflexmin_la_CPPFLAGS = -I$(top_srcdir)/include
-# libreflexmin_la_SOURCES  = debug.cpp error.cpp input.cpp matcher.cpp pattern.cpp utf8.cpp
+# libreflexmin_la_SOURCES  = debug.cpp error.cpp input.cpp lexer.cpp pattern.cpp utf8.cpp
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

@@ -4623,7 +4623,7 @@ fi
 
 
 # if CXXFLAGS is undefined, set it to our preferred default flags
-: ${CXXFLAGS="-Wextra -Wunused -O2"}
+: ${CXXFLAGS="-Wextra -Wunused -g -O0"}
 
 ac_ext=cpp
 ac_cpp='$CXXCPP $CPPFLAGS'

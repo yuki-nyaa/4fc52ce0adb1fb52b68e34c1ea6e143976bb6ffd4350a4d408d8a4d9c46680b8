@@ -34,300 +34,464 @@
 @copyright (c) BSD-3 License - see LICENSE.txt
 */
 
-#include"reflex.h"
+#include<cstring>
+#include<cctype>
+#include<algorithm>
+#include<string>
 #include<iostream>
+#include<fstream>
 #include<vector>
+#include<map>
+#include<set>
+#include<iomanip>
+#include<reflex/input.h>
+#include<reflex/convert.h>
+#include<reflex/pattern.h>
+
+#if defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(__CYGWIN__) || defined(__MINGW32__) || defined(__MINGW64__) || defined(__BORLANDC__)
+# define OS_WIN
+#endif
+
+#if !defined(PLATFORM)
+# if defined(OS_WIN)
+#  define PLATFORM "WIN"
+# else
+#  define PLATFORM ""
+# endif
+#endif
+
+// DO NOT ALTER THIS LINE: the makemake.sh script updates the version
+#define REFLEX_VERSION "3.0.7"
 
 /// Work around the Boost.Regex partial_match bug by forcing the generated scanner to buffer all input
-#define WITH_BOOST_PARTIAL_MATCH_BUG
+#define REFLEX_WITH_BOOST_PARTIAL_MATCH_BUG
 
 /// Safer fopen_s()
 #if (!defined(__WIN32__) && !defined(_WIN32) && !defined(WIN32) && !defined(_WIN64) && !defined(__BORLANDC__)) || defined(__CYGWIN__)
 int fopen_s(FILE **file, const char *name, const char *mode) { return (*file = ::fopen(name, mode)) ? 0 : errno; }
 #endif
 
-////////////////////////////////////////////////////////////////////////////////
-//                                                                            //
-//  Static data                                                               //
-//                                                                            //
-////////////////////////////////////////////////////////////////////////////////
+namespace reflex{
 
-/// @brief Table with command-line reflex options and lex specification %%options.
-///
-/// The table consists of option names with hyphens replaced by underscores.
-static const char *options_table[] = {
-  "array",
-  "always_interactive",
-  "batch",
-  "bison",
-  "bison_bridge",
-  "bison_cc",
-  "bison_cc_namespace",
-  "bison_cc_parser",
-  "bison_complete",
-  "bison_locations",
-  "case_insensitive",
-  "class",
-  "ctorarg",
-  "debug",
-  "default",
-  "dotall",
-  "exception",
-  "extra_type",
-  "fast",
-  "find",
-  "flex",
-  "freespace",
-  "full",
-  "graphs_file",
-  "header_file",
-  "include",
-  "indent",
-  "input",
-  "interactive",
-  "lex",
-  "lex_compat",
-  "lexer",
-  "templated_lexer",
-  "main",
-  "matcher",
-  "namespace",
-  "never_interactive",
-  "noarray",
-  "nocase_insensitive",
-  "nodebug",
-  "nodefault",
-  "nodotall",
-  "nofreespace",
-  "noindent",
-  "noinput",
-  "noline",
-  "nomain",
-  "nopointer",
-  "nostack",
-  "nostdinit",
-  "nounicode",
-  "nounistd",
-  "nounput",
-  "nowarn",
-  "noyylineno",
-  "noyymore",
-  "noyywrap",
-  "outfile",
-  "params",
-  "pattern",
-  "permissive",
-  "pointer",
-  "perf_report",
-  "posix_compat",
-  "prefix",
-  "reentrant",
-  "regexp_file",
-  "stack",
-  "stdinit",
-  "stdout",
-  "tables_file",
-  "tabs",
-  "token_eof",
-  "token_type",
-  "unicode",
-  "unput",
-  "verbose",
-  "warn",
-  "yy",
-  "yyclass",
-  "yylineno",
-  "yymore",
-  "yywrap",
-  "YYLTYPE",
-  "YYSTYPE",
-  "7bit",
-  "8bit",
-  nullptr // end of table
-};
+struct Reflex_Parser{
+  /// A library entry to describe regex library properties
+  struct Library {
+    const char *name;      ///< the unique ID name of the regex library
+    const char *file;      ///< the header file to include
+    const char *base_lexer;   ///< the name of the base lexer class
+    const char *signature; ///< a regex library signature of the form "[decls:]escapes[?+]"
+  };
 
-static std::vector<std::string> include_directories;
+  /// Line of code fragment in lex specifications
+  struct Code {
+    std::string contents; ///< contents
+    std::string file;   ///< source filename
+    size_t      lineno; ///< source line number
+  };
 
-/// @brief Table with regex library properties.
-///
-/// This table is extensible and new regex libraries may be added.  Each regex library is described by:
-///
-/// - a unique name that is used for specifying the `matcher=NAME` option
-/// - the header file to be included
-/// - the pattern type or class used by the matcher class
-/// - the matcher class
-/// - the regex library signature
-///
-/// A regex library signature is a string of the form `"decls:escapes?+."`, see reflex::convert.
-///
-/// The optional `"decls:"` part specifies which modifiers and other special `(?...)` constructs are supported:
-/// - non-capturing group `(?:...)` is supported
-/// - one or all of "imsx" specify which (?ismx) modifiers are supported:
-/// - 'i' specifies that `(?i...)` case-insensitive matching is supported
-/// - 'm' specifies that `(?m...)` multiline mode is supported for the ^ and $ anchors
-/// - 's' specifies that `(?s...)` dotall mode is supported
-/// - 'x' specifies that `(?x...)` freespace mode is supported
-/// - `#` specifies that `(?#...)` comments are supported
-/// - `=` specifies that `(?=...)` lookahead is supported
-/// - `<` specifies that `(?<...)` lookbehind is supported
-/// - `!` specifies that `(?!=...)` and `(?!<...)` are supported
-/// - `^` specifies that `(?^...)` negative (reflex) patterns are supported
-///
-/// The `"escapes"` characters specify which standard escapes are supported:
-/// - `a` for `\a` (BEL U+0007)
-/// - `b` for `\b` (BS U+0008) in brackets `[\b]` only AND the `\b` word boundary
-/// - `c` for `\cX` control character specified by `X` modulo 32
-/// - `d` for `\d` ASCII digit `[0-9]`
-/// - `e` for `\e` ESC U+001B
-/// - `f` for `\f` FF U+000C
-/// - `h` for `\h` ASCII blank `[ \t]` (SP U+0020 or TAB U+0009)
-/// - `i` for `\i` reflex indent anchor
-/// - `j` for `\j` reflex dedent anchor
-/// - `j` for `\k` reflex undent anchor
-/// - `l` for `\l` ASCII lower case letter `[a-z]`
-/// - `n` for `\n` LF U+000A
-/// - `p` for `\p{C}` Unicode character classes, also implies Unicode \x{X}, \l, \u, \d, \s, \w
-/// - `r` for `\r` CR U+000D
-/// - `s` for `\s` space (SP, TAB, LF, VT, FF, or CR)
-/// - `t` for `\t` TAB U+0009
-/// - `u` for `\u` ASCII upper case letter `[A-Z]` (when not followed by `{XXXX}`)
-/// - `v` for `\v` VT U+000B
-/// - `w` for `\w` ASCII word-like character `[0-9A-Z_a-z]`
-/// - `x` for `\xXX` 8-bit character encoding in hexadecimal
-/// - `y` for `\y` word boundary
-/// - `z` for `\z` end of input anchor
-/// - ``` for `\`` begin of input anchor
-/// - `'` for `\'` end of input anchor
-/// - `<` for `\<` left word boundary
-/// - `>` for `\>` right word boundary
-/// - `A` for `\A` begin of input anchor
-/// - `B` for `\B` non-word boundary
-/// - `D` for `\D` ASCII non-digit `[^0-9]`
-/// - `H` for `\H` ASCII non-blank `[^ \t]`
-/// - `L` for `\L` ASCII non-lower case letter `[^a-z]`
-/// - `N` for `\N` not a newline
-/// - `P` for `\P{C}` Unicode inverse character classes, see 'p'
-/// - `Q` for `\Q...\E` quotations
-/// - `R` for `\R` Unicode line break
-/// - `S` for `\S` ASCII non-space (no SP, TAB, LF, VT, FF, or CR)
-/// - `U` for `\U` ASCII non-upper case letter `[^A-Z]`
-/// - `W` for `\W` ASCII non-word-like character `[^0-9A-Z_a-z]`
-/// - `X` for `\X` any Unicode character
-/// - `Z` for `\Z` end of input anchor, before the final line break
-/// - `0` for `\0nnn` 8-bit character encoding in octal requires a leading `0`
-/// - '1' to '9' for backreferences (not applicable to lexer specifications)
-///
-/// Note that 'p' is a special case to support Unicode-based matchers that
-/// natively support UTF8 patterns and Unicode classes \p{C}, \P{C}, \w, \W,
-/// \d, \D, \l, \L, \u, \U, \N, and \x{X}.  Basically, 'p' prevents conversion
-/// of Unicode patterns to UTF8.  This special case does not support {NAME}
-/// expansions in bracket lists such as [a-z||{upper}] and {lower}{+}{upper}
-/// used in lexer specifications.
-///
-/// The optional `"?+"` specify lazy and possessive support:
-/// - `?` lazy quantifiers for repeats are supported
-/// - `+` possessive quantifiers for repeats are supported
-///
-/// The optional `"."` (dot) specifies that dot matches any character except newline.
-/// A dot is implied by the presence of the 's' modifier, and can be omitted in that case.
-static const Reflex::Library library_table[] = {
+  /// A regex pattern and action pair that forms a rule
+  struct Rule {
+    std::string pattern; ///< the pattern
+    std::string regex;   ///< the pattern-converted regex for the selected regex engine
+    Code        code;    ///< the action code corresponding to the pattern
+  };
+
+  typedef std::vector<Code>                 Codes;      ///< Collection of ordered lines of code
+  typedef std::vector<Rule>                 Rules;      ///< Collection of ordered rules
+  typedef std::vector<std::string>          Strings;    ///< Collection of ordered strings
+  typedef size_t                            Start;      ///< Start condition state type
+  typedef std::set<Start>                   Starts;     ///< Set of start conditions
+
+ private:
+  bool                  color_term;    ///< terminal supports colors
+  std::map<std::string,std::string> options; ///< maps option name (from the options_table) to its option value
+  std::map<std::string,Library> libraries;  ///< maps regex library name ("reflex", "boost", etc) to library info
+  Library              *library;       ///< the regex library selected
+  Strings               conditions;    ///< "INITIAL" start condition etc. defined with %x name
+  Strings               patterns;      ///< regex patterns for each start condition
+  Starts                inclusive;     ///< inclusive start conditions
+  std::map<std::string,std::string> definitions; ///< map of {name} to regex
+  std::map<Start,Rules> rules;         ///< <Start_i>regex_j action for Start i Rule j
+  std::vector<std::string> include_directories;
+
+  Codes                 section_htop;   ///< %code_htop{ user code %} in section 1 container
+  Codes                 section_hafter;   ///< %code_hafter{ user code %} in section 1 container
+  Codes                 section_cpptop;   ///< %code_cpptop{ user code %} in section 1 container
+  Codes                 section_class; ///< %code_class{ class code %} in section 1 container
+  Codes                 section_init;  ///< %code_init{ init code %} in section 1 container
+  Codes                 section_lextop;  ///< %code_lextop{ user code %} in section 1 container
+  Codes                 section_templateclass;  ///< %code_templateclass{ user code %} in section 1 container
+  Codes                 section_1;     ///< %{ user code %} in section 1 container
+  std::map<Start,Codes> section_2;     ///< lexer user code in section 2 container
+  Codes                 section_3;     ///< main user code in section 3 container
+
+  std::string           infile;        ///< input file name
+  reflex::BufferedInput in;            ///< input lex spec
+  std::ostream         *out;           ///< output stream
+
+  std::string           line;          ///< current line read from input
+  size_t                lineno;        ///< current line number at input
+  size_t                linelen;       ///< current line length
+ public:
+  /// @brief Table with command-line reflex options and lex specification %%options.
+  ///
+  /// The table consists of option names with hyphens replaced by underscores.
+  static constexpr const char *option_names[88] = {
+    "array",
+    "always_interactive",
+    "batch",
+    "bison",
+    "bison_bridge",
+    "bison_cc",
+    "bison_cc_namespace",
+    "bison_cc_parser",
+    "bison_complete",
+    "bison_locations",
+    "case_insensitive",
+    "class",
+    "ctorarg",
+    "debug",
+    "default",
+    "dotall",
+    "exception",
+    "extra_type",
+    "fast",
+    "find",
+    "flex",
+    "freespace",
+    "full",
+    "graphs_file",
+    "header_file",
+    "include",
+    "indent",
+    "input",
+    "interactive",
+    "lex",
+    "lex_compat",
+    "lexer",
+    "templated_lexer",
+    "main",
+    "base_lexer",
+    "namespace",
+    "never_interactive",
+    "noarray",
+    "nocase_insensitive",
+    "nodebug",
+    "nodefault",
+    "nodotall",
+    "nofreespace",
+    "noindent",
+    "noinput",
+    "noline",
+    "nomain",
+    "nopointer",
+    "nostack",
+    "nostdinit",
+    "nounicode",
+    "nounistd",
+    "nounput",
+    "nowarn",
+    "noyylineno",
+    "noyymore",
+    "noyywrap",
+    "outfile",
+    "params",
+    "pattern",
+    "permissive",
+    "pointer",
+    "perf_report",
+    "posix_compat",
+    "prefix",
+    "reentrant",
+    "regexp_file",
+    "stack",
+    "stdinit",
+    "stdout",
+    "tables_file",
+    "tabs",
+    "token_eof",
+    "token_type",
+    "unicode",
+    "unput",
+    "verbose",
+    "warn",
+    "yy",
+    "yyclass",
+    "yylineno",
+    "yymore",
+    "yywrap",
+    "YYLTYPE",
+    "YYSTYPE",
+    "7bit",
+    "8bit",
+    nullptr // end of table
+  };
+
+  /// @brief Table with regex library properties.
+  ///
+  /// This table is extensible and new regex libraries may be added.  Each regex library is described by:
+  ///
+  /// - a unique name that is used for specifying the `base_lexer=NAME` option
+  /// - the header file to be included
+  /// - the base_lexer class
+  /// - the regex library signature
+  ///
+  /// A regex library signature is a string of the form `"decls:escapes?+."`, see reflex::convert.
+  ///
+  /// The optional `"decls:"` part specifies which modifiers and other special `(?...)` constructs are supported:
+  /// - non-capturing group `(?:...)` is supported
+  /// - one or all of "imsx" specify which (?ismx) modifiers are supported:
+  /// - 'i' specifies that `(?i...)` case-insensitive matching is supported
+  /// - 'm' specifies that `(?m...)` multiline mode is supported for the ^ and $ anchors
+  /// - 's' specifies that `(?s...)` dotall mode is supported
+  /// - 'x' specifies that `(?x...)` freespace mode is supported
+  /// - `#` specifies that `(?#...)` comments are supported
+  /// - `=` specifies that `(?=...)` lookahead is supported
+  /// - `<` specifies that `(?<...)` lookbehind is supported
+  /// - `!` specifies that `(?!=...)` and `(?!<...)` are supported
+  /// - `^` specifies that `(?^...)` negative (reflex) patterns are supported
+  ///
+  /// The `"escapes"` characters specify which standard escapes are supported:
+  /// - `a` for `\a` (BEL U+0007)
+  /// - `b` for `\b` (BS U+0008) in brackets `[\b]` only AND the `\b` word boundary
+  /// - `c` for `\cX` control character specified by `X` modulo 32
+  /// - `d` for `\d` ASCII digit `[0-9]`
+  /// - `e` for `\e` ESC U+001B
+  /// - `f` for `\f` FF U+000C
+  /// - `h` for `\h` ASCII blank `[ \t]` (SP U+0020 or TAB U+0009)
+  /// - `i` for `\i` reflex indent anchor
+  /// - `j` for `\j` reflex dedent anchor
+  /// - `j` for `\k` reflex undent anchor
+  /// - `l` for `\l` ASCII lower case letter `[a-z]`
+  /// - `n` for `\n` LF U+000A
+  /// - `p` for `\p{C}` Unicode character classes, also implies Unicode \x{X}, \l, \u, \d, \s, \w
+  /// - `r` for `\r` CR U+000D
+  /// - `s` for `\s` space (SP, TAB, LF, VT, FF, or CR)
+  /// - `t` for `\t` TAB U+0009
+  /// - `u` for `\u` ASCII upper case letter `[A-Z]` (when not followed by `{XXXX}`)
+  /// - `v` for `\v` VT U+000B
+  /// - `w` for `\w` ASCII word-like character `[0-9A-Z_a-z]`
+  /// - `x` for `\xXX` 8-bit character encoding in hexadecimal
+  /// - `y` for `\y` word boundary
+  /// - `z` for `\z` end of input anchor
+  /// - ``` for `\`` begin of input anchor
+  /// - `'` for `\'` end of input anchor
+  /// - `<` for `\<` left word boundary
+  /// - `>` for `\>` right word boundary
+  /// - `A` for `\A` begin of input anchor
+  /// - `B` for `\B` non-word boundary
+  /// - `D` for `\D` ASCII non-digit `[^0-9]`
+  /// - `H` for `\H` ASCII non-blank `[^ \t]`
+  /// - `L` for `\L` ASCII non-lower case letter `[^a-z]`
+  /// - `N` for `\N` not a newline
+  /// - `P` for `\P{C}` Unicode inverse character classes, see 'p'
+  /// - `Q` for `\Q...\E` quotations
+  /// - `R` for `\R` Unicode line break
+  /// - `S` for `\S` ASCII non-space (no SP, TAB, LF, VT, FF, or CR)
+  /// - `U` for `\U` ASCII non-upper case letter `[^A-Z]`
+  /// - `W` for `\W` ASCII non-word-like character `[^0-9A-Z_a-z]`
+  /// - `X` for `\X` any Unicode character
+  /// - `Z` for `\Z` end of input anchor, before the final line break
+  /// - `0` for `\0nnn` 8-bit character encoding in octal requires a leading `0`
+  /// - '1' to '9' for backreferences (not applicable to lexer specifications)
+  ///
+  /// Note that 'p' is a special case to support Unicode-based matchers that
+  /// natively support UTF8 patterns and Unicode classes \p{C}, \P{C}, \w, \W,
+  /// \d, \D, \l, \L, \u, \U, \N, and \x{X}.  Basically, 'p' prevents conversion
+  /// of Unicode patterns to UTF8.  This special case does not support {NAME}
+  /// expansions in bracket lists such as [a-z||{upper}] and {lower}{+}{upper}
+  /// used in lexer specifications.
+  ///
+  /// The optional `"?+"` specify lazy and possessive support:
+  /// - `?` lazy quantifiers for repeats are supported
+  /// - `+` possessive quantifiers for repeats are supported
+  ///
+  /// The optional `"."` (dot) specifies that dot matches any character except newline.
+  /// A dot is implied by the presence of the 's' modifier, and can be omitted in that case.
+  static constexpr Library library_table[6] = {
+    {
+      "reflex",
+      "reflex/lexer.h",
+      "reflex::Lexer",
+      "imsx#=^:abcdefhijklnrstuvwxzABDHLNQSUW<>?.",
+    },
+    {
+      "boost",
+      "reflex/boostlexer.h",
+      "reflex::BoostPosixLexer",
+      "imsx#<=!:abcdefghlnrstuvwxzABDHLQSUWZ0<>.",
+    },
+    {
+      "boost_perl",
+      "reflex/boostlexer.h",
+      "reflex::BoostLexer",
+      "imsx#<=!:abcdefghlnrstuvwxzABDHLQSUWZ0<>?+.",
+    },
+    {
+      "pcre2_perl",
+      "reflex/pcre2lexer.h",
+      "reflex::PCRE2Lexer",
+      "imsx!#<=:abcdefghlnrstuvwxzABDGHKLNQRSUWXZ0?+.",
+    },
+    {
+      "std_ecma", // this is an experimental option, not recommended!!
+      "reflex/stdlexer.h",
+      "/* EXPERIMENTAL OPTION, NOT RECOMMENDED */ reflex::StdEcmaLexer",
+      "!=:bcdfnrstvwxBDSW?"
+    },
+    { nullptr, nullptr, nullptr, nullptr} // end of table
+  };
+ private:
+  ////////////////////////////////////////////////////////////////////////////////
+  //                                                                            //
+  //  Helper functions                                                          //
+  //                                                                            //
+  ////////////////////////////////////////////////////////////////////////////////
+  /// Add file extension if not present, modifies the string argument and returns a copy
+  std::string add_file_ext(std::string& name, const char *ext)
+    /// @returns copy of file `name` string with extension `ext`
   {
-    "reflex",
-    "reflex/matcher.h",
-    "reflex::Pattern",
-    "reflex::Matcher",
-    "imsx#=^:abcdefhijklnrstuvwxzABDHLNQSUW<>?.",
-  },
+    size_t n = name.size();
+    size_t m = strlen(ext);
+    if (n > m && (name.at(n - m - 1) != '.' || name.compare(n - m, m, ext) != 0))
+      name.append(".").append(ext);
+    return name;
+  }
+
+  const char *SGR(const char *code) { return color_term ? code : ""; }
+
+  void message_and_abort(const char* source, size_t at_lineno, const char* message_type, const char* message, const char* arg)
   {
-    "boost",
-    "reflex/boostmatcher.h",
-    "boost::regex",
-    "reflex::BoostPosixMatcher",
-    "imsx#<=!:abcdefghlnrstuvwxzABDHLQSUWZ0<>.",
-  },
+    std::cerr <<
+      SGR("\033[0m") << source << ':' << at_lineno <<
+      SGR("\033[1;31m") << message_type << ": " << SGR("\033[0m") <<
+      message <<
+      SGR("\033[1m") << (arg != nullptr ? arg : "") << SGR("\033[0m") <<
+      std::endl;
+    exit(EXIT_FAILURE);
+  }
+  ////////////////////////////////////////////////////////////////////////////////
+  //                                                                            //
+  //  Functions                                                                 //
+  //                                                                            //
+  ////////////////////////////////////////////////////////////////////////////////
+  /// Display version information and exit
+  void version()
   {
-    "boost_perl",
-    "reflex/boostmatcher.h",
-    "boost::regex",
-    "reflex::BoostMatcher",
-    "imsx#<=!:abcdefghlnrstuvwxzABDHLQSUWZ0<>?+.",
-  },
+    std::cout << "reflex " REFLEX_VERSION " " PLATFORM << "\n"
+      "License BSD-3-Clause: <https://opensource.org/licenses/BSD-3-Clause>\n"
+      "Written by Robert van Engelen and others: <https://github.com/Genivia/RE-flex>" << std::endl;
+    exit(EXIT_SUCCESS);
+  }
+  /// Abort with an error message
+  void abort(const char *message, const char *arg = nullptr)
   {
-    "pcre2_perl",
-    "reflex/pcre2matcher.h",
-    "std::string",
-    "reflex::PCRE2Matcher",
-    "imsx!#<=:abcdefghlnrstuvwxzABDGHKLNQRSUWXZ0?+.",
-  },
+    message_and_abort("reflex",0,"error",message,arg);
+  }
+  /// Report an error and exit
+  void error(const char *message, const char *arg = nullptr, size_t at_lineno = 0)
   {
-    "std_ecma", // this is an experimental option, not recommended!!
-    "reflex/stdmatcher.h",
-    "char *",
-    "/* EXPERIMENTAL OPTION, NOT RECOMMENDED */ reflex::StdEcmaMatcher",
-    "!=:bcdfnrstvwxBDSW?"
-  },
-  { nullptr, nullptr, nullptr, nullptr, nullptr } // end of table
-};
+    message_and_abort((infile.empty() ? "(stdin)" : infile.c_str()),(at_lineno ? at_lineno : lineno),"error",message,arg);
+  }
+  /// Report a warning
+  void warning(const char *message, const char *arg = nullptr, size_t at_lineno = 0)
+  {
+    if(options["nowarn"].empty())
+      message_and_abort((infile.empty() ? "(stdin)" : infile.c_str()),(at_lineno ? at_lineno : lineno),"warning",message,arg);
+  }
+  void        help(const char *message = nullptr, const char *arg = nullptr);
+  void        set_library();
+  void        parse_section_1();
+  void        parse_section_2();
+  void        parse_section_3();
+  void        include(const std::string& filename,const bool sys=false);
+  void        write_banner(const char *title);
+  void        write_prelude();
+  void        write_defines();
+  void        write_class();
+  void        write_section_htop();
+  void        write_section_hafter();
+  void        write_section_cpptop();
+  void        write_section_class();
+  void        write_section_init();
+  void        write_section_lextop();
+  void        write_section_templateclass();
+  void        write_perf_report();
+  void        write_section_1();
+  void        write_section_3();
+  void        write_code(const Codes& codes);
+  void        write_code(const Code& code);
+  void        write_lexer();
+  void        write_main();
+  void        write_regex(const std::string *condition, const std::string& regex);
+  void        write_namespace_open();
+  void        write_namespace_close();
+  void        write_namespace_scope();
+  void        undot_namespace(std::string& s);
+  void        stats();
+  bool        get_line();
+  bool        skip_comment(size_t& pos);
+  bool        is(const char *s);
+  bool        ins(const char *s);
+  bool        br(size_t pos, const char *s = nullptr);
+  bool        as(size_t& pos, const char *s,bool=false);
+  bool        ws(size_t& pos,bool=false);
+  bool        eq(size_t& pos);
+  bool        nl(size_t& pos);
+  bool        is_code();
+  bool        is_qcode(const char*);
+  bool        is_code_htop();
+  bool        is_code_hafter();
+  bool        is_code_cpptop();
+  bool        is_code_class();
+  bool        is_code_init();
+  bool        is_code_lextop();
+  bool        is_code_templateclass();
+  std::string get_name(size_t& pos);
+  std::string get_option(size_t& pos);
+  std::string get_start(size_t& pos);
+  std::string get_string(size_t& pos,const char,const char);
+  bool        get_pattern(size_t& pos, std::string& pattern, std::string& regex);
+  std::string get_namespace(size_t& pos);
+  std::string get_code(size_t& pos);
+  std::string escape_bs(const std::string& s);
+  std::string upper_name(const std::string& s);
+  std::string param_args(const std::string& s);
+  bool        get_starts(size_t& pos, Starts& starts);
+ public:
+  Reflex_Parser(int argc, char **argv);
+  /// Parse lex specification input
+  void parse()
+  {
+    parse_section_1();
+    parse_section_2();
+    parse_section_3();
+  }
+  /// Close the input file.
+  void close_in()
+  {
+    if (in.file() != stdin)
+      fclose(in.file());
+  }
+  void        write();
+}; // struct Reflex_Parser
+} // namespace reflex
 
-////////////////////////////////////////////////////////////////////////////////
-//                                                                            //
-//  Helper functions                                                          //
-//                                                                            //
-////////////////////////////////////////////////////////////////////////////////
-
-/// Convert to lower case
-inline int lower(int c)
-  /// @returns lower case char
-{
-  return std::isalpha(c) ? (c | 0x20) : c;
-}
-
-/// Add file extension if not present, modifies the string argument and returns a copy
-static std::string file_ext(std::string& name, const char *ext)
-  /// @returns copy of file `name` string with extension `ext`
-{
-  size_t n = name.size();
-  size_t m = strlen(ext);
-  if (n > m && (name.at(n - m - 1) != '.' || name.compare(n - m, m, ext) != 0))
-    name.append(".").append(ext);
-  return name;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-//                                                                            //
-//  Main                                                                      //
-//                                                                            //
-////////////////////////////////////////////////////////////////////////////////
-
-/// Main program instantiates Reflex class and runs `Reflex::main(argc, argv)`
 int main(int argc, char **argv)
 {
-  Reflex().main(argc, argv);
-  return EXIT_SUCCESS;
+  reflex::Reflex_Parser reflex_parser(argc, argv);
+  reflex_parser.parse();
+  reflex_parser.write();
+  reflex_parser.close_in();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-//                                                                            //
-//  Reflex class public methods                                               //
-//                                                                            //
-////////////////////////////////////////////////////////////////////////////////
-
-/// Main program
-void Reflex::main(int argc, char **argv)
-{
-  init(argc, argv);
-  parse();
-  write();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-//                                                                            //
-//  Reflex class private/protected methods                                    //
-//                                                                            //
-////////////////////////////////////////////////////////////////////////////////
-
+namespace reflex{
+#if __cplusplus<201703L
+constexpr const char *Reflex_Parser::option_names[88];
+constexpr Reflex_Parser::Library Reflex_Parser::library_table[6];
+#endif
 /// Reflex initialization
-void Reflex::init(int argc, char **argv)
+Reflex_Parser::Reflex_Parser(int argc, char **argv)
 {
 #ifdef OS_WIN
   color_term = false;
@@ -335,11 +499,13 @@ void Reflex::init(int argc, char **argv)
   const char *term = getenv("TERM");
   color_term = term && (strstr(term, "ansi") || strstr(term, "xterm") || strstr(term, "color"));
 #endif
-  for (const char *const *i = options_table; *i != nullptr; ++i)
-    options[*i] = "";
+
   for (const Library *j = library_table; j->name != nullptr; ++j)
     libraries[j->name] = *j;
-  library = &libraries["reflex"];
+
+  for (const char *const *i = option_names; *i != nullptr; ++i)
+    options[*i] = "";
+
   conditions.push_back("INITIAL");
   inclusive.insert(0);
   out = &std::cout;
@@ -349,11 +515,7 @@ void Reflex::init(int argc, char **argv)
   {
     const char *arg = argv[i];
     if (*arg == '-'
-     || (arg[0] == '\xE2' && arg[1] == '\x88' && arg[2] == '\x92') // UTF-8 Unicode minus sign U+2212
-#ifdef OS_WIN
-     || *arg == '/'
-#endif
-     )
+     || (arg[0] == '\xE2' && arg[1] == '\x88' && arg[2] == '\x92')) // UTF-8 Unicode minus sign U+2212
     {
       bool is_grouped = true;
       if (arg[1] == '\x88' && arg[2] == '\x92') // UTF-8 Unicode minus sign U+2212
@@ -367,7 +529,7 @@ void Reflex::init(int argc, char **argv)
                break;
              arg += 2;
              // fall through
-          case '-':
+          case '-': // Handles long option.
             ++arg;
             if (strcmp(arg, "help") == 0)
               help();
@@ -383,7 +545,7 @@ void Reflex::init(int argc, char **argv)
               size_t pos;
               while ((pos = name.find('-')) != std::string::npos)
                 name[pos] = '_';
-              StringMap::iterator i = options.find(name);
+              std::map<std::string,std::string>::iterator i = options.find(name);
               if (i == options.end())
                 help("unknown option --", arg);
               if (val != nullptr)
@@ -393,6 +555,8 @@ void Reflex::init(int argc, char **argv)
             }
             is_grouped = false;
             break;
+
+          // Handles short options.
           case '+':
             options["flex"] = "true";
             break;
@@ -435,16 +599,16 @@ void Reflex::init(int argc, char **argv)
           case 'L':
             options["noline"] = "true";
             break;
-          case 'm':
-            ++arg;
-            if (*arg)
-              options["matcher"] = &arg[*arg == '='];
-            else if (++i < argc && *argv[i] != '-')
-              options["matcher"] = argv[i];
-            else
-              help("missing NAME for option -m NAME");
-            is_grouped = false;
-            break;
+          //case 'm':
+          //  ++arg;
+          //  if (*arg)
+          //    options["base_lexer"] = &arg[*arg == '='];
+          //  else if (++i < argc && *argv[i] != '-')
+          //    options["base_lexer"] = argv[i];
+          //  else
+          //    help("missing NAME for option -m NAME");
+          //  is_grouped = false;
+          //  break;
           case 'n':
             break;
           case 'o':
@@ -524,29 +688,28 @@ void Reflex::init(int argc, char **argv)
         help("one input FILE argument can be specified, also found ", argv[i]);
       infile = argv[i];
     }
+    FILE *file = stdin;
+    if (!infile.empty())
+    {
+      fopen_s(&file, infile.c_str(), "r");
+      if (!file)
+        abort("cannot open file ", infile.c_str());
+    }
+    in = file;
   }
 
   set_library();
 }
 
-/// Display version information and exit
-void Reflex::version()
-{
-  std::cout << "reflex " REFLEX_VERSION " " PLATFORM << "\n"
-    "License BSD-3-Clause: <https://opensource.org/licenses/BSD-3-Clause>\n"
-    "Written by Robert van Engelen and others: <https://github.com/Genivia/RE-flex>" << std::endl;
-  exit(EXIT_SUCCESS);
-}
-
 /// Display help information with an optional diagnostic message and exit
-void Reflex::help(const char *message, const char *arg)
+void Reflex_Parser::help(const char *message /* = nullptr */, const char *arg /* = nullptr */)
 {
   if (message)
     std::cout
       << "reflex: "
       << message
       << (arg != nullptr ? arg : "")
-      << std::endl;
+      << '\n';
   std::cout << "Usage: reflex [OPTIONS] [FILE]\n\
 \n\
     Scanner:\n\
@@ -564,15 +727,15 @@ void Reflex::help(const char *message, const char *arg)
                 ignore case in patterns\n\
         -I, --interactive, --always-interactive\n\
                 generate interactive scanner\n\
-        -m NAME, --matcher=NAME\n\
-                match with ";
-  for (LibraryMap::const_iterator i = libraries.begin(); i != libraries.end(); ++i)
+        --base_lexer=NAME\n\
+                lex with ";
+  for (std::map<std::string,Library>::const_iterator i = libraries.begin(); i != libraries.end(); ++i)
     std::cout << i->first << ", ";
   std::cout << "...\n\
         --pattern=NAME\n\
-                use custom pattern class NAME for custom matcher option -m\n\
+                use custom pattern class NAME for custom base lexer option -m\n\
         --include=FILE\n\
-                include header FILE.h for custom matcher option -m\n\
+                include header FILE.h for custom base lexer option -m\n\
         -S, --find\n\
                 generate search engine to find matches, ignores unmatched input\n\
         -T N, --tabs=N\n\
@@ -678,108 +841,67 @@ void Reflex::help(const char *message, const char *arg)
   exit(message ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
-/// Set/reset regex library matcher
-void Reflex::set_library()
+/// Set/reset regex library base lexer
+void Reflex_Parser::set_library()
 {
   if (!definitions.empty())
-    warning("%option matcher should be specified before the start of regular definitions");
-  if (options["matcher"] == "reflex")
-  {
-    options["matcher"].clear();
-  }
-  else if (!options["matcher"].empty())
-  {
-    std::string& name = options["matcher"];
-    std::string name_ext = name;
-    size_t pos;
-    while ((pos = name.find('-')) != std::string::npos)
-      name[pos] = '_';
-    LibraryMap::iterator i = libraries.find(name);
-    if (i != libraries.end())
-    {
-      library = &i->second;
-    }
-    else
-    {
-      library = &libraries[name];
-      library->name = name.c_str();
-      if (options["include"].empty())
-        options["include"] = name_ext;
-      file_ext(options["include"], "h");
-      library->file = options["include"].c_str();
-      if (options["pattern"].empty())
-        library->pattern = "char *";
-      else
-        library->pattern = options["pattern"].c_str();
-      library->matcher = name.c_str();
-      library->signature = "m:";
-      warning("using custom matcher ", library->name);
-    }
-  }
-}
+    warning("%option base_lexer should be specified before the start of regular definitions");
 
-/// Parse lex specification input
-void Reflex::parse()
-{
-  FILE *file = stdin;
-  if (!infile.empty())
-  {
-    fopen_s(&file, infile.c_str(), "r");
-    if (!file)
-      abort("cannot open file ", infile.c_str());
+  std::string& name = options["base_lexer"];
+
+  if(name.empty()){
+    library = &(libraries.find("reflex")->second);
+    return;
   }
-  in = file;
-  parse_section_1();
-  parse_section_2();
-  parse_section_3();
-  if (file != stdin)
-    fclose(file);
+
+  std::string name_ext = name;
+  std::replace(name.begin(),name.end(),'-','_');
+  std::map<std::string,Library>::iterator i = libraries.find(name);
+  if (i != libraries.end())
+  {
+    library = &i->second;
+  }
+  else
+  {
+    library = &libraries[name]; // This inserts a new entry into `libraries`.
+    library->name = name.c_str();
+    if (options["include"].empty())
+      options["include"] = name_ext;
+    add_file_ext(options["include"], "h");
+    library->file = options["include"].c_str();
+    library->base_lexer = name.c_str();
+    library->signature = "m:";
+    warning("using custom base lexer ", library->name);
+  }
 }
 
 /// Parse the specified %%include file
-void Reflex::include(const std::string& filename,const bool sys)
+void Reflex_Parser::include(const std::string& filename,const bool sys /*  =false */)
 {
   FILE *file = nullptr;
   std::string fullname;
   const char* REFLEX_INCLUDE = getenv("REFLEX_INCLUDE");
 
-  if(sys){
-    for(const std::string& s : include_directories){ // First search the "-I" dirs.
-      fullname = s+"/"+filename;
-      fopen_s(&file, fullname.c_str(), "r");
-      if(file)
-        goto search_end;
-    }
-    if(REFLEX_INCLUDE){ // Then comes the environment-defined dir.
-      fullname = std::string(REFLEX_INCLUDE) + "/"+ filename;
-      fopen_s(&file, fullname.c_str(), "r");
-      if(file)
-        goto search_end;
-    }
-    goto search_error;
-  }else{
+  if(!sys){
     fopen_s(&file, filename.c_str(), "r"); // First search the current dir.
     if(file)
-      goto search_end;
-    for(const std::string& s : include_directories){ // Then comes the "-I" dirs.
-      fullname = s+"/"+filename;
-      fopen_s(&file, fullname.c_str(), "r");
-      if(file)
-        goto search_end;
-    }
-    if(REFLEX_INCLUDE){ // Finally the environment-defined dir.
-      fullname = std::string(REFLEX_INCLUDE) + "/"+filename;
-      fopen_s(&file, fullname.c_str(), "r");
-      if(file)
-        goto search_end;
-    }
-    goto search_error;
+      goto search_suc;
   }
-
-  search_error:
+  for(const std::string& s : include_directories){ // Then comes the "-I" dirs.
+    fullname = s+"/"+filename;
+    fopen_s(&file, fullname.c_str(), "r");
+    if(file)
+      goto search_suc;
+  }
+  if(REFLEX_INCLUDE){ // Finally the environment-defined dir.
+    fullname = std::string(REFLEX_INCLUDE) + "/"+filename;
+    fopen_s(&file, fullname.c_str(), "r");
+    if(file)
+      goto search_suc;
+  }
   abort("cannot include file ", filename.c_str());
 
-  search_end:
+  search_suc:
   std::string save_infile(infile);
   infile = filename;
   reflex::BufferedInput save_in(in);
@@ -797,8 +919,8 @@ void Reflex::include(const std::string& filename,const bool sys)
   linelen = save_linelen;
 }
 
-/// Fetch next line from the input, return true if ok
-bool Reflex::get_line()
+/// Fetch next line from the given input, return true if ok
+bool Reflex_Parser::get_line()
 {
   if (in.eof())
     return false;
@@ -812,17 +934,18 @@ bool Reflex::get_line()
     if (c != '\r')
       line.push_back(c);
   }
-  linelen = line.length();
-  while (linelen > 0 && std::isspace(line.at(linelen - 1)))
-    --linelen;
-  line.resize(linelen);
+  size_t pos = line.size();
+  while (pos > 0 && std::isspace(line.at(pos - 1)))
+    --pos;
+  line.resize(pos);
+  linelen = line.size();
   if (in.eof() && line.empty())
     return false;
   return true;
 }
 
 /// Advance pos over white space and comments, return true if ok
-bool Reflex::skip_comment(size_t& pos)
+bool Reflex_Parser::skip_comment(size_t& pos)
 {
   while (true)
   {
@@ -861,20 +984,20 @@ bool Reflex::skip_comment(size_t& pos)
 }
 
 /// Match case-insensitive string s while ignoring the rest of the line, return true if OK
-bool Reflex::is(const char *s)
+bool Reflex_Parser::is(const char *s)
 {
-  for (size_t pos = 0; pos < linelen && *s != '\0' && lower(line.at(pos)) == *s; ++pos, ++s)
+  for (size_t pos = 0; pos < linelen && *s != '\0' && std::tolower(line.at(pos)) == *s; ++pos, ++s)
     continue;
   return *s == '\0';
 }
 
 /// Match case-insensitive string s at any indent while ignoring the rest of the line, return true if OK
-bool Reflex::ins(const char *s)
+bool Reflex_Parser::ins(const char *s)
 {
   size_t pos = 0;
   while (pos < linelen && std::isspace(line.at(pos)))
     ++pos;
-  while (pos < linelen && *s != '\0' && lower(line.at(pos)) == *s)
+  while (pos < linelen && *s != '\0' && std::tolower(line.at(pos)) == *s)
   {
     ++pos;
     ++s;
@@ -883,13 +1006,13 @@ bool Reflex::ins(const char *s)
 }
 
 /// Match s then look for a '{' at the end of the line (skipping whitespace) and return true, false otherwise (pos is unchanged)
-bool Reflex::br(size_t pos, const char *s)
+bool Reflex_Parser::br(size_t pos, const char *s /* =nullptr */)
 {
   if (s != nullptr)
   {
-    if (pos >= linelen || *s == '\0' || lower(line.at(pos)) != *s++)
+    if (pos >= linelen || *s == '\0' || std::tolower(line.at(pos)) != *s++)
       return false;
-    while (++pos < linelen && *s != '\0' && lower(line.at(pos)) == *s++)
+    while (++pos < linelen && *s != '\0' && std::tolower(line.at(pos)) == *s++)
       continue;
   }
   while (pos < linelen && std::isspace(line.at(pos)))
@@ -905,17 +1028,17 @@ bool Reflex::br(size_t pos, const char *s)
 }
 
 /// Advance pos to match case-insensitive initial part of the string s followed by white space, return true if OK
-bool Reflex::as(size_t& pos, const char *s,bool include)
+bool Reflex_Parser::as(size_t& pos, const char *s,bool include /* =false */)
 {
-  if (pos >= linelen || *s == '\0' || lower(line.at(pos)) != *s++)
+  if (pos >= linelen || *s == '\0' || std::tolower(line.at(pos)) != *s++)
     return false;
-  while (++pos < linelen && *s != '\0' && lower(line.at(pos)) == *s++)
+  while (++pos < linelen && *s != '\0' && std::tolower(line.at(pos)) == *s++)
     continue;
   return ws(pos,include);
 }
 
 /// Advance pos over whitespace, returns true if whitespace was found
-bool Reflex::ws(size_t& pos,bool include)
+bool Reflex_Parser::ws(size_t& pos,bool include /* =false */)
 {
   if (pos >= linelen || (!include && pos > 0 && !std::isspace(line.at(pos))))
     return false;
@@ -925,7 +1048,7 @@ bool Reflex::ws(size_t& pos,bool include)
 }
 
 /// Advance pos over '=' and whitespace when present, return true if OK
-bool Reflex::eq(size_t& pos)
+bool Reflex_Parser::eq(size_t& pos)
 {
   (void)ws(pos);
   if (pos + 1 >= linelen || line.at(pos) != '=')
@@ -936,7 +1059,7 @@ bool Reflex::eq(size_t& pos)
 }
 
 /// Advance pos to end of line while skipping whitespace, return true if end of line
-bool Reflex::nl(size_t& pos)
+bool Reflex_Parser::nl(size_t& pos)
 {
   while (pos < linelen && std::isspace(line.at(pos)))
     ++pos;
@@ -944,57 +1067,57 @@ bool Reflex::nl(size_t& pos)
 }
 
 /// Check if current line starts a block of code or a comment
-bool Reflex::is_code()
+bool Reflex_Parser::is_code()
 {
   return linelen > 0 && ((std::isspace(line.at(0)) && options["freespace"].empty()) || is("%{"));
 }
 
-bool Reflex::is_qcode(const char* qualifier){
+bool Reflex_Parser::is_qcode(const char* qualifier){
   size_t pos = 0;
   return as(pos,"%code") && br(pos,qualifier); // The evaluation order is DEFINED.
 }
 
 /// Check if current line starts a block of %code_htop code
-bool Reflex::is_code_htop()
+bool Reflex_Parser::is_code_htop()
 {
   return br(0, "%code_htop");
 }
 
 /// Check if current line starts a block of %code_hafter code
-bool Reflex::is_code_hafter()
+bool Reflex_Parser::is_code_hafter()
 {
   return br(0, "%code_hafter");
 }
 
 /// Check if current line starts a block of %code_cpptop code
-bool Reflex::is_code_cpptop()
+bool Reflex_Parser::is_code_cpptop()
 {
   return br(0, "%code_cpptop");
 }
 
 /// Check if current line starts a block of %code_class code
-bool Reflex::is_code_class()
+bool Reflex_Parser::is_code_class()
 {
   return br(0, "%code_class");
 }
 
 /// Check if current line starts a block of %code_init code
-bool Reflex::is_code_init()
+bool Reflex_Parser::is_code_init()
 {
   return br(0, "%code_init");
 }
 /// Check if current line starts a block of %code_lextop code
-bool Reflex::is_code_lextop()
+bool Reflex_Parser::is_code_lextop()
 {
   return br(0, "%code_lextop");
 }
 /// Check if current line starts a block of %code_templateclass code
-bool Reflex::is_code_templateclass()
+bool Reflex_Parser::is_code_templateclass()
 {
   return br(0, "%code_templateclass");
 }
 /// Advance pos over name (letters, digits, ., -, _ or any non-ASCII character > U+007F), return name
-std::string Reflex::get_name(size_t& pos)
+std::string Reflex_Parser::get_name(size_t& pos)
 {
   if (pos >= linelen || (!std::isalnum(line.at(pos)) && line.at(pos) != '_' && (line.at(pos) & 0x80) != 0x80))
     return "";
@@ -1009,7 +1132,7 @@ std::string Reflex::get_name(size_t& pos)
 }
 
 /// Advance pos over option name or namespace (letters, digits, ::, ., -, _ or any non-ASCII character > U+007F), return name
-std::string Reflex::get_namespace(size_t& pos)
+std::string Reflex_Parser::get_namespace(size_t& pos)
 {
   size_t loc = pos++;
   while (pos < linelen)
@@ -1024,7 +1147,7 @@ std::string Reflex::get_namespace(size_t& pos)
 }
 
 /// Advance pos over option name (letters, digits, +/hyphen/underscore), return name
-std::string Reflex::get_option(size_t& pos)
+std::string Reflex_Parser::get_option(size_t& pos)
 {
   if (pos >= linelen || !std::isalnum(line.at(pos)))
     return "";
@@ -1041,7 +1164,7 @@ std::string Reflex::get_option(size_t& pos)
 }
 
 /// Advance pos over start condition name (an ASCII C++ identifier or C++11 Unicode identifier), return name
-std::string Reflex::get_start(size_t& pos)
+std::string Reflex_Parser::get_start(size_t& pos)
 {
   if (pos >= linelen || (!std::isalpha(line.at(pos)) && line.at(pos) != '_' && (line.at(pos) & 0x80) != 0x80))
     return "";
@@ -1058,7 +1181,7 @@ std::string Reflex::get_start(size_t& pos)
 }
 
 /// Advance pos over quoted string, return string
-std::string Reflex::get_string(size_t& pos,const char front = '"', const char back = '"')
+std::string Reflex_Parser::get_string(size_t& pos,const char front = '"', const char back = '"')
 {
   if (pos >= linelen || line.at(pos) != front)
     return "";
@@ -1074,7 +1197,7 @@ std::string Reflex::get_string(size_t& pos,const char front = '"', const char ba
 }
 
 /// Get pattern and its regex form converted to a format understood by the selected regex engine library
-bool Reflex::get_pattern(size_t& pos, std::string& pattern, std::string& regex)
+bool Reflex_Parser::get_pattern(size_t& pos, std::string& pattern, std::string& regex)
 {
   size_t at_lineno = lineno;
   (void)ws(pos); // skip indent, if any
@@ -1209,7 +1332,7 @@ bool Reflex::get_pattern(size_t& pos, std::string& pattern, std::string& regex)
 }
 
 /// Get line(s) of code, %{ %}, %%code_htop, %%code_cpptop, %%code_class, %%code_init, %%code_lextop, %%code_templateclass.
-std::string Reflex::get_code(size_t& pos)
+std::string Reflex_Parser::get_code(size_t& pos)
 {
   std::string code;
   size_t at_lineno = lineno;
@@ -1326,7 +1449,7 @@ std::string Reflex::get_code(size_t& pos)
 }
 
 /// Returns string with all \ replaced by \\ to stringify file paths
-std::string Reflex::escape_bs(const std::string& s)
+std::string Reflex_Parser::escape_bs(const std::string& s)
 {
   std::string t = s;
   size_t i = 0;
@@ -1339,7 +1462,7 @@ std::string Reflex::escape_bs(const std::string& s)
 }
 
 /// Returns string in upper case as a name, replacing non-alphanum by underscore
-std::string Reflex::upper_name(const std::string& s)
+std::string Reflex_Parser::upper_name(const std::string& s)
 {
   std::string t;
   for (size_t i = 0; i < s.size(); ++i)
@@ -1353,7 +1476,7 @@ std::string Reflex::upper_name(const std::string& s)
 }
 
 /// Extract a list of argument names from function parameters
-std::string Reflex::param_args(const std::string& params)
+std::string Reflex_Parser::param_args(const std::string& params)
 {
   std::string args;
   size_t from = 0;
@@ -1384,7 +1507,7 @@ std::string Reflex::param_args(const std::string& params)
 }
 
 /// Add start conditions <start1,start2,...> or subtract them with <-start1,-start2,...>
-bool Reflex::get_starts(size_t& pos, Starts& starts)
+bool Reflex_Parser::get_starts(size_t& pos, Starts& starts)
 {
   pos = 0;
   if (linelen > 1 && line.at(0) == '<' && (std::isalpha(line.at(1)) || line.at(1) == '_' || line.at(1) == '*' || (line.at(1) & 0x80) == 0x80 || line.at(1) == '^') && line.find('>') != std::string::npos)
@@ -1445,44 +1568,8 @@ bool Reflex::get_starts(size_t& pos, Starts& starts)
   return false;
 }
 
-/// Abort with an error message
-void Reflex::abort(const char *message, const char *arg)
-{
-  std::cerr <<
-    SGR("\033[0m") << "reflex: " <<
-    SGR("\033[1;31m") << "error: " << SGR("\033[0m") <<
-    message <<
-    SGR("\033[1m") << (arg != nullptr ? arg : "") << SGR("\033[0m") <<
-    std::endl;
-  exit(EXIT_FAILURE);
-}
-
-/// Report an error and exit
-void Reflex::error(const char *message, const char *arg, size_t at_lineno)
-{
-  std::cerr <<
-    SGR("\033[0m") << (infile.empty() ? "(stdin)" : infile.c_str()) << ":" << (at_lineno ? at_lineno : lineno) << ": " <<
-    SGR("\033[1;31m") << "error: " << SGR("\033[0m") <<
-    message <<
-    SGR("\033[1m") << (arg != nullptr ? arg : "") << SGR("\033[0m") <<
-    std::endl;
-  exit(EXIT_FAILURE);
-}
-
-/// Report a warning
-void Reflex::warning(const char *message, const char *arg, size_t at_lineno)
-{
-  if (options["nowarn"].empty())
-    std::cerr <<
-      SGR("\033[0m") << (infile.empty() ? "(stdin)" : infile.c_str()) << ":" << (at_lineno ? at_lineno : lineno) << ": " <<
-      SGR("\033[1;35m") << "warning: " << SGR("\033[0m") <<
-      message <<
-      SGR("\033[1m") << (arg != nullptr ? arg : "") << SGR("\033[0m") <<
-      std::endl;
-}
-
 /// Parse section 1 of a lex specification
-void Reflex::parse_section_1()
+void Reflex_Parser::parse_section_1()
 {
   if (!get_line())
     return;
@@ -1500,56 +1587,56 @@ void Reflex::parse_section_1()
         size_t pos = 0;
         size_t this_lineno = lineno;
         std::string code = get_code(pos);
-        section_1.push_back(Code(code, infile, this_lineno));
+        section_1.push_back(Code{code, infile, this_lineno});
       }
       else if (is_code_htop())
       {
         size_t pos = 0;
         size_t this_lineno = lineno;
         std::string code = get_code(pos);
-        section_htop.push_back(Code(code, infile, this_lineno));
+        section_htop.push_back(Code{code, infile, this_lineno});
       }
       else if (is_code_hafter())
       {
         size_t pos = 0;
         size_t this_lineno = lineno;
         std::string code = get_code(pos);
-        section_hafter.push_back(Code(code, infile, this_lineno));
+        section_hafter.push_back(Code{code, infile, this_lineno});
       }
       else if (is_code_cpptop())
       {
         size_t pos = 0;
         size_t this_lineno = lineno;
         std::string code = get_code(pos);
-        section_cpptop.push_back(Code(code, infile, this_lineno));
+        section_cpptop.push_back(Code{code, infile, this_lineno});
       }
       else if (is_code_class())
       {
         size_t pos = 0;
         size_t this_lineno = lineno;
         std::string code = get_code(pos);
-        section_class.push_back(Code(code, infile, this_lineno));
+        section_class.push_back(Code{code, infile, this_lineno});
       }
       else if (is_code_init())
       {
         size_t pos = 0;
         size_t this_lineno = lineno;
         std::string code = get_code(pos);
-        section_init.push_back(Code(code, infile, this_lineno));
+        section_init.push_back(Code{code, infile, this_lineno});
       }
       else if (is_code_lextop())
       {
         size_t pos = 0;
         size_t this_lineno = lineno;
         std::string code = get_code(pos);
-        section_lextop.push_back(Code(code, infile, this_lineno));
+        section_lextop.push_back(Code{code, infile, this_lineno});
       }
       else if (is_code_templateclass())
       {
         size_t pos = 0;
         size_t this_lineno = lineno;
         std::string code = get_code(pos);
-        section_templateclass.push_back(Code(code, infile, this_lineno));
+        section_templateclass.push_back(Code{code, infile, this_lineno});
       }
       else
       {
@@ -1617,7 +1704,7 @@ void Reflex::parse_section_1()
                     error("bad %option name or value");
                   if (name != "c__") // %option c++ has no effect
                   {
-                    StringMap::iterator i = options.find(name);
+                    std::map<std::string,std::string>::iterator i = options.find(name);
                     if (i == options.end())
                       error("unrecognized %option: ", name.c_str());
                     (void)ws(pos);
@@ -1638,7 +1725,7 @@ void Reflex::parse_section_1()
                       i->second = "true";
                       if (name.compare(0, 2, "no") == 0)
                       {
-                        StringMap::iterator j = options.find(name.substr(2));
+                        std::map<std::string,std::string>::iterator j = options.find(name.substr(2));
                         if (j != options.end() && j->second.compare("true") == 0)
                         {
                           warning("disabling an initially enabled %option ", name.c_str() + 2);
@@ -1648,7 +1735,7 @@ void Reflex::parse_section_1()
                       else
                       {
                         std::string noname("no");
-                        StringMap::iterator j = options.find(noname.append(name));
+                        std::map<std::string,std::string>::iterator j = options.find(noname.append(name));
                         if (j != options.end() && j->second.compare("true") == 0)
                         {
                           warning("enabling an initially disabled %option ", noname.c_str());
@@ -1658,7 +1745,7 @@ void Reflex::parse_section_1()
                     }
                     if (!option && !nl(pos))
                       error("trailing text after %option: ", name.c_str());
-                    if (name.compare("matcher") == 0)
+                    if (name.compare("base_lexer") == 0)
                       set_library();
                   }
                 } while (!nl(pos));
@@ -1686,12 +1773,12 @@ void Reflex::parse_section_1()
 }
 
 /// Parse section 2 of a lex specification
-void Reflex::parse_section_2()
+void Reflex_Parser::parse_section_2()
 {
   if (in.eof())
     error("missing %% section 2");
   bool init = true;
-  std::stack<Starts> scopes;
+  std::vector<Starts> scopes;
   if (!get_line())
     return;
   while (!is("%%"))
@@ -1712,18 +1799,18 @@ void Reflex::parse_section_2()
           for (Start start = 0; start < conditions.size(); ++start)
           {
             if (inclusive.find(start) != inclusive.end())
-              section_2[start].push_back(Code(code, infile, lineno));
+              section_2[start].push_back(Code{code, infile, lineno});
           }
         }
         else
         {
-          for (Starts::const_iterator start = scopes.top().begin(); start != scopes.top().end(); ++start)
-            section_2[*start].push_back(Code(code, infile, lineno));
+          for (Starts::const_iterator start = scopes.back().begin(); start != scopes.back().end(); ++start)
+            section_2[*start].push_back(Code{code, infile, lineno});
         }
       }
       else if (ins("}") && !scopes.empty())
       {
-        scopes.pop();
+        scopes.pop_back();
         if (!get_line())
           break;
       }
@@ -1733,18 +1820,18 @@ void Reflex::parse_section_2()
           break;
         Starts starts;
         if (!scopes.empty())
-          starts = scopes.top();
+          starts = scopes.back();
         bool has_starts = get_starts(pos, starts);
         if (has_starts && pos < linelen && br(pos))
         {
-          scopes.push(starts);
+          scopes.push_back(starts);
           if (!get_line())
             error("EOF encountered inside scope ", conditions.at(*starts.begin()).c_str());
           init = true;
         }
         else
         {
-          if ((has_starts && starts.empty()) || (!has_starts && !scopes.empty() && scopes.top().empty()))
+          if ((has_starts && starts.empty()) || (!has_starts && !scopes.empty() && scopes.back().empty()))
             warning("rule cannot be matched because the scope of start conditions is empty");
           std::string pattern;
           std::string regex;
@@ -1755,17 +1842,17 @@ void Reflex::parse_section_2()
           if (has_starts)
           {
             for (Starts::const_iterator start = starts.begin(); start != starts.end(); ++start)
-              rules[*start].push_back(Rule(pattern, regex, Code(code, infile, rule_lineno)));
+              rules[*start].push_back(Rule{pattern, regex, Code{code, infile, rule_lineno}});
           }
           else if (!scopes.empty())
           {
-            for (Starts::const_iterator start = scopes.top().begin(); start != scopes.top().end(); ++start)
-              rules[*start].push_back(Rule(pattern, regex, Code(code, infile, rule_lineno)));
+            for (Starts::const_iterator start = scopes.back().begin(); start != scopes.back().end(); ++start)
+              rules[*start].push_back(Rule{pattern, regex, Code{code, infile, rule_lineno}});
           }
           else
           {
             for (Starts::const_iterator start = inclusive.begin(); start != inclusive.end(); ++start)
-              rules[*start].push_back(Rule(pattern, regex, Code(code, infile, rule_lineno)));
+              rules[*start].push_back(Rule{pattern, regex, Code{code, infile, rule_lineno}});
           }
           init = false;
         }
@@ -1774,7 +1861,7 @@ void Reflex::parse_section_2()
   }
   if (!scopes.empty())
   {
-    const char *name = conditions.at(*scopes.top().begin()).c_str();
+    const char *name = conditions.at(*scopes.back().begin()).c_str();
     if (in.eof())
       error("EOF encountered inside scope ", name);
     else
@@ -1814,14 +1901,14 @@ void Reflex::parse_section_2()
 }
 
 /// Parse section 3 of a lex specification
-void Reflex::parse_section_3()
+void Reflex_Parser::parse_section_3()
 {
   while (get_line())
-    section_3.push_back(Code(line, infile, lineno));
+    section_3.push_back(Code{line, infile, lineno});
 }
 
 /// Write lex.yy.cpp
-void Reflex::write()
+void Reflex_Parser::write()
 {
   if (!options["yy"].empty() || !options["array"].empty() || !options["pointer"].empty())
     options["flex"] = options["bison"] = "true";
@@ -1881,6 +1968,8 @@ void Reflex::write()
   std::string comma_params = options["params"].empty() ? "" : ", " + params;
   std::string args = options["params"].empty() ? "" : param_args(params);
   std::string comma_args = options["params"].empty() ? "" : ", " + args;
+
+  // Write cpp
   *out << "// " << options["outfile"] << " generated by reflex " REFLEX_VERSION " from " << infile << "\n";
   if (options["header_file"]!="false"){
     write_section_cpptop();
@@ -1898,11 +1987,13 @@ void Reflex::write()
   write_section_3();
   if (!out->good())
     abort("error in writing");
-  if (options["matcher"].empty() && (!options["full"].empty() || !options["fast"].empty()) && options["tables_file"].empty() && options["stdout"].empty())
+  if (options["base_lexer"].empty() && (!options["full"].empty() || !options["fast"].empty()) && options["tables_file"].empty() && options["stdout"].empty())
     write_banner("TABLES");
   if (ofs.is_open())
     ofs.close();
   stats();
+
+  // Write regexp
   if (!options["regexp_file"].empty())
   {
     std::ofstream ofs;
@@ -1919,7 +2010,7 @@ void Reflex::write()
         }
         else
         {
-          filename = file_ext(options["regexp_file"], "txt");
+          filename = add_file_ext(options["regexp_file"], "txt");
           append = true;
         }
         if (filename.compare(0, 7, "stdout.") == 0)
@@ -1944,6 +2035,8 @@ void Reflex::write()
     if (append && ofs.is_open())
       ofs.close();
   }
+
+  // Write the header.
   if (!options["header_file"].empty())
   {
     ofs.open(options["header_file"].c_str(), std::ofstream::out);
@@ -2100,7 +2193,7 @@ void Reflex::write()
 }
 
 /// Write a banner in lex.yy.cpp
-void Reflex::write_banner(const char *title)
+void Reflex_Parser::write_banner(const char *title)
 {
   size_t i;
   *out << '\n';
@@ -2122,7 +2215,7 @@ void Reflex::write_banner(const char *title)
 }
 
 /// Write the prelude to lex.yy.cpp
-void Reflex::write_prelude()
+void Reflex_Parser::write_prelude()
 {
   if (!out->good())
     return;
@@ -2130,13 +2223,13 @@ void Reflex::write_prelude()
   write_banner("OPTIONS USED");
   if (!options["prefix"].empty() && options["prefix"] != "yy")
   {
-    for (StringMap::const_iterator option = options.begin(); option != options.end(); ++option)
+    for (std::map<std::string,std::string>::const_iterator option = options.begin(); option != options.end(); ++option)
       if (!option->second.empty())
         if (!options["prefix"].empty() && options["prefix"] != "yy")
           *out << "#undef REFLEX_OPTION_" << option->first << '\n';
     *out << '\n';
   }
-  for (StringMap::const_iterator option = options.begin(); option != options.end(); ++option)
+  for (std::map<std::string,std::string>::const_iterator option = options.begin(); option != options.end(); ++option)
   {
     if (!option->second.empty())
     {
@@ -2155,7 +2248,7 @@ void Reflex::write_prelude()
 }
 
 /// Write Flex-compatible #defines to lex.yy.cpp
-void Reflex::write_defines()
+void Reflex_Parser::write_defines()
 {
   if (!out->good())
     return;
@@ -2172,15 +2265,15 @@ void Reflex::write_defines()
 }
 
 /// Write the lexer class to lex.yy.cpp
-void Reflex::write_class()
+void Reflex_Parser::write_class()
 {
   if (!out->good())
     return;
-  write_banner("REGEX MATCHER");
+  write_banner("BASE LEXER");
   if (!options["noindent"].empty())
-    *out << "#define WITH_NO_INDENT\n";
+    *out << "#define REFLEX_WITH_NO_INDENT\n";
   *out << "#include <" << library->file << ">\n";
-  const char *matcher = library->matcher;
+  const char *base_lexer = library->base_lexer;
   std::string lex = options["lex"];
   std::string token_type = options["token_type"].empty() ? "int" : options["token_type"];
   std::string yyltype = options["YYLTYPE"].empty() ? "YYLTYPE" : options["YYLTYPE"];
@@ -2200,7 +2293,7 @@ void Reflex::write_class()
       write_namespace_open();
       *out << '\n';
     }
-    *out << "typedef reflex::FlexLexer" << "<" << matcher << "> FlexLexer;\n";
+    *out << "typedef reflex::FlexLexer" << "<" << base_lexer << "> FlexLexer;\n";
     if (!options["namespace"].empty())
     {
       *out << '\n';
@@ -2221,9 +2314,7 @@ void Reflex::write_class()
   }
   else
   {
-    write_banner("ABSTRACT LEXER CLASS");
-    *out << "#include <reflex/abslexer.h>\n";
-    base.assign("reflex::AbstractLexer<").append(matcher).append(">");
+    base.assign("reflex::AbstractLexer_old<").append(base_lexer).append(">");
   }
   write_banner("LEXER CLASS");
   std::string lexer = options["lexer"];
@@ -2234,8 +2325,48 @@ void Reflex::write_class()
   }
   write_section_templateclass();
   *out <<
-    "class " << lexer << " : public " << base << " {\n";
-  write_section_class();
+    "class " << lexer << " : public " << base_lexer << " {\n";
+  *out << " public:\n";
+  if (options["base_lexer"].empty() && !options["fast"].empty())
+  {
+    for (Start start = 0; start < conditions.size(); ++start)
+    {
+      *out << "  static void dfa_code_" << conditions[start] << "(reflex::Lexer&);\n";
+      if (!options["find"].empty())
+        *out << "  static const reflex::Pattern::Pred pattern_pred_" << conditions[start] << "[];\n";
+    }
+  }
+  else if (options["base_lexer"].empty() && !options["full"].empty())
+  {
+    for (Start start = 0; start < conditions.size(); ++start)
+    {
+      *out << "  static const reflex::Pattern::Opcode opcode_" << conditions[start] << "[];\n";
+      if (!options["find"].empty())
+        *out << "  static const reflex::Pattern::Pred pattern_pred_" << conditions[start] << "[];\n";
+    }
+  }
+  *out << '\n';
+  *out << " protected:\n  "
+    "void patterns_init(){\n";
+  if (options["base_lexer"].empty() && !options["fast"].empty())
+  {
+    for (Start start = 0; start < conditions.size(); ++start)
+    {
+      *out << "    patterns.emplace_back(dfa_code_" << conditions[start] << ");\n";
+      if (!options["find"].empty())
+        *out << "    patterns.emplace_back(pattern_pred_" << conditions[start] << ");\n";
+    }
+  }
+  else if (options["base_lexer"].empty() && !options["full"].empty())
+  {
+    for (Start start = 0; start < conditions.size(); ++start)
+    {
+      *out << "    patterns.emplace_back(opcode_" << conditions[start] << ");\n";
+      if (!options["find"].empty())
+        *out << "    patterns.emplace_back(pattern_pred_" << conditions[start] << ");\n";
+    }
+  }
+  *out << "  }\n";
   if (!options["flex"].empty())
   {
     *out <<
@@ -2258,11 +2389,11 @@ void Reflex::write_class()
           "  {\n"
           "    " << yyltype << " yylloc;\n"
           "    yylloc.begin.filename = &filename;\n"
-          "    yylloc.begin.line = static_cast<unsigned int>(matcher().lineno());\n"
-          "    yylloc.begin.column = static_cast<unsigned int>(matcher().columno());\n"
+          "    yylloc.begin.line = static_cast<unsigned int>(lineno());\n"
+          "    yylloc.begin.column = static_cast<unsigned int>(columno());\n"
           "    yylloc.end.filename = &filename;\n"
-          "    yylloc.end.line = static_cast<unsigned int>(matcher().lineno_end());\n"
-          "    yylloc.end.column = static_cast<unsigned int>(matcher().columno_end());\n"
+          "    yylloc.end.line = static_cast<unsigned int>(lineno_end());\n"
+          "    yylloc.end.column = static_cast<unsigned int>(columno_end());\n"
           "    return yylloc;\n"
           "  }\n";
       *out <<
@@ -2274,10 +2405,10 @@ void Reflex::write_class()
         *out <<
           "  virtual void yylloc_update(" << yyltype << "& yylloc)\n"
           "  {\n"
-          "    yylloc.begin.line = static_cast<unsigned int>(matcher().lineno());\n"
-          "    yylloc.begin.column = static_cast<unsigned int>(matcher().columno());\n"
-          "    yylloc.end.line = static_cast<unsigned int>(matcher().lineno_end());\n"
-          "    yylloc.end.column = static_cast<unsigned int>(matcher().columno_end());\n"
+          "    yylloc.begin.line = static_cast<unsigned int>(lineno());\n"
+          "    yylloc.begin.column = static_cast<unsigned int>(columno());\n"
+          "    yylloc.end.line = static_cast<unsigned int>(lineno_end());\n"
+          "    yylloc.end.column = static_cast<unsigned int>(columno_end());\n"
           "  }\n"
           "  virtual " << token_type << " yylex(void)\n"
           "  {\n"
@@ -2307,10 +2438,10 @@ void Reflex::write_class()
       *out <<
         "  virtual void yylloc_update(" << yyltype << "& yylloc)\n"
         "  {\n"
-        "    yylloc.first_line = static_cast<unsigned int>(matcher().lineno());\n"
-        "    yylloc.first_column = static_cast<unsigned int>(matcher().columno());\n"
-        "    yylloc.last_line = static_cast<unsigned int>(matcher().lineno_end());\n"
-        "    yylloc.last_column = static_cast<unsigned int>(matcher().columno_end());\n"
+        "    yylloc.first_line = static_cast<unsigned int>(lineno());\n"
+        "    yylloc.first_column = static_cast<unsigned int>(columno());\n"
+        "    yylloc.last_line = static_cast<unsigned int>(lineno_end());\n"
+        "    yylloc.last_column = static_cast<unsigned int>(columno_end());\n"
         "  }\n"
         "  virtual " << token_type << " yylex(void)\n"
         "  {\n"
@@ -2353,10 +2484,10 @@ void Reflex::write_class()
         "\n";
   }
   else
-  {
+  { // TODO Here
     *out <<
       " public:\n"
-      "  typedef " << base << " AbstractBaseLexer;\n"
+      "  typedef " << base_lexer << " BaseLexer;\n"
       "  " << lexer << "(\n";
     if (!options["ctorarg"].empty())
       *out << "      " << options["ctorarg"] << ",\n";
@@ -2379,11 +2510,11 @@ void Reflex::write_class()
           "  {\n"
           "    " << yyltype << " yylloc;\n"
           "    yylloc.begin.filename = &filename;\n"
-          "    yylloc.begin.line = static_cast<unsigned int>(matcher().lineno());\n"
-          "    yylloc.begin.column = static_cast<unsigned int>(matcher().columno());\n"
+          "    yylloc.begin.line = static_cast<unsigned int>(lineno());\n"
+          "    yylloc.begin.column = static_cast<unsigned int>(columno());\n"
           "    yylloc.end.filename = &filename;\n"
-          "    yylloc.end.line = static_cast<unsigned int>(matcher().lineno_end());\n"
-          "    yylloc.end.column = static_cast<unsigned int>(matcher().columno_end());\n"
+          "    yylloc.end.line = static_cast<unsigned int>(lineno_end());\n"
+          "    yylloc.end.column = static_cast<unsigned int>(columno_end());\n"
           "    return yylloc;\n"
           "  }\n";
       *out <<
@@ -2395,10 +2526,10 @@ void Reflex::write_class()
         *out <<
           "  virtual void yylloc_update(" << yyltype << "& yylloc)\n"
           "  {\n"
-          "    yylloc.begin.line = static_cast<unsigned int>(matcher().lineno());\n"
-          "    yylloc.begin.column = static_cast<unsigned int>(matcher().columno());\n"
-          "    yylloc.end.line = static_cast<unsigned int>(matcher().lineno_end());\n"
-          "    yylloc.end.column = static_cast<unsigned int>(matcher().columno_end());\n"
+          "    yylloc.begin.line = static_cast<unsigned int>(lineno());\n"
+          "    yylloc.begin.column = static_cast<unsigned int>(columno());\n"
+          "    yylloc.end.line = static_cast<unsigned int>(lineno_end());\n"
+          "    yylloc.end.column = static_cast<unsigned int>(columno_end());\n"
           "  }\n"
           "  virtual " << token_type << " " << lex << "(" << yystype << " *lvalp, " << yyltype << " *llocp" << comma_params << ")\n"
           "  {\n"
@@ -2418,10 +2549,10 @@ void Reflex::write_class()
       *out <<
         "  virtual void yylloc_update(" << yyltype << "& yylloc)\n"
         "  {\n"
-        "    yylloc.first_line = static_cast<unsigned int>(matcher().lineno());\n"
-        "    yylloc.first_column = static_cast<unsigned int>(matcher().columno());\n"
-        "    yylloc.last_line = static_cast<unsigned int>(matcher().lineno_end());\n"
-        "    yylloc.last_column = static_cast<unsigned int>(matcher().columno_end());\n"
+        "    yylloc.first_line = static_cast<unsigned int>(lineno());\n"
+        "    yylloc.first_column = static_cast<unsigned int>(columno());\n"
+        "    yylloc.last_line = static_cast<unsigned int>(lineno_end());\n"
+        "    yylloc.last_column = static_cast<unsigned int>(columno_end());\n"
         "  }\n"
         "  virtual " << token_type << " " << lex << "(" << yystype << "& yylval, " << yyltype << "& yylloc" << comma_params << ")";
     }
@@ -2469,6 +2600,7 @@ void Reflex::write_class()
         "  }\n";
   }
   write_perf_report();
+  write_section_class();
   *out <<
     "};\n";
   if (!options["namespace"].empty())
@@ -2479,7 +2611,7 @@ void Reflex::write_class()
 }
 
 /// Write %%code_htop code to lex.yy.cpp
-void Reflex::write_section_htop()
+void Reflex_Parser::write_section_htop()
 {
   if (!section_htop.empty())
   {
@@ -2489,7 +2621,7 @@ void Reflex::write_section_htop()
 }
 
 /// Write %%code_hafter code to lex.yy.cpp
-void Reflex::write_section_hafter()
+void Reflex_Parser::write_section_hafter()
 {
   if (!section_hafter.empty())
   {
@@ -2499,7 +2631,7 @@ void Reflex::write_section_hafter()
 }
 
 /// Write %%code_cpptop code to lex.yy.cpp
-void Reflex::write_section_cpptop()
+void Reflex_Parser::write_section_cpptop()
 {
   if (!section_cpptop.empty())
   {
@@ -2509,14 +2641,14 @@ void Reflex::write_section_cpptop()
 }
 
 /// Write %%code_class code to lex.yy.cpp
-void Reflex::write_section_class()
+void Reflex_Parser::write_section_class()
 {
   if (!section_class.empty())
     write_code(section_class);
 }
 
 /// Write %%code_init code to lex.yy.cpp
-void Reflex::write_section_init()
+void Reflex_Parser::write_section_init()
 {
   *out << "  {\n";
   if (!section_init.empty())
@@ -2529,7 +2661,7 @@ void Reflex::write_section_init()
 }
 
 /// Write %%code_lextop code to lex.yy.cpp
-void Reflex::write_section_lextop()
+void Reflex_Parser::write_section_lextop()
 {
   if (!section_lextop.empty())
   {
@@ -2539,14 +2671,14 @@ void Reflex::write_section_lextop()
 }
 
 /// Write %%code_templateclass code to lex.yy.cpp
-void Reflex::write_section_templateclass()
+void Reflex_Parser::write_section_templateclass()
 {
   if (!section_templateclass.empty())
     write_code(section_templateclass);
 }
 
 /// Write perf_report code to lex.yy.cpp
-void Reflex::write_perf_report()
+void Reflex_Parser::write_perf_report()
 {
   if (!options["perf_report"].empty())
   {
@@ -2563,7 +2695,7 @@ void Reflex::write_perf_report()
       size_t report = 0;
       for (Rules::const_iterator rule = rules[start].begin(); rule != rules[start].end(); ++rule)
       {
-        if (rule->regex != "<<EOF>>" && rule->code.line != "|")
+        if (rule->regex != "<<EOF>>" && rule->code.contents != "|")
         {
           *out <<
             "\n      \"    rule at line " << rule->code.lineno << " matched \" << perf_report_" << conditions[start] << "_rule[" << report << "] << \" times matching \" << perf_report_" << conditions[start] << "_size[" << report << "] << \" bytes total in \" << perf_report_" << conditions[start] << "_time[" << report << "] << \" ms\\n\"";
@@ -2588,7 +2720,7 @@ void Reflex::write_perf_report()
       size_t report = 0;
       for (Rules::const_iterator rule = rules[start].begin(); rule != rules[start].end(); ++rule)
       {
-        if (rule->regex != "<<EOF>>" && rule->code.line != "|")
+        if (rule->regex != "<<EOF>>" && rule->code.contents != "|")
         {
           *out <<
             "    perf_report_" << conditions[start] << "_rule[" << report << "] = 0;\n"
@@ -2610,7 +2742,7 @@ void Reflex::write_perf_report()
     {
       size_t report = 0;
       for (Rules::const_iterator rule = rules[start].begin(); rule != rules[start].end(); ++rule)
-        if (rule->regex != "<<EOF>>" && rule->code.line != "|")
+        if (rule->regex != "<<EOF>>" && rule->code.contents != "|")
           ++report;
       *out <<
         "  size_t perf_report_" << conditions[start] << "_rule[" << report << "];\n"
@@ -2627,7 +2759,7 @@ void Reflex::write_perf_report()
 }
 
 /// Write section 1 user-defined code to lex.yy.cpp
-void Reflex::write_section_1()
+void Reflex_Parser::write_section_1()
 {
   if (!section_1.empty())
   {
@@ -2637,7 +2769,7 @@ void Reflex::write_section_1()
 }
 
 /// Write section 3 user-defined code to lex.yy.cpp
-void Reflex::write_section_3()
+void Reflex_Parser::write_section_3()
 {
   if (!section_3.empty())
   {
@@ -2647,7 +2779,7 @@ void Reflex::write_section_3()
 }
 
 /// Write lines of code to lex.yy.cpp annotated with #line source info
-void Reflex::write_code(const Codes& codes)
+void Reflex_Parser::write_code(const Codes& codes)
 {
   if (!out->good())
     return;
@@ -2661,13 +2793,13 @@ void Reflex::write_code(const Codes& codes)
         *out << " \"" << escape_bs(code->file) << "\"";
       *out << '\n';
     }
-    *out << code->line << '\n';
+    *out << code->contents << '\n';
     this_lineno = code->lineno + 1;
   }
 }
 
 /// Write a line(s) of code to lex.yy.cpp annotated with #line source info
-void Reflex::write_code(const Code& code)
+void Reflex_Parser::write_code(const Code& code)
 {
   if (options["noline"].empty())
   {
@@ -2676,12 +2808,12 @@ void Reflex::write_code(const Code& code)
       *out << " \"" << escape_bs(infile) << "\"";
     *out << '\n';
   }
-  if (!code.line.empty())
-    *out << code.line << '\n';
+  if (!code.contents.empty())
+    *out << code.contents << '\n';
 }
 
 /// Write lexer code and lex() method code
-void Reflex::write_lexer()
+void Reflex_Parser::write_lexer()
 {
   if (!out->good())
     return;
@@ -2972,34 +3104,6 @@ void Reflex::write_lexer()
     }
   }
   write_banner("SECTION 2: rules");
-  if (options["matcher"].empty() && !options["fast"].empty())
-  {
-    for (Start start = 0; start < conditions.size(); ++start)
-    {
-      if (!options["namespace"].empty())
-        write_namespace_open();
-      *out << "extern void reflex_code_" << conditions[start] << "(reflex::Matcher&);\n";
-      if (!options["find"].empty())
-        *out << "extern const reflex::Pattern::Pred reflex_pred_" << conditions[start] << "[];\n";
-      if (!options["namespace"].empty())
-        write_namespace_close();
-    }
-    *out << '\n';
-  }
-  else if (options["matcher"].empty() && !options["full"].empty())
-  {
-    for (Start start = 0; start < conditions.size(); ++start)
-    {
-      if (!options["namespace"].empty())
-        write_namespace_open();
-      *out << "extern const reflex::Pattern::Opcode reflex_code_" << conditions[start] << "[];\n";
-      if (!options["find"].empty())
-        *out << "extern const reflex::Pattern::Pred reflex_pred_" << conditions[start] << "[];\n";
-      if (!options["namespace"].empty())
-        write_namespace_close();
-    }
-    *out << '\n';
-  }
   write_section_templateclass();
   *out << token_type << " ";
   if (!options["namespace"].empty())
@@ -3020,57 +3124,57 @@ void Reflex::write_lexer()
     *out << "::" << lex << "(" << yystype << "& yylval" << comma_params << ")\n{\n";
   else
     *out << "::" << lex << "(" << params << ")\n{\n";
-  for (Start start = 0; start < conditions.size(); ++start)
-  {
-    if (options["matcher"].empty())
-    {
-      if (!options["full"].empty() || !options["fast"].empty())
-      {
-        *out << "  static reflex::Pattern PATTERN_" << conditions[start] << "(reflex_code_" << conditions[start];
-        if (!options["find"].empty())
-          *out << ", reflex_pred_" << conditions[start];
-        *out << ");\n";
-      }
-      else
-      {
-        write_regex(&conditions[start], patterns[start]);
-        *out << "  static reflex::Pattern PATTERN_" << conditions[start] << "(REGEX_" << conditions[start] << ");\n";
-      }
-    }
-    else
-    {
-      write_regex(&conditions[start], patterns[start]);
-      *out << "  static " << library->pattern << " PATTERN_" << conditions[start] << "(REGEX_" << conditions[start] << ");\n";
-    }
-  }
+  // TEMP
+  //for (Start start = 0; start < conditions.size(); ++start)
+  //{
+  //  if (options["base_lexer"].empty())
+  //  {
+  //    if (!options["full"].empty() || !options["fast"].empty())
+  //    {
+  //      *out << "  static reflex::Pattern PATTERN_" << conditions[start] << "(reflex_code_" << conditions[start];
+  //      if (!options["find"].empty())
+  //        *out << ", reflex_pred_" << conditions[start];
+  //      *out << ");\n";
+  //    }
+  //    else
+  //    {
+  //      write_regex(&conditions[start], patterns[start]);
+  //      *out << "  static reflex::Pattern PATTERN_" << conditions[start] << "(REGEX_" << conditions[start] << ");\n";
+  //    }
+  //  }
+  //  else
+  //  {
+  //    write_regex(&conditions[start], patterns[start]);
+  //    *out << "  static " << "Pattern" << " PATTERN_" << conditions[start] << "(REGEX_" << conditions[start] << ");\n";
+  //  }
+  //}
   write_section_lextop();
-  *out <<
-    "  if (!has_matcher())\n"
-    "  {\n";
-  if (!options["tabs"].empty())
+  // TEMP
+  //*out <<
+  //  "  if (!has_matcher())\n"
+  //  "  {\n";
+  //if (!options["tabs"].empty())
+  //  *out <<
+  //    "    matcher(new Matcher(std::move(PATTERN_" << conditions[0] << "), " << (options["nostdinit"].empty() ? "stdinit()" : "nostdinit()") << ", \"T=" << options["tabs"] << "\"));\n";
+  //else
+  //  *out <<
+  //    "    matcher(new Matcher(std::move(PATTERN_" << conditions[0] << "), " << (options["nostdinit"].empty() ? "stdinit()" : "nostdinit()") << "));\n";
+#ifdef REFLEX_WITH_BOOST_PARTIAL_MATCH_BUG
+  if (options["base_lexer"] == "boost" || options["base_lexer"] == "boost-perl")
     *out <<
-      "    matcher(new Matcher(std::move(PATTERN_" << conditions[0] << "), " << (options["nostdinit"].empty() ? "stdinit()" : "nostdinit()") << ", \"T=" << options["tabs"] << "\"));\n";
-  else
-    *out <<
-      "    matcher(new Matcher(std::move(PATTERN_" << conditions[0] << "), " << (options["nostdinit"].empty() ? "stdinit()" : "nostdinit()") << "));\n";
-#ifdef WITH_BOOST_PARTIAL_MATCH_BUG
-  if (options["matcher"] == "boost" || options["matcher"] == "boost-perl")
-    *out <<
-      "    if (!matcher().buffer()) // work around Boost.Regex match_partial bug\n"
+      "    if (!buffer()) // work around Boost.Regex match_partial bug\n"
       "      return " << token_type << "(); // could not buffer: terminate\n";
   else
 #endif
   if (!options["interactive"].empty() || !options["always_interactive"].empty())
     *out <<
-      "    matcher().interactive();\n";
+      "    interactive();\n";
   else if (!options["batch"].empty())
     *out <<
-      "    matcher().buffer();\n";
+      "    buffer();\n";
   if (!options["flex"].empty())
     *out <<
       "    YY_USER_INIT\n";
-  *out <<
-    "  }\n";
   if (conditions.size() == 1)
   {
     write_code(section_2[0]);
@@ -3078,7 +3182,7 @@ void Reflex::write_lexer()
   else if (!section_2.empty())
   {
     *out << "  switch (start())\n  {\n";
-    for (CodesMap::const_iterator i = section_2.begin(); i != section_2.end(); ++i)
+    for (std::map<Start,Codes>::const_iterator i = section_2.begin(); i != section_2.end(); ++i)
     {
       *out << "    case " << conditions[i->first] << ":\n";
       write_code(i->second);
@@ -3095,24 +3199,24 @@ void Reflex::write_lexer()
       "      *perf_report_time_pointer += reflex::timer_elapsed(perf_report_timer);\n";
   if (conditions.size() > 1)
     *out <<
-      "    switch (start())\n"
+      "    switch (start)\n"
       "    {\n";
   for (Start start = 0; start < conditions.size(); ++start)
   {
     if (conditions.size() > 1)
       *out <<
-        "      case " << conditions[start] << ":\n"
-        "        matcher().pattern(PATTERN_" << conditions[start] << ");\n";
+        "      case State::" << conditions[start] << ":\n"
+        "        pattern_current = static_cast<size_t>(State::" << conditions[start] << ");\n";
     if (!options["find"].empty())
     {
       if (!options["bison_locations"].empty() && options["bison_complete"].empty())
         *out <<
-          "        matcher().find();\n"
+          "        find();\n"
           "        yylloc_update(yylloc);\n"
-          "        switch (matcher().accept())\n";
+          "        switch (accept())\n";
       else
         *out <<
-          "        switch (matcher().find())\n";
+          "        switch (find())\n";
       *out <<
         "        {\n"
         "          case 0:\n"
@@ -3122,16 +3226,16 @@ void Reflex::write_lexer()
     {
       if (!options["bison_locations"].empty() && options["bison_complete"].empty())
         *out <<
-          "        matcher().scan();\n"
+          "        scan();\n"
           "        yylloc_update(yylloc);\n"
-          "        switch (matcher().accept())\n";
+          "        switch (accept())\n";
       else
         *out <<
-          "        switch (matcher().scan())\n";
+          "        switch (scan())\n";
       *out <<
         "        {\n"
         "          case 0:\n"
-        "            if (matcher().at_end())\n"
+        "            if (at_end())\n"
         "            {\n";
       bool has_eof = false;
       for (Rules::const_iterator rule = rules[start].begin(); rule != rules[start].end(); ++rule)
@@ -3195,17 +3299,17 @@ void Reflex::write_lexer()
               "              yyterminate();\n";
           else if (!options["debug"].empty())
             *out <<
-              "              char ch = matcher().input();\n"
+              "              char ch = input();\n"
               "              if (debug()) std::cerr << \"--" <<
               SGR("\\033[1;31m") << "suppressed default rule " << SGR("\\033[0m") <<
-            "\" << matcher().lineno() << \",\" << matcher().columno() << \":" <<
+            "\" << lineno() << \",\" << columno() << \":" <<
             "'\" << (ch > 32 && ch < 127 ? ch : ' ') << \"'(\" << (int)ch << \")\\n\";\n";
           else if (!options["exception"].empty())
             *out <<
               "              throw " << options["exception"] << ";\n";
           else
             *out <<
-              "              lexer_error((std::string(\"scanner jammed in initial state \")+std::to_string(start())).c_str());\n"
+              "              //lexer_error((std::string(\"scanner jammed in initial state \")+std::to_string(start())).c_str());\n"
               "              return " << token_type << "();\n";
         }
         else
@@ -3218,10 +3322,10 @@ void Reflex::write_lexer()
               "              throw " << options["exception"] << ";\n";
           else if (!options["flex"].empty())
             *out <<
-              "              output(matcher().input());\n";
+              "              output(input());\n";
           else
             *out <<
-              "              out().put(matcher().input());\n";
+              "              out().put(input());\n";
         }
       }
       *out <<
@@ -3244,7 +3348,7 @@ void Reflex::write_lexer()
       {
         *out <<
           "          case " << accept << ": // rule " << rule->code.file << ":" << rule->code.lineno << ": " << rule->pattern << " :\n";
-        has_code = rule->code.line != "|";
+        has_code = rule->code.contents != "|";
         if (has_code)
         {
           if (!eof_rule)
@@ -3262,8 +3366,8 @@ void Reflex::write_lexer()
             *out <<
               "            if (debug()) std::cerr << \"--" <<
               SGR("\\033[1;35m") << "rule " << escape_bs(rule->code.file) << ":" << rule->code.lineno << SGR("\\033[0m") <<
-              " start(\" << start() << \") \" << matcher().lineno() << \",\" << matcher().columno() << \":"
-              "\\\"" << SGR("\\033[1m") << "\" << matcher().text() << \"" << SGR("\\033[0m") << "\\\"\\n\";\n";
+              " start(\" << start() << \") \" << lineno() << \",\" << columno() << \":"
+              "\\\"" << SGR("\\033[1m") << "\" << text() << \"" << SGR("\\033[0m") << "\\\"\\n\";\n";
           if (!options["flex"].empty())
             *out <<
               "            YY_USER_ACTION\n";
@@ -3288,7 +3392,7 @@ void Reflex::write_lexer()
   {
     *out <<
       "      default:\n"
-      "        start(0);\n"
+      "        start = State::INITIAL;\n"
       "    }\n";
   }
   *out <<
@@ -3297,7 +3401,7 @@ void Reflex::write_lexer()
 }
 
 /// Write main() to lex.yy.cpp
-void Reflex::write_main()
+void Reflex_Parser::write_main()
 {
   if (!out->good())
     return;
@@ -3326,7 +3430,7 @@ void Reflex::write_main()
 }
 
 /// Write regex string to lex.yy.cpp by escaping \ and ", prevent trigraphs, very long strings are represented by character arrays
-void Reflex::write_regex(const std::string *condition, const std::string& regex)
+void Reflex_Parser::write_regex(const std::string *condition, const std::string& regex)
 {
   // output a string if start condition == nullptr (--regexp-file option) or when the string is not too long
   if (!condition ||
@@ -3371,7 +3475,7 @@ void Reflex::write_regex(const std::string *condition, const std::string& regex)
 }
 
 /// Write namespace openings NAME {
-void Reflex::write_namespace_open()
+void Reflex_Parser::write_namespace_open()
 {
   const std::string& s = options["namespace"];
   size_t i = 0, j;
@@ -3384,7 +3488,7 @@ void Reflex::write_namespace_open()
 }
 
 /// Write namespace closing scope } // NAME
-void Reflex::write_namespace_close()
+void Reflex_Parser::write_namespace_close()
 {
   const std::string& s = options["namespace"];
   size_t i = 0, j;
@@ -3397,13 +3501,13 @@ void Reflex::write_namespace_close()
 }
 
 /// Write namespace scope NAME ::
-void Reflex::write_namespace_scope()
+void Reflex_Parser::write_namespace_scope()
 {
   *out << options["namespace"] << "::";
 }
 
 /// Replace all . by :: in namespace name
-void Reflex::undot_namespace(std::string& s)
+void Reflex_Parser::undot_namespace(std::string& s)
 {
   size_t i = 0;
   while ((i = s.find('.', i)) != std::string::npos)
@@ -3414,18 +3518,18 @@ void Reflex::undot_namespace(std::string& s)
 }
 
 /// Display usage report
-void Reflex::stats()
+void Reflex_Parser::stats()
 {
   if (!options["verbose"].empty())
   {
     std::cout << "reflex " REFLEX_VERSION " " << infile << " usage report:\n" << "  options used:\n";
-    for (StringMap::const_iterator option = options.begin(); option != options.end(); ++option)
+    for (std::map<std::string,std::string>::const_iterator option = options.begin(); option != options.end(); ++option)
       if (!option->second.empty())
         std::cout << "    " << option->first << "=" << option->second << '\n';
     if (!options["verbose"].empty())
       std::cout << "  inclusive (%s) and exclusive (%x) start conditions (with construction time):\n";
   }
-  if (!options["matcher"].empty())
+  if (!options["base_lexer"].empty())
   {
     if (!options["verbose"].empty())
     {
@@ -3452,7 +3556,7 @@ void Reflex::stats()
       if (options["graphs_file"] == "true")
         option.append(";f=reflex.").append(conditions[start]).append(".gv");
       else if (!options["graphs_file"].empty())
-        option.append(";f=").append(start > 0 ? "+" : "").append(file_ext(options["graphs_file"], "gv"));
+        option.append(";f=").append(start > 0 ? "+" : "").append(add_file_ext(options["graphs_file"], "gv"));
       if (!options["fast"].empty())
         option.append(";o");
       if (!options["find"].empty())
@@ -3460,7 +3564,7 @@ void Reflex::stats()
       if (options["tables_file"] == "true")
         option.append(";f=reflex.").append(conditions[start]).append(".cpp");
       else if (!options["tables_file"].empty())
-        option.append(";f=").append(start > 0 ? "+" : "").append(file_ext(options["tables_file"], "cpp"));
+        option.append(";f=").append(start > 0 ? "+" : "").append(add_file_ext(options["tables_file"], "cpp"));
       if ((!options["full"].empty() || !options["fast"].empty()) && options["tables_file"].empty() && options["stdout"].empty())
         option.append(";f=+").append(escape_bs(options["outfile"]));
       try
@@ -3502,3 +3606,4 @@ void Reflex::stats()
   }
 }
 
+} // namespace reflex

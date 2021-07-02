@@ -56,18 +56,18 @@
 #endif
 
 namespace reflex {
-
+  class Lexer;
 /// Pattern class holds a regex pattern and its compiled FSM opcode table or code for the reflex::Matcher engine.
 class Pattern final {
-  friend class Matcher;      ///< permit access by the reflex::Matcher engine
-  friend class FuzzyMatcher; ///< permit access by the reflex::FuzzyMatcher engine
+  friend class Lexer;
+  friend class FuzzyMatcher;
  public:
   typedef uint_least8_t  Pred;   ///< predict match bits
   typedef uint_least16_t Hash;   ///< hash value type, max value is Const::HASH
   typedef uint_least32_t Index;  ///< index into opcodes array Pattern::opc_ and subpattern indexing
   typedef uint_least32_t Accept; ///< group capture index
   typedef uint_least32_t Opcode; ///< 32 bit opcode word
-  typedef void (*FSM)(class Matcher&); ///< function pointer to FSM code
+  typedef void (*FSM)(Lexer&); ///< function pointer to FSM code
   /// Common constants.
   struct Const {
     static const Index  IMAX = 0xFFFFFFFF; ///< max index, also serves as a marker
@@ -85,8 +85,8 @@ class Pattern final {
     fsm_(nullptr)
   { }
   /// Construct a pattern object given a regex string.
-  template<typename R>
-  explicit Pattern(R&& regex, const char *options = nullptr) :
+  template<typename R,typename = typename std::enable_if<std::is_constructible<std::string,R&&>::value>::type>
+  Pattern(R&& regex, const char *options = nullptr) :
     rex_(std::forward<R>(regex)),
     opc_(nullptr),
     fsm_(nullptr)
@@ -485,26 +485,25 @@ class Pattern final {
     bool   operator>=(const Chars& c) const { return !(*this < c); }
     Char   lo()                       const { for (Char i = 0; i < 5; ++i) if (b[i]) for (Char j = 0; j < 64; ++j) if (b[i] & (1ULL << j)) return (i << 6) + j; return 0; }
     Char   hi()                       const { for (Char i = 0; i < 5; ++i) if (b[4-i]) for (Char j = 0; j < 64; ++j) if (b[4-i] & (1ULL << (63-j))) return ((4-i) << 6) + (63-j); return 0; }
-    uint_least64_t b[5]; ///< 256 bits to store a set of 8-bit chars + extra bits for meta
+    uint_least64_t b[4+1]; ///< 256 bits to store a set of 8-bit chars + extra bits for meta
   };
   /// Finite state machine construction position information.
   struct Position {
     typedef uint_least64_t        value_type;
-    static const Iter       MAXITER = 0xFFFF;
-    static const Location   MAXLOC  = 0xFFFFFFFFUL;
-    static const value_type NPOS    = 0xFFFFFFFFFFFFFFFFULL;
-    static const value_type RES1    = 1ULL << 48; ///< reserved
-    static const value_type RES2    = 1ULL << 49; ///< reserved
-    static const value_type RES3    = 1ULL << 50; ///< reserved
-    static const value_type NEGATE  = 1ULL << 51; ///< marks negative patterns
-    static const value_type TICKED  = 1ULL << 52; ///< marks lookahead ending ) in (?=X)
-    static const value_type GREEDY  = 1ULL << 53; ///< force greedy quants
-    static const value_type ANCHOR  = 1ULL << 54; ///< marks begin of word (\b,\<,\>) and buffer (\A,^) anchors
-    static const value_type ACCEPT  = 1ULL << 55; ///< accept, not a regex position
-    Position()                   : k(NPOS) { }
-    Position(value_type k)       : k(k)    { }
-    Position(const Position& p)  : k(p.k)  { }
-    Position& operator=(const Position& p) { k = p.k; return *this; }
+    static constexpr Iter       MAXITER = 0xFFFF;
+    static constexpr Location   MAXLOC  = 0xFFFFFFFFUL;
+    static constexpr value_type NPOS    = 0xFFFFFFFFFFFFFFFFULL;
+    static constexpr value_type RES1    = 1ULL << 48; ///< reserved
+    static constexpr value_type RES2    = 1ULL << 49; ///< reserved
+    static constexpr value_type RES3    = 1ULL << 50; ///< reserved
+    static constexpr value_type NEGATE  = 1ULL << 51; ///< marks negative patterns
+    static constexpr value_type TICKED  = 1ULL << 52; ///< marks lookahead ending ) in (?=X)
+    static constexpr value_type GREEDY  = 1ULL << 53; ///< force greedy quants
+    static constexpr value_type ANCHOR  = 1ULL << 54; ///< marks begin of word (\b,\<,\>) and buffer (\A,^) anchors
+    static constexpr value_type ACCEPT  = 1ULL << 55; ///< accept, not a regex position
+
+    constexpr Position(value_type k = NPOS) noexcept : k(k) {}
+
     operator value_type()            const { return k; }
     Position iter(Iter i)            const { return Position(k + (static_cast<value_type>(i) << 32)); }
     Position negate(bool b)          const { return b ? Position(k | NEGATE) : Position(k & ~NEGATE); }
@@ -881,7 +880,7 @@ class Pattern final {
   {
     uint_least16_t h = 0;
     for (Positions::const_iterator i = pos->begin(); i != pos->end(); ++i)
-      h += static_cast<uint_least16_t>(*i ^ (*i >> 24)); // (Position(*i).iter() << 4) unique hash for up to 16 chars iterated (abc...p){iter}
+      h += static_cast<uint_least16_t>(*i ^ (*i >> 24)); // (Position{*i}.iter() << 4) unique hash for up to 16 chars iterated (abc...p){iter}
     return h;
   }
   static inline bool valid_goto_index(Index index)

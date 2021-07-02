@@ -27,24 +27,24 @@
 \******************************************************************************/
 
 /**
-@file      matcher.h
-@brief     RE/flex matcher engine
+@file      lexer.h (originally matcher.h)
+@brief     RE/flex lexer
 @author    Robert van Engelen - engelen@genivia.com
 @copyright (c) 2016-2020, Robert van Engelen, Genivia Inc. All rights reserved.
 @copyright (c) BSD-3 License - see LICENSE.txt
 */
 
-#ifndef REFLEX_MATCHER_H
-#define REFLEX_MATCHER_H
+#ifndef REFLEX_LEXER_H
+#define REFLEX_LEXER_H
 
-#include <reflex/absmatcher.h>
+#include <reflex/abslexer.h>
 #include <reflex/pattern.h>
 #include <stack>
 
 namespace reflex {
 
-/// RE/flex matcher engine class, implements reflex::AbstractMatcher pattern matching interface with scan, find, split functors and iterators.
-class Matcher : public AbstractMatcher<reflex::Pattern> {
+/// RE/flex lexer engine class, implements reflex::AbstractLexer pattern matching interface with scan, find, split functors and iterators.
+class Lexer : public AbstractLexer<reflex::Pattern> {
  public:
   /// Convert a regex to an acceptable form, given the specified regex library signature `"[decls:]escapes[?+]"`, see reflex::convert.
   template<typename T>
@@ -53,82 +53,80 @@ class Matcher : public AbstractMatcher<reflex::Pattern> {
     return reflex::convert(regex, "imsx#=^:abcdefhijklnrstuvwxzABDHLNQSUW<>?", flags);
   }
   /// Default constructor.
-  Matcher() : AbstractMatcher<reflex::Pattern>()
+  Lexer() : AbstractLexer<reflex::Pattern>()
   {
-    Matcher::reset();
+    Lexer::reset();
   }
-  /// Construct matcher engine from a pattern, and an input character sequence.
-  template<typename P>
-  Matcher(
-      P&& pattern,         ///< a reflex::Pattern
-      const Input&   input = Input(), ///< input character sequence for this matcher
-      const char    *opt = nullptr)      ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
+  /// Construct lexer engine
+  explicit Lexer(
+      const Input&   input, ///< input character sequence for this lexer
+      Option opt={})         ///< option string of the form `(A|N|T(=[[:digit:]])?|;)*`
     :
-      AbstractMatcher<reflex::Pattern>(std::forward<P>(pattern), input, opt)
+      AbstractLexer<reflex::Pattern>(input,opt)
   {
     reset();
   }
   /// Copy constructor.
-  Matcher(const Matcher& matcher) ///< matcher to copy with pattern (pattern may be shared)
+  Lexer(const Lexer& lexer) ///< lexer to copy with pattern (pattern may be shared)
     :
-      AbstractMatcher<reflex::Pattern>(matcher),
-      ded_(matcher.ded_),
-      tab_(matcher.tab_)
+      AbstractLexer<reflex::Pattern>(lexer),
+      ded_(lexer.ded_),
+      tab_(lexer.tab_)
   {
-    DBGLOG("Matcher::Matcher(matcher)");
-    bmd_ = matcher.bmd_;
+    DBGLOG("Lexer::Lexer(lexer)");
+    bmd_ = lexer.bmd_;
     if (bmd_ != 0)
-      std::memcpy(bms_, matcher.bms_, sizeof(bms_));
+      std::memcpy(bms_, lexer.bms_, sizeof(bms_));
   }
-  /// Assign a matcher.
-  Matcher& operator=(const Matcher& matcher) ///< matcher to copy
+  /// Assign a lexer.
+  Lexer& operator=(const Lexer& lexer) ///< lexer to copy
   {
-    AbstractMatcher<reflex::Pattern>::operator=(matcher);
-    ded_ = matcher.ded_;
-    tab_ = matcher.tab_;
-    bmd_ = matcher.bmd_;
+    AbstractLexer<reflex::Pattern>::operator=(lexer);
+    ded_ = lexer.ded_;
+    tab_ = lexer.tab_;
+    bmd_ = lexer.bmd_;
     if (bmd_ != 0)
-      std::memcpy(bms_, matcher.bms_, sizeof(bms_));
+      std::memcpy(bms_, lexer.bms_, sizeof(bms_));
     return *this;
   }
   /// Polymorphic cloning.
-  virtual Matcher *clone()
+  virtual Lexer *clone() override
   {
-    return new Matcher(*this);
+    return new Lexer(*this);
   }
-  /// Reset this matcher's state to the initial state.
-  void reset(const AbstractMatcher<reflex::Pattern>::Option& opt)
+  /// Reset this lexer's state to the initial state.
+  void reset(AbstractLexer<reflex::Pattern>::Option opt)
   {
-    DBGLOG("Matcher::reset(opt)");
-    AbstractMatcher<reflex::Pattern>::reset(opt);
+    DBGLOG("Lexer::reset(opt)");
+    AbstractLexer<reflex::Pattern>::reset(opt);
     ded_ = 0;
     tab_.resize(0);
     bmd_ = 0;
   }
-  /// Reset this matcher's state to the initial state.
+  /// Reset this lexer's state to the initial state.
   void reset()
   {
-    DBGLOG("Matcher::reset()");
-    AbstractMatcher<reflex::Pattern>::reset();
+    DBGLOG("Lexer::reset()");
+    AbstractLexer<reflex::Pattern>::reset();
     ded_ = 0;
     tab_.resize(0);
     bmd_ = 0;
   }
   /// Returns captured text as a std::pair<const char*,size_t> with string pointer (non-0-terminated) and length.
-  virtual std::pair<const char*,size_t> operator[](size_t n) const
+  virtual std::pair<const char*,size_t> operator[](size_t n) const override
   {
     if (n == 0)
       return std::pair<const char*,size_t>(txt_, len_);
     return std::pair<const char*,size_t>(nullptr, 0);
   }
   /// Returns the group capture identifier containing the group capture index >0 and name (or nullptr) of a named group capture, or (1,nullptr) by default
-  virtual std::pair<size_t,const char*> group_id()
+  virtual std::pair<size_t,const char*> group_id() override
     /// @returns a pair of size_t and string
   {
     return std::pair<size_t,const char*>(accept(), nullptr);
   }
   /// Returns the next group capture identifier containing the group capture index >0 and name (or nullptr) of a named group capture, or (0,nullptr) when no more groups matched
-  virtual std::pair<size_t,const char*> group_next_id()
+  virtual std::pair<size_t,const char*> group_next_id() override
     /// @returns (0,nullptr)
   {
     return std::pair<size_t,const char*>(0, nullptr);
@@ -221,7 +219,7 @@ class Matcher : public AbstractMatcher<reflex::Pattern> {
     return get();
   }
   /// FSM code HALT.
-  inline void FSM_HALT(int c1 = AbstractMatcher::Const::UNK)
+  inline void FSM_HALT(int c1 = AbstractLexer::Const::UNK)
   {
     fsm_.c1 = c1;
   }
@@ -286,7 +284,7 @@ class Matcher : public AbstractMatcher<reflex::Pattern> {
   {
     cur_ = txt_ - buf_ + pos;
   }
-#if !defined(WITH_NO_INDENT)
+#if !defined(REFLEX_WITH_NO_INDENT)
   /// FSM code META DED.
   inline bool FSM_META_DED()
   {
@@ -374,17 +372,17 @@ class Matcher : public AbstractMatcher<reflex::Pattern> {
     int  c1;
   };
   /// Returns true if input matched the pattern using method Const::SCAN, Const::FIND, Const::SPLIT, or Const::MATCH.
-  virtual size_t match(Method method) ///< Const::SCAN, Const::FIND, Const::SPLIT, or Const::MATCH
+  virtual size_t match(Method method) override ///< Const::SCAN, Const::FIND, Const::SPLIT, or Const::MATCH
     /// @returns nonzero if input matched the pattern
   {
-    DBGLOG("BEGIN Matcher::match()");
+    DBGLOG("BEGIN Lexer::match()");
     bool tail_=false;
     reset_text();
     len_ = 0; // split text length starts with 0
     anc_ = false; // no word boundary anchor found and applied
 scan:
     txt_ = buf_ + cur_;
-#if !defined(WITH_NO_INDENT)
+#if !defined(REFLEX_WITH_NO_INDENT)
     mrk_ = false;
     ind_ = pos_; // ind scans input in buf[] in newline() up to pos - 1
     col_ = 0; // count columns for indent matching
@@ -392,30 +390,30 @@ scan:
 find:
     int c1 = got_;
     bool bol = at_bol(); // at begin of line?
-    if (pat_.fsm_ != nullptr)
+    if (patterns[pattern_current].fsm_ != nullptr)
       fsm_.c1 = c1;
-#if !defined(WITH_NO_INDENT)
+#if !defined(REFLEX_WITH_NO_INDENT)
 redo:
 #endif
     lap_.resize(0);
     cap_ = 0;
-    bool nul = method == Const::MATCH;
-    if (pat_.fsm_ != nullptr)
+    bool nul = method == Method::MATCH;
+    if (patterns[pattern_current].fsm_ != nullptr)
     {
-      DBGLOG("FSM code %p", pat_.fsm_);
+      DBGLOG("FSM code %p", patterns[pattern_current].fsm_);
       fsm_.bol = bol;
       fsm_.nul = nul;
-      pat_.fsm_(*this);
+      patterns[pattern_current].fsm_(*this);
       nul = fsm_.nul;
       c1 = fsm_.c1;
     }
-    else if (pat_.opc_ != nullptr)
+    else if (patterns[pattern_current].opc_ != nullptr)
     {
-      const Pattern::Opcode *pc = pat_.opc_;
+      const Pattern::Opcode *pc = patterns[pattern_current].opc_;
       while (true)
       {
         Pattern::Opcode opcode = *pc;
-        DBGLOG("Fetch: code[%zu] = 0x%08X", pc - pat_.opc_, opcode);
+        DBGLOG("Fetch: code[%zu] = 0x%08X", pc - patterns[pattern_current].opc_, opcode);
         if (!Pattern::is_opcode_goto(opcode))
         {
           switch (opcode >> 24)
@@ -452,7 +450,7 @@ redo:
               ++pc;
               continue;
             }
-#if !defined(WITH_NO_INDENT)
+#if !defined(REFLEX_WITH_NO_INDENT)
             case Pattern::META_DED - Pattern::META_MIN:
               if (ded_ > 0)
               {
@@ -461,7 +459,7 @@ redo:
                   jump = Pattern::long_index_of(pc[1]);
                 DBGLOG("Dedent ded = %zu", ded_); // unconditional dedent matching \j
                 nul = true;
-                pc = pat_.opc_ + jump;
+                pc = patterns[pattern_current].opc_ + jump;
                 continue;
               }
 #endif
@@ -509,7 +507,7 @@ redo:
                 case 0xFB: // HEAD
                   opcode = *++pc;
                   continue;
-#if !defined(WITH_NO_INDENT)
+#if !defined(REFLEX_WITH_NO_INDENT)
                 case Pattern::META_DED - Pattern::META_MIN:
                   DBGLOG("DED? %d", c1);
                   if (jump == Pattern::Const::IMAX && back == Pattern::Const::IMAX && bol && dedent())
@@ -663,15 +661,15 @@ redo:
             {
               if (back != Pattern::Const::IMAX)
               {
-                pc = pat_.opc_ + back;
+                pc = patterns[pattern_current].opc_ + back;
                 opcode = *pc;
               }
               break;
             }
             DBGLOG("Backtrack: pc = %u", jump);
             if (back == Pattern::Const::IMAX)
-              back = static_cast<Pattern::Index>(pc - pat_.opc_);
-            pc = pat_.opc_ + jump;
+              back = static_cast<Pattern::Index>(pc - patterns[pattern_current].opc_);
+            pc = patterns[pattern_current].opc_ + jump;
             opcode = *pc;
             jump = Pattern::Const::IMAX;
           }
@@ -729,7 +727,7 @@ unrolled:
         if (jump == 0)
         {
           // loop back to start state after only one char matched (one transition) but w/o full match, then optimize
-          if (cap_ == 0 && pos_ == cur_ + 1 && method == Const::FIND)
+          if (cap_ == 0 && pos_ == cur_ + 1 && method == Method::FIND)
             cur_ = pos_; // set cur_ to move forward from cur_ + 1 with FIND advance()
         }
         else if (jump >= Pattern::Const::LONG)
@@ -738,10 +736,10 @@ unrolled:
             break;
           jump = Pattern::long_index_of(pc[1]);
         }
-        pc = pat_.opc_ + jump;
+        pc = patterns[pattern_current].opc_ + jump;
       }
     }
-#if !defined(WITH_NO_INDENT)
+#if !defined(REFLEX_WITH_NO_INDENT)
     if (mrk_ && cap_ != Const::REDO)
     {
       if (col_ > 0 && (tab_.empty() || tab_.back() < col_))
@@ -779,7 +777,7 @@ unrolled:
       --ded_;
     }
 #endif
-    if (method == Const::SPLIT)
+    if (method == Method::SPLIT)
     {
       DBGLOG("Split: len = %zu cap = %zu cur = %zu pos = %zu end = %zu txt-buf = %zu eob = %d got = %d", len_, cap_, cur_, pos_, end_, txt_-buf_, (int)eof_, got_);
       if (cap_ == 0 || (cur_ == static_cast<size_t>(txt_ - buf_) && !at_bob()))
@@ -798,7 +796,7 @@ unrolled:
         set_current(end_);
         got_ = Const::EOB;
         DBGLOG("Split at eof: cap = %zu txt = '%s' len = %zu", cap_, std::string(txt_, len_).c_str(), len_);
-        DBGLOG("END Matcher::match()");
+        DBGLOG("END Lexer::match()");
         return cap_;
       }
       if (cur_ == 0 && at_bob() && at_end())
@@ -811,12 +809,12 @@ unrolled:
         set_current(cur_);
       }
       DBGLOG("Split: txt = '%s' len = %zu", std::string(txt_, len_).c_str(), len_);
-      DBGLOG("END Matcher::match()");
+      DBGLOG("END Lexer::match()");
       return cap_;
     }
     if (cap_ == 0)
     {
-      if (method == Const::FIND && !at_end())
+      if (method == Method::FIND && !at_end())
       {
         if (anc_)
         {
@@ -828,9 +826,9 @@ unrolled:
           // we didn't fail on META alone
           if (advance())
           {
-            if (!pat_.one_)
+            if (!patterns[pattern_current].one_)
               goto scan;
-            len_ = pat_.len_;
+            len_ = patterns[pattern_current].len_;
             txt_ = buf_ + cur_;
             set_current(cur_ + len_);
             return cap_ = 1;
@@ -857,7 +855,7 @@ unrolled:
           DBGLOG("Reject empty match at EOF");
           cap_ = 0;
         }
-        else if (method == Const::FIND)
+        else if (method == Method::FIND)
         {
           DBGLOG("Reject empty match and continue?");
           // skip one char to keep searching
@@ -887,7 +885,7 @@ unrolled:
         {
           DBGLOG("Ignore accept and continue: len = %zu", len_);
           len_ = 0;
-          if (method != Const::MATCH)
+          if (method != Method::MATCH)
             goto scan;
           cap_ = 0;
         }
@@ -905,7 +903,7 @@ unrolled:
   bool advance()
     /// @returns true if possible match found
     ;
-#if !defined(WITH_NO_INDENT)
+#if !defined(REFLEX_WITH_NO_INDENT)
   /// Update indentation column counter for indent() and dedent().
   inline void newline()
   {
@@ -947,10 +945,10 @@ unrolled:
   std::vector<int>  lap_;      ///< lookahead position in input that heads a lookahead match (indexed by lookahead number)
   std::stack<Stops> stk_;      ///< stack to push/pop stops
   FSM               fsm_;      ///< local state for FSM code
-  uint_least16_t          lcp_;      ///< primary least common character position in the pattern prefix or 0xffff for pure Boyer-Moore
-  uint_least16_t          lcs_;      ///< secondary least common character position in the pattern prefix or 0xffff for pure Boyer-Moore
+  uint_least16_t    lcp_;      ///< primary least common character position in the pattern prefix or 0xffff for pure Boyer-Moore
+  uint_least16_t    lcs_;      ///< secondary least common character position in the pattern prefix or 0xffff for pure Boyer-Moore
   size_t            bmd_;      ///< Boyer-Moore jump distance on mismatch, B-M is enabled when bmd_ > 0
-  uint_least8_t           bms_[256]; ///< Boyer-Moore skip array
+  uint_least8_t     bms_[256]; ///< Boyer-Moore skip array
   bool              mrk_;      ///< indent \i or dedent \j in pattern found: should check and update indent stops
   bool              anc_;      ///< match is anchored, advance slowly to retry when searching
 };

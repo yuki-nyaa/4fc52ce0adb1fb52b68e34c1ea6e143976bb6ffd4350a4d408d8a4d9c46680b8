@@ -404,13 +404,13 @@ namespace reflex {
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
-/// Flex-compatible FlexLexer abstract base class template derived from reflex::AbstractMatcher for the reflex-generated yyFlexLexer scanner class.
-template<typename M> /// @tparam <M> matcher class derived from reflex::AbstractMatcher
-class FlexLexer : public AbstractLexer<M> {
+/// Flex-compatible FlexLexer abstract base class template derived from reflex::AbstractLexer for the reflex-generated yyFlexLexer scanner class.
+template<typename M> /// @tparam <M> matcher class derived from reflex::AbstractLexer
+class FlexLexer : public AbstractLexer_old<M> {
  public:
   /// Typedef for the abstract base class
-  typedef AbstractLexer<M> AbstractBaseLexer;
-  /// Extends reflex::AbstractLexer<M>::Matcher for Flex-compatibility.
+  typedef AbstractLexer_old<M> AbstractBaseLexer;
+  /// Extends reflex::AbstractLexer_old<M>::Matcher for Flex-compatibility.
   class Matcher : public AbstractBaseLexer::Matcher {
    public:
     /// Construct a FlexLexer matcher from a matcher's pattern type.

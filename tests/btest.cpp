@@ -640,7 +640,7 @@ int main()
   if (test != "abc/def/")
     error("skip");
   //
-#ifdef WITH_SPAN
+#ifdef REFLEX_WITH_SPAN
   banner("TEST SPAN");
   //
   matcher.pattern(pattern8);

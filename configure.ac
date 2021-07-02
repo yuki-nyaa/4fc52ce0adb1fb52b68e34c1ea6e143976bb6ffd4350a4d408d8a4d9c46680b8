@@ -6,7 +6,7 @@ AC_COPYRIGHT([Copyright (C) 2016-2020 Robert van Engelen, Genivia Inc.])
 AC_TYPE_OFF_T
 
 # if CXXFLAGS is undefined, set it to our preferred default flags
-: ${CXXFLAGS="-Wextra -Wunused -O2"}
+: ${CXXFLAGS="-Wextra -Wunused -g -O0"}
 
 AC_LANG([C++])
 AC_PROG_CXX
