@@ -126,7 +126,8 @@ struct Reflex_Parser{
   Codes                 section_3;     ///< main user code in section 3 container
 
   std::string           infile;        ///< input file name
-  reflex::BufferedInput in;            ///< input lex spec
+  reflex::BufferedInput in;            ///< input lex spec. The main input.
+  reflex::BufferedInput in_include;    ///< input lex spec. The included input.
   std::ostream         *out;           ///< output stream
 
   std::string           line;          ///< current line read from input
@@ -902,19 +903,18 @@ void Reflex_Parser::include(const std::string& filename,const bool sys /*  =fals
   abort("cannot include file ", filename.c_str());
 
   search_suc:
-  std::string save_infile(infile);
-  infile = filename;
-  reflex::BufferedInput save_in(in);
-  in = file;
-  std::string save_line(line);
+  std::string save_infile(std::move(infile));
+  infile = std::move(filename);
+  std::string save_line(std::move(line));
   size_t save_lineno = lineno;
   size_t save_linelen = linelen;
   lineno = 0;
+  in_include = file;
   parse_section_1();
   fclose(file);
-  infile = save_infile;
-  in = save_in;
-  line = save_line;
+  in_include.clear();
+  infile = std::move(save_infile);
+  line = std::move(save_line);
   lineno = save_lineno;
   linelen = save_linelen;
 }
