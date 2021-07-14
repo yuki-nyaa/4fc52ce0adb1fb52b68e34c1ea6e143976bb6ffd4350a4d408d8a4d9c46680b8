@@ -121,7 +121,7 @@ sequence of characters:
 - `class Input::streambbuf(const Input&)` creates a `std::istream` for the
   given `Input` object.
 
-- Compile with `WITH_UTF8_UNRESTRICTED` to enable unrestricted UTF-8 beyond
+- Compile with `REFLEX_WITH_UTF8_UNRESTRICTED` to enable unrestricted UTF-8 beyond
   U+10FFFF, permitting lossless UTF-8 encoding of 32 bit words without limits.
 
 Example

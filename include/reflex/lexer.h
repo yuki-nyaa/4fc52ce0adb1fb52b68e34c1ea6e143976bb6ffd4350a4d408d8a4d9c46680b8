@@ -73,7 +73,7 @@ class Lexer : public AbstractLexer<reflex::Pattern> {
       ded_(lexer.ded_),
       tab_(lexer.tab_)
   {
-    DBGLOG("Lexer::Lexer(lexer)");
+    REFLEX_DBGLOG("Lexer::Lexer(lexer)");
     bmd_ = lexer.bmd_;
     if (bmd_ != 0)
       std::memcpy(bms_, lexer.bms_, sizeof(bms_));
@@ -97,7 +97,7 @@ class Lexer : public AbstractLexer<reflex::Pattern> {
   /// Reset this lexer's state to the initial state.
   void reset(AbstractLexer<reflex::Pattern>::Option opt)
   {
-    DBGLOG("Lexer::reset(opt)");
+    REFLEX_DBGLOG("Lexer::reset(opt)");
     AbstractLexer<reflex::Pattern>::reset(opt);
     ded_ = 0;
     tab_.resize(0);
@@ -106,7 +106,7 @@ class Lexer : public AbstractLexer<reflex::Pattern> {
   /// Reset this lexer's state to the initial state.
   void reset()
   {
-    DBGLOG("Lexer::reset()");
+    REFLEX_DBGLOG("Lexer::reset()");
     AbstractLexer<reflex::Pattern>::reset();
     ded_ = 0;
     tab_.resize(0);
@@ -375,7 +375,7 @@ class Lexer : public AbstractLexer<reflex::Pattern> {
   virtual size_t match(Method method) override ///< Const::SCAN, Const::FIND, Const::SPLIT, or Const::MATCH
     /// @returns nonzero if input matched the pattern
   {
-    DBGLOG("BEGIN Lexer::match()");
+    REFLEX_DBGLOG("BEGIN Lexer::match()");
     bool tail_=false;
     reset_text();
     len_ = 0; // split text length starts with 0
@@ -400,7 +400,7 @@ redo:
     bool nul = method == Method::MATCH;
     if (patterns[pattern_current].fsm_ != nullptr)
     {
-      DBGLOG("FSM code %p", patterns[pattern_current].fsm_);
+      REFLEX_DBGLOG("FSM code %p", patterns[pattern_current].fsm_);
       fsm_.bol = bol;
       fsm_.nul = nul;
       patterns[pattern_current].fsm_(*this);
@@ -413,7 +413,7 @@ redo:
       while (true)
       {
         Pattern::Opcode opcode = *pc;
-        DBGLOG("Fetch: code[%zu] = 0x%08X", pc - patterns[pattern_current].opc_, opcode);
+        REFLEX_DBGLOG("Fetch: code[%zu] = 0x%08X", pc - patterns[pattern_current].opc_, opcode);
         if (!Pattern::is_opcode_goto(opcode))
         {
           switch (opcode >> 24)
@@ -422,18 +422,18 @@ redo:
               cap_ = Pattern::long_index_of(opcode);
               cur_ = pos_;
               ++pc;
-              DBGLOG("Take: cap = %zu", cap_);
+              REFLEX_DBGLOG("Take: cap = %zu", cap_);
               continue;
             case 0xFD: // REDO
               cap_ = Const::REDO;
-              DBGLOG("Redo");
+              REFLEX_DBGLOG("Redo");
               cur_ = pos_;
               ++pc;
               continue;
             case 0xFC: // TAIL
             {
               Pattern::Lookahead la = Pattern::lookahead_of(opcode);
-              DBGLOG("Tail: %u", la);
+              REFLEX_DBGLOG("Tail: %u", la);
               if (lap_.size() > la && lap_[la] >= 0)
                 cur_ = txt_ - buf_ + static_cast<size_t>(lap_[la]); // mind the (new) gap
               ++pc;
@@ -443,7 +443,7 @@ redo:
             case 0xFB: // HEAD
             {
               Pattern::Lookahead la = Pattern::lookahead_of(opcode);
-              DBGLOG("Head: lookahead[%u] = %zu", la, pos_ - (txt_ - buf_));
+              REFLEX_DBGLOG("Head: lookahead[%u] = %zu", la, pos_ - (txt_ - buf_));
               if (lap_.size() <= la)
                 lap_.resize(la + 1, -1);
               lap_[la] = static_cast<int>(pos_ - (txt_ - buf_)); // mind the gap
@@ -457,7 +457,7 @@ redo:
                 Pattern::Index jump = Pattern::index_of(opcode);
                 if (jump == Pattern::Const::LONG)
                   jump = Pattern::long_index_of(pc[1]);
-                DBGLOG("Dedent ded = %zu", ded_); // unconditional dedent matching \j
+                REFLEX_DBGLOG("Dedent ded = %zu", ded_); // unconditional dedent matching \j
                 nul = true;
                 pc = patterns[pattern_current].opc_ + jump;
                 continue;
@@ -468,7 +468,7 @@ redo:
             break;
           int c0 = c1;
           c1 = get();
-          DBGLOG("Get: c1 = %d", c1);
+          REFLEX_DBGLOG("Get: c1 = %d", c1);
           Pattern::Index back = Pattern::Const::IMAX; // where to jump back to (backtrack on meta transitions)
           Pattern::Index jump = Pattern::Const::IMAX; // to jump to longest sequence of matching metas
           while (true)
@@ -484,11 +484,11 @@ redo:
                   if (c1 != EOF)
                     --cur_; // must unget one char
                   opcode = *++pc;
-                  DBGLOG("Take: cap = %zu", cap_);
+                  REFLEX_DBGLOG("Take: cap = %zu", cap_);
                   continue;
                 case 0xFD: // REDO
                   cap_ = Const::REDO;
-                  DBGLOG("Redo");
+                  REFLEX_DBGLOG("Redo");
                   cur_ = pos_;
                   if (c1 != EOF)
                     --cur_; // must unget one char
@@ -497,7 +497,7 @@ redo:
                 case 0xFC: // TAIL
                 {
                   Pattern::Lookahead la = Pattern::lookahead_of(opcode);
-                  DBGLOG("Tail: %u", la);
+                  REFLEX_DBGLOG("Tail: %u", la);
                   if (lap_.size() > la && lap_[la] >= 0)
                     cur_ = txt_ - buf_ + static_cast<size_t>(lap_[la]); // mind the (new) gap
                   opcode = *++pc;
@@ -509,7 +509,7 @@ redo:
                   continue;
 #if !defined(REFLEX_WITH_NO_INDENT)
                 case Pattern::META_DED - Pattern::META_MIN:
-                  DBGLOG("DED? %d", c1);
+                  REFLEX_DBGLOG("DED? %d", c1);
                   if (jump == Pattern::Const::IMAX && back == Pattern::Const::IMAX && bol && dedent())
                   {
                     jump = Pattern::index_of(opcode);
@@ -519,7 +519,7 @@ redo:
                   opcode = *++pc;
                   continue;
                 case Pattern::META_IND - Pattern::META_MIN:
-                  DBGLOG("IND? %d", c1);
+                  REFLEX_DBGLOG("IND? %d", c1);
                   if (jump == Pattern::Const::IMAX && back == Pattern::Const::IMAX && bol && indent())
                   {
                     jump = Pattern::index_of(opcode);
@@ -529,7 +529,7 @@ redo:
                   opcode = *++pc;
                   continue;
                 case Pattern::META_UND - Pattern::META_MIN:
-                  DBGLOG("UND");
+                  REFLEX_DBGLOG("UND");
                   if (mrk_)
                   {
                     jump = Pattern::index_of(opcode);
@@ -542,7 +542,7 @@ redo:
                   continue;
 #endif
                 case Pattern::META_EOB - Pattern::META_MIN:
-                  DBGLOG("EOB? %d", c1);
+                  REFLEX_DBGLOG("EOB? %d", c1);
                   if (jump == Pattern::Const::IMAX && c1 == EOF)
                   {
                     jump = Pattern::index_of(opcode);
@@ -552,7 +552,7 @@ redo:
                   opcode = *++pc;
                   continue;
                 case Pattern::META_BOB - Pattern::META_MIN:
-                  DBGLOG("BOB? %d", at_bob());
+                  REFLEX_DBGLOG("BOB? %d", at_bob());
                   if (jump == Pattern::Const::IMAX && at_bob())
                   {
                     jump = Pattern::index_of(opcode);
@@ -562,7 +562,7 @@ redo:
                   opcode = *++pc;
                   continue;
                 case Pattern::META_EOL - Pattern::META_MIN:
-                  DBGLOG("EOL? %d", c1);
+                  REFLEX_DBGLOG("EOL? %d", c1);
                   anc_ = true;
                   if (jump == Pattern::Const::IMAX && (c1 == EOF || c1 == '\n' || (c1 == '\r' && peek() == '\n')))
                   {
@@ -573,7 +573,7 @@ redo:
                   opcode = *++pc;
                   continue;
                 case Pattern::META_BOL - Pattern::META_MIN:
-                  DBGLOG("BOL? %d", bol);
+                  REFLEX_DBGLOG("BOL? %d", bol);
                   anc_ = true;
                   if (jump == Pattern::Const::IMAX && bol)
                   {
@@ -584,7 +584,7 @@ redo:
                   opcode = *++pc;
                   continue;
                 case Pattern::META_EWE - Pattern::META_MIN:
-                  DBGLOG("EWE? %d %d %d", c0, c1, isword(c0) && !isword(c1));
+                  REFLEX_DBGLOG("EWE? %d %d %d", c0, c1, isword(c0) && !isword(c1));
                   anc_ = true;
                   if (jump == Pattern::Const::IMAX && (isword(c0) || opt_.W) && !isword(c1))
                   {
@@ -595,7 +595,7 @@ redo:
                   opcode = *++pc;
                   continue;
                 case Pattern::META_BWE - Pattern::META_MIN:
-                  DBGLOG("BWE? %d %d %d", c0, c1, !isword(c0) && isword(c1));
+                  REFLEX_DBGLOG("BWE? %d %d %d", c0, c1, !isword(c0) && isword(c1));
                   anc_ = true;
                   if (jump == Pattern::Const::IMAX && !isword(c0) && isword(c1))
                   {
@@ -606,7 +606,7 @@ redo:
                   opcode = *++pc;
                   continue;
                 case Pattern::META_EWB - Pattern::META_MIN:
-                  DBGLOG("EWB? %d", at_eow());
+                  REFLEX_DBGLOG("EWB? %d", at_eow());
                   anc_ = true;
                   if (jump == Pattern::Const::IMAX && isword(got_) &&
                       !isword(static_cast<unsigned char>(txt_[len_])))
@@ -618,7 +618,7 @@ redo:
                   opcode = *++pc;
                   continue;
                 case Pattern::META_BWB - Pattern::META_MIN:
-                  DBGLOG("BWB? %d", at_bow());
+                  REFLEX_DBGLOG("BWB? %d", at_bow());
                   anc_ = true;
                   if (jump == Pattern::Const::IMAX && !isword(got_) &&
                       (opt_.W || isword(static_cast<unsigned char>(txt_[len_]))))
@@ -630,7 +630,7 @@ redo:
                   opcode = *++pc;
                   continue;
                 case Pattern::META_NWE - Pattern::META_MIN:
-                  DBGLOG("NWE? %d %d %d", c0, c1, isword(c0) == isword(c1));
+                  REFLEX_DBGLOG("NWE? %d %d %d", c0, c1, isword(c0) == isword(c1));
                   anc_ = true;
                   if (jump == Pattern::Const::IMAX && isword(c0) == isword(c1))
                   {
@@ -641,7 +641,7 @@ redo:
                   opcode = *++pc;
                   continue;
                 case Pattern::META_NWB - Pattern::META_MIN:
-                  DBGLOG("NWB? %d %d", at_bow(), at_eow());
+                  REFLEX_DBGLOG("NWB? %d %d", at_bow(), at_eow());
                   anc_ = true;
                   if (jump == Pattern::Const::IMAX &&
                       isword(got_) == isword(static_cast<unsigned char>(txt_[len_])))
@@ -666,7 +666,7 @@ redo:
               }
               break;
             }
-            DBGLOG("Backtrack: pc = %u", jump);
+            REFLEX_DBGLOG("Backtrack: pc = %u", jump);
             if (back == Pattern::Const::IMAX)
               back = static_cast<Pattern::Index>(pc - patterns[pattern_current].opc_);
             pc = patterns[pattern_current].opc_ + jump;
@@ -683,7 +683,7 @@ redo:
           if (c1 == EOF)
             break;
           c1 = get();
-          DBGLOG("Get: c1 = %d", c1);
+          REFLEX_DBGLOG("Get: c1 = %d", c1);
           if (c1 == EOF)
             break;
         }
@@ -744,7 +744,7 @@ unrolled:
     {
       if (col_ > 0 && (tab_.empty() || tab_.back() < col_))
       {
-        DBGLOG("Set new stop: tab_[%zu] = %zu", tab_.size(), col_);
+        REFLEX_DBGLOG("Set new stop: tab_[%zu] = %zu", tab_.size(), col_);
         tab_.push_back(col_);
       }
       else if (!tab_.empty() && tab_.back() > col_)
@@ -754,7 +754,7 @@ unrolled:
           if (tab_.at(n - 1) <= col_)
             break;
         ded_ += tab_.size() - n;
-        DBGLOG("Dedents: ded = %zu tab_ = %zu", ded_, tab_.size());
+        REFLEX_DBGLOG("Dedents: ded = %zu tab_ = %zu", ded_, tab_.size());
         tab_.resize(n);
         // adjust stop when indents are not aligned (Python would give an error though)
         if (n > 0)
@@ -763,12 +763,12 @@ unrolled:
     }
     if (ded_ > 0)
     {
-      DBGLOG("Dedents: ded = %zu", ded_);
+      REFLEX_DBGLOG("Dedents: ded = %zu", ded_);
       if (col_ == 0 && bol)
       {
         ded_ += tab_.size();
         tab_.resize(0);
-        DBGLOG("Rescan for pending dedents: ded = %zu", ded_);
+        REFLEX_DBGLOG("Rescan for pending dedents: ded = %zu", ded_);
         pos_ = ind_;
         // avoid looping, match \j exactly
         bol = false;
@@ -779,13 +779,13 @@ unrolled:
 #endif
     if (method == Method::SPLIT)
     {
-      DBGLOG("Split: len = %zu cap = %zu cur = %zu pos = %zu end = %zu txt-buf = %zu eob = %d got = %d", len_, cap_, cur_, pos_, end_, txt_-buf_, (int)eof_, got_);
+      REFLEX_DBGLOG("Split: len = %zu cap = %zu cur = %zu pos = %zu end = %zu txt-buf = %zu eob = %d got = %d", len_, cap_, cur_, pos_, end_, txt_-buf_, (int)eof_, got_);
       if (cap_ == 0 || (cur_ == static_cast<size_t>(txt_ - buf_) && !at_bob()))
       {
         if (!hit_end() && (txt_ + len_ < buf_ + end_ || peek() != EOF))
         {
           ++len_;
-          DBGLOG("Split continue: len = %zu", len_);
+          REFLEX_DBGLOG("Split continue: len = %zu", len_);
           set_current(++cur_);
           goto find;
         }
@@ -795,8 +795,8 @@ unrolled:
           cap_ = 0;
         set_current(end_);
         got_ = Const::EOB;
-        DBGLOG("Split at eof: cap = %zu txt = '%s' len = %zu", cap_, std::string(txt_, len_).c_str(), len_);
-        DBGLOG("END Lexer::match()");
+        REFLEX_DBGLOG("Split at eof: cap = %zu txt = '%s' len = %zu", cap_, std::string(txt_, len_).c_str(), len_);
+        REFLEX_DBGLOG("END Lexer::match()");
         return cap_;
       }
       if (cur_ == 0 && at_bob() && at_end())
@@ -808,8 +808,8 @@ unrolled:
       {
         set_current(cur_);
       }
-      DBGLOG("Split: txt = '%s' len = %zu", std::string(txt_, len_).c_str(), len_);
-      DBGLOG("END Lexer::match()");
+      REFLEX_DBGLOG("Split: txt = '%s' len = %zu", std::string(txt_, len_).c_str(), len_);
+      REFLEX_DBGLOG("END Lexer::match()");
       return cap_;
     }
     if (cap_ == 0)
@@ -847,34 +847,34 @@ unrolled:
     {
       if (len_ == 0 && !nul)
       {
-        DBGLOG("Empty or no match cur = %zu pos = %zu end = %zu", cur_, pos_, end_);
+        REFLEX_DBGLOG("Empty or no match cur = %zu pos = %zu end = %zu", cur_, pos_, end_);
         pos_ = cur_;
         if (at_end())
         {
           set_current(cur_);
-          DBGLOG("Reject empty match at EOF");
+          REFLEX_DBGLOG("Reject empty match at EOF");
           cap_ = 0;
         }
         else if (method == Method::FIND)
         {
-          DBGLOG("Reject empty match and continue?");
+          REFLEX_DBGLOG("Reject empty match and continue?");
           // skip one char to keep searching
           set_current(++cur_);
           // allow FIND with "N" to match an empty line, with ^$ etc.
           if (cap_ == 0 || !opt_.N)
             goto scan;
-          DBGLOG("Accept empty match");
+          REFLEX_DBGLOG("Accept empty match");
         }
         else
         {
           set_current(cur_);
-          DBGLOG("Reject empty match");
+          REFLEX_DBGLOG("Reject empty match");
           cap_ = 0;
         }
       }
       else if (len_ == 0 && cur_ == end_)
       {
-        DBGLOG("Hit end: got = %d", got_);
+        REFLEX_DBGLOG("Hit end: got = %d", got_);
         if (cap_ == Const::REDO && !opt_.A)
           cap_ = 0;
       }
@@ -883,7 +883,7 @@ unrolled:
         set_current(cur_);
         if (len_ > 0 && cap_ == Const::REDO && !opt_.A)
         {
-          DBGLOG("Ignore accept and continue: len = %zu", len_);
+          REFLEX_DBGLOG("Ignore accept and continue: len = %zu", len_);
           len_ = 0;
           if (method != Method::MATCH)
             goto scan;
@@ -895,8 +895,8 @@ unrolled:
     {
       pos_=cur_;
     }
-    DBGLOG("Return: cap = %zu txt = '%s' len = %zu pos = %zu got = %d", cap_, std::string(txt_, len_).c_str(), len_, pos_, got_);
-    DBGLOG("END match()");
+    REFLEX_DBGLOG("Return: cap = %zu txt = '%s' len = %zu pos = %zu got = %d", cap_, std::string(txt_, len_).c_str(), len_, pos_, got_);
+    REFLEX_DBGLOG("END match()");
     return cap_;
   }
   /// Returns true if able to advance to next possible match
@@ -910,7 +910,7 @@ unrolled:
     mrk_ = true;
     while (ind_ + 1 < pos_)
       col_ += buf_[ind_++] == '\t' ? 1 + (~col_ & (opt_.T - 1)) : 1;
-    DBGLOG("Newline with indent/dedent? col = %zu", col_);
+    REFLEX_DBGLOG("Newline with indent/dedent? col = %zu", col_);
   }
   /// Returns true if looking at indent.
   inline bool indent()

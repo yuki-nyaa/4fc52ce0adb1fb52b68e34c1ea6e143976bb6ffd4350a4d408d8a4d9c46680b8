@@ -48,34 +48,34 @@
     if ('a' <= c1 && c1 <= 'k') goto S3;
     return l.FSM_HALT(c1);
 */
-#define WITH_COMPACT_DFA -1
+#define REFLEX_WITH_COMPACT_DFA -1
 
-#ifdef DEBUG_REFLEX
+#ifdef REFLEX_DEBUG
 # define DBGLOGPOS(p) \
   if ((p).accept()) \
   { \
-    DBGLOGA(" (%u)", (p).accepts()); \
+    REFLEX_DBGLOGA(" (%u)", (p).accepts()); \
     if ((p).lazy()) \
-      DBGLOGA("?%u", (p).lazy()); \
+      REFLEX_DBGLOGA("?%u", (p).lazy()); \
     if ((p).greedy()) \
-      DBGLOGA("!"); \
+      REFLEX_DBGLOGA("!"); \
   } \
   else \
   { \
-    DBGLOGA(" "); \
+    REFLEX_DBGLOGA(" "); \
     if ((p).iter()) \
-      DBGLOGA("%u.", (p).iter()); \
-    DBGLOGA("%u", (p).loc()); \
+      REFLEX_DBGLOGA("%u.", (p).iter()); \
+    REFLEX_DBGLOGA("%u", (p).loc()); \
     if ((p).lazy()) \
-      DBGLOGA("?%u", (p).lazy()); \
+      REFLEX_DBGLOGA("?%u", (p).lazy()); \
     if ((p).anchor()) \
-      DBGLOGA("^"); \
+      REFLEX_DBGLOGA("^"); \
     if ((p).greedy()) \
-      DBGLOGA("!"); \
+      REFLEX_DBGLOGA("!"); \
     if ((p).ticked()) \
-      DBGLOGA("'"); \
+      REFLEX_DBGLOGA("'"); \
     if ((p).negate()) \
-      DBGLOGA("-"); \
+      REFLEX_DBGLOGA("-"); \
   }
 #endif
 
@@ -312,7 +312,7 @@ void Pattern::parse(
     Map&       modifiers,
     Map&       lookahead)
 {
-  DBGLOG("BEGIN parse()");
+  REFLEX_DBGLOG("BEGIN parse()");
   if (rex_.size() > Position::MAXLOC)
     throw regex_error(regex_error::exceeds_length, rex_, Position::MAXLOC);
   Location   len = static_cast<Location>(rex_.size());
@@ -493,22 +493,22 @@ void Pattern::parse(
   #ifdef REFLEX_PATTERN_TIMER
   pms_ = timer_elapsed(t);
   #endif
-#ifdef DEBUG_REFLEX
-  DBGLOGN("startpos = {");
+#ifdef REFLEX_DEBUG
+  REFLEX_DBGLOGN("startpos = {");
   for (Positions::const_iterator p = startpos.begin(); p != startpos.end(); ++p)
     DBGLOGPOS(*p);
-  DBGLOGA(" }");
+  REFLEX_DBGLOGA(" }");
   for (Follow::const_iterator fp = followpos.begin(); fp != followpos.end(); ++fp)
   {
-    DBGLOGN("followpos(");
+    REFLEX_DBGLOGN("followpos(");
     DBGLOGPOS(fp->first);
-    DBGLOGA(" ) = {");
+    REFLEX_DBGLOGA(" ) = {");
     for (Positions::const_iterator p = fp->second.begin(); p != fp->second.end(); ++p)
       DBGLOGPOS(*p);
-    DBGLOGA(" }");
+    REFLEX_DBGLOGA(" }");
   }
 #endif
-  DBGLOG("END parse()");
+  REFLEX_DBGLOG("END parse()");
 }
 
 void Pattern::parse1(
@@ -524,7 +524,7 @@ void Pattern::parse1(
     Locations& lookahead,
     Iter&      iter)
 {
-  DBGLOG("BEGIN parse1(%u)", loc);
+  REFLEX_DBGLOG("BEGIN parse1(%u)", loc);
   parse2(
       begin,
       loc,
@@ -565,7 +565,7 @@ void Pattern::parse1(
     if (iter1 > iter)
       iter = iter1;
   }
-  DBGLOG("END parse1()");
+  REFLEX_DBGLOG("END parse1()");
 }
 
 void Pattern::parse2(
@@ -581,7 +581,7 @@ void Pattern::parse2(
     Locations& lookahead,
     Iter&      iter)
 {
-  DBGLOG("BEGIN parse2(%u)", loc);
+  REFLEX_DBGLOG("BEGIN parse2(%u)", loc);
   Positions a_pos;
   Char c;
   if (begin)
@@ -687,7 +687,7 @@ void Pattern::parse2(
       nullable = false;
     }
   }
-  DBGLOG("END parse2()");
+  REFLEX_DBGLOG("END parse2()");
 }
 
 void Pattern::parse3(
@@ -703,7 +703,7 @@ void Pattern::parse3(
     Locations& lookahead,
     Iter&      iter)
 {
-  DBGLOG("BEGIN parse3(%u)", loc);
+  REFLEX_DBGLOG("BEGIN parse3(%u)", loc);
   Position b_pos{loc};
   parse4(
       begin,
@@ -877,7 +877,7 @@ void Pattern::parse3(
     }
     c = at(loc);
   }
-  DBGLOG("END parse3()");
+  REFLEX_DBGLOG("END parse3()");
 }
 
 void Pattern::parse4(
@@ -893,7 +893,7 @@ void Pattern::parse4(
     Locations& lookahead,
     Iter&      iter)
 {
-  DBGLOG("BEGIN parse4(%u)", loc);
+  REFLEX_DBGLOG("BEGIN parse4(%u)", loc);
   firstpos.clear();
   lastpos.clear();
   nullable = true;
@@ -1146,7 +1146,7 @@ void Pattern::parse4(
   {
     error(regex_error::empty_expression, loc);
   }
-  DBGLOG("END parse4()");
+  REFLEX_DBGLOG("END parse4()");
 }
 
 Pattern::Char Pattern::parse_esc(Location& loc, Chars *chars) const
@@ -1291,7 +1291,7 @@ void Pattern::compile(
     const Map&  modifiers,
     const Map&  lookahead)
 {
-  DBGLOG("BEGIN compile()");
+  REFLEX_DBGLOG("BEGIN compile()");
   // init stats and timers
   vno_ = 0;
   eno_ = 0;
@@ -1469,11 +1469,11 @@ void Pattern::compile(
         }
         Char lo = i->first.lo();
         Char max = i->first.hi();
-#ifdef DEBUG_REFLEX
-        DBGLOGN("from state %p on %02x-%02x move to {", state, lo, max);
+#ifdef REFLEX_DEBUG
+        REFLEX_DBGLOGN("from state %p on %02x-%02x move to {", state, lo, max);
         for (Positions::const_iterator p = pos.begin(); p != pos.end(); ++p)
           DBGLOGPOS(*p);
-        DBGLOGN(" } = state %p", target_state);
+        REFLEX_DBGLOGN(" } = state %p", target_state);
 #endif
         while (lo <= max)
         {
@@ -1483,7 +1483,7 @@ void Pattern::compile(
             while (hi <= max && i->first.contains(hi))
               ++hi;
             --hi;
-#if WITH_COMPACT_DFA == -1
+#if REFLEX_WITH_COMPACT_DFA == -1
             state->edges[lo] = std::pair<Char,DFA::State*>(hi, target_state);
 #else
             state->edges[hi] = std::pair<Char,DFA::State*>(lo, target_state);
@@ -1504,7 +1504,7 @@ void Pattern::compile(
   #ifdef REFLEX_PATTERN_TIMER
   vms_ = timer_elapsed(vt) - ems_;
   #endif
-  DBGLOG("END compile()");
+  REFLEX_DBGLOG("END compile()");
 }
 
 void Pattern::lazy(
@@ -1542,10 +1542,10 @@ void Pattern::greedy(Positions& pos) const
 void Pattern::trim_anchors(Positions& follow, const Position p) const
 {
 #ifdef DEBUG
-  DBGLOG("trim_anchors({");
+  REFLEX_DBGLOG("trim_anchors({");
   for (Positions::const_iterator q = follow.begin(); q != follow.end(); ++q)
     DBGLOGPOS(*q);
-  DBGLOGA(" }, %u)", p.loc());
+  REFLEX_DBGLOGA(" }, %u)", p.loc());
 #endif
   Positions::iterator q = follow.begin();
   Positions::iterator end = follow.end();
@@ -1580,20 +1580,20 @@ void Pattern::trim_anchors(Positions& follow, const Position p) const
     }
   }
 #ifdef DEBUG
-  DBGLOGA(" = {");
+  REFLEX_DBGLOGA(" = {");
   for (Positions::const_iterator q = follow.begin(); q != follow.end(); ++q)
     DBGLOGPOS(*q);
-  DBGLOG(" }");
+  REFLEX_DBGLOG(" }");
 #endif
 }
 
 void Pattern::trim_lazy(Positions *pos) const
 {
-#ifdef DEBUG_REFLEX
-  DBGLOG("BEGIN trim_lazy({");
+#ifdef REFLEX_DEBUG
+  REFLEX_DBGLOG("BEGIN trim_lazy({");
   for (Positions::const_iterator q = pos->begin(); q != pos->end(); ++q)
     DBGLOGPOS(*q);
-  DBGLOGA(" })");
+  REFLEX_DBGLOGA(" })");
 #endif
   Positions::reverse_iterator p = pos->rbegin();
   while (p != pos->rend() && p->lazy())
@@ -1655,11 +1655,11 @@ void Pattern::trim_lazy(Positions *pos) const
       ++q;
     }
   }
-#ifdef DEBUG_REFLEX
-  DBGLOG("END trim_lazy({");
+#ifdef REFLEX_DEBUG
+  REFLEX_DBGLOG("END trim_lazy({");
   for (Positions::const_iterator q = pos->begin(); q != pos->end(); ++q)
     DBGLOGPOS(*q);
-  DBGLOGA(" })");
+  REFLEX_DBGLOGA(" })");
 #endif
 }
 
@@ -1670,7 +1670,7 @@ void Pattern::compile_transition(
     const Map&  lookahead,
     Moves&      moves) const
 {
-  DBGLOG("BEGIN compile_transition()");
+  REFLEX_DBGLOG("BEGIN compile_transition()");
   Positions::const_iterator end = state->end();
   for (Positions::const_iterator k = state->begin(); k != end; ++k)
   {
@@ -1686,16 +1686,16 @@ void Pattern::compile_transition(
     {
       Location loc = k->loc();
       Char c = at(loc);
-      DBGLOGN("At %u: %c", loc, c);
+      REFLEX_DBGLOGN("At %u: %c", loc, c);
       bool literal = is_modified('q', modifiers, loc);
       if (c == '(' && !literal)
       {
         Lookahead n = 0;
-        DBGLOG("LOOKAHEAD HEAD");
+        REFLEX_DBGLOG("LOOKAHEAD HEAD");
         for (Map::const_iterator i = lookahead.begin(); i != lookahead.end(); ++i)
         {
           Locations::const_iterator j = i->second.find(loc);
-          DBGLOGN("%d %d (%d) %u", state->accept, i->first, j != i->second.end(), n);
+          REFLEX_DBGLOGN("%d %d (%d) %u", state->accept, i->first, j != i->second.end(), n);
           if (j != i->second.end())
           {
             Lookahead l = n + static_cast<Lookahead>(std::distance(i->second.begin(), j));
@@ -1716,11 +1716,11 @@ void Pattern::compile_transition(
         */
         {
           Lookahead n = 0;
-          DBGLOG("LOOKAHEAD TAIL");
+          REFLEX_DBGLOG("LOOKAHEAD TAIL");
           for (Map::const_iterator i = lookahead.begin(); i != lookahead.end(); ++i)
           {
             Locations::const_iterator j = i->second.find(loc);
-            DBGLOGN("%d %d (%d) %u", state->accept, i->first, j != i->second.end(), n);
+            REFLEX_DBGLOGN("%d %d (%d) %u", state->accept, i->first, j != i->second.end(), n);
             if (j != i->second.end() /* CHECKED algorithmic options: 7/18 && state->accept == i->first */ ) // only add lookstop when part of the proper accept state
             {
               Lookahead l = n + static_cast<Lookahead>(std::distance(i->second.begin(), j));
@@ -1764,13 +1764,13 @@ void Pattern::compile_transition(
               j = followpos.insert(std::pair<Position,Positions>(*k, Positions())).first;
               for (Positions::const_iterator p = i->second.begin(); p != i->second.end(); ++p)
                 j->second.insert(/* p->lazy() || CHECKED algorithmic options: 7/31 */ p->ticked() ? *p : /* CHECKED algorithmic options: 7/31 adds too many states p->greedy() ? p->lazy(0).greedy(false) : */ p->lazy(k->lazy())); // CHECKED algorithmic options: 7/18 ticked() preserves lookahead tail at '/' and ')'
-#ifdef DEBUG_REFLEX
-              DBGLOGN("lazy followpos(");
+#ifdef REFLEX_DEBUG
+              REFLEX_DBGLOGN("lazy followpos(");
               DBGLOGPOS(*k);
-              DBGLOGA(" ) = {");
+              REFLEX_DBGLOGA(" ) = {");
               for (Positions::const_iterator q = j->second.begin(); q != j->second.end(); ++q)
                 DBGLOGPOS(*q);
-              DBGLOGA(" }");
+              REFLEX_DBGLOGA(" }");
 #endif
             }
             i = j;
@@ -1895,7 +1895,7 @@ void Pattern::compile_transition(
     else
       ++i;
   }
-  DBGLOG("END compile_transition()");
+  REFLEX_DBGLOG("END compile_transition()");
 }
 
 void Pattern::transition(
@@ -2036,7 +2036,7 @@ void Pattern::compile_list(Location loc, Chars& chars, const Map& modifiers) con
 
 void Pattern::posix(size_t index, Chars& chars) const
 {
-  DBGLOG("posix(%lu)", index);
+  REFLEX_DBGLOG("posix(%lu)", index);
   static const uint_least64_t posix_chars[14][5] = {
     { 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 0ULL, 0ULL, 0ULL }, // ASCII
     { 0x0000000100003E00ULL, 0x0000000000000000ULL, 0ULL, 0ULL, 0ULL }, // Space: \t-\r, ' '
@@ -2063,7 +2063,7 @@ void Pattern::flip(Chars& chars) const
 
 void Pattern::assemble(DFA::State *start)
 {
-  DBGLOG("BEGIN assemble()");
+  REFLEX_DBGLOG("BEGIN assemble()");
   timer_type t;
   timer_start(t);
   predict_match_dfa(start);
@@ -2075,12 +2075,12 @@ void Pattern::assemble(DFA::State *start)
   #endif
   gencode_dfa(start);
   export_code();
-  DBGLOG("END assemble()");
+  REFLEX_DBGLOG("END assemble()");
 }
 
 void Pattern::compact_dfa(DFA::State *start)
 {
-#if WITH_COMPACT_DFA == -1
+#if REFLEX_WITH_COMPACT_DFA == -1
   // edge compaction in reverse order
   for (DFA::State *state = start; state; state = state->next)
   {
@@ -2106,7 +2106,7 @@ void Pattern::compact_dfa(DFA::State *start)
       }
     }
   }
-#elif WITH_COMPACT_DFA == 1
+#elif REFLEX_WITH_COMPACT_DFA == 1
   // edge compaction
   for (DFA::State *state = start; state; state = state->next)
   {
@@ -2145,7 +2145,7 @@ void Pattern::encode_dfa(DFA::State *start)
     if (state->accept > Const::AMAX)
       state->accept = Const::AMAX;
     state->first = state->index = nop_;
-#if WITH_COMPACT_DFA == -1
+#if REFLEX_WITH_COMPACT_DFA == -1
     Char hi = 0x00;
     for (DFA::State::Edges::const_iterator i = state->edges.begin(); i != state->edges.end(); ++i)
     {
@@ -2197,7 +2197,7 @@ void Pattern::encode_dfa(DFA::State *start)
     for (DFA::State *state = start; state; state = state->next)
     {
       state->index = nop_;
-#if WITH_COMPACT_DFA == -1
+#if REFLEX_WITH_COMPACT_DFA == -1
       Char hi = 0x00;
       for (DFA::State::Edges::const_iterator i = state->edges.begin(); i != state->edges.end(); ++i)
       {
@@ -2278,7 +2278,7 @@ void Pattern::encode_dfa(DFA::State *start)
         throw regex_error(regex_error::exceeds_limits, rex_, rex_.size());
       opcode[pc++] = opcode_head(static_cast<Index>(*i));
     }
-#if WITH_COMPACT_DFA == -1
+#if REFLEX_WITH_COMPACT_DFA == -1
     for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
     {
       Char lo = i->first;
@@ -2437,7 +2437,7 @@ void Pattern::gencode_dfa(const DFA::State *start) const
           bool prev = false; // if we need to keep the previous character in c0
           for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
           {
-#if WITH_COMPACT_DFA == -1
+#if REFLEX_WITH_COMPACT_DFA == -1
             Char lo = i->first;
             Char hi = i->second.first;
 #else
@@ -2470,7 +2470,7 @@ void Pattern::gencode_dfa(const DFA::State *start) const
           }
           bool read = peek;
           bool elif = false;
-#if WITH_COMPACT_DFA == -1
+#if REFLEX_WITH_COMPACT_DFA == -1
           for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
           {
             Char lo = i->first;
@@ -2690,7 +2690,7 @@ void Pattern::check_dfa_closure(const DFA::State *state, int nest, bool& peek, b
     return;
   for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
   {
-#if WITH_COMPACT_DFA == -1
+#if REFLEX_WITH_COMPACT_DFA == -1
     Char lo = i->first;
     Char hi = i->second.first;
 #else
@@ -2736,7 +2736,7 @@ void Pattern::gencode_dfa_closure(FILE *file, const DFA::State *state, int nest,
     return;
   for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
   {
-#if WITH_COMPACT_DFA == -1
+#if REFLEX_WITH_COMPACT_DFA == -1
     Char lo = i->first;
     Char hi = i->second.first;
 #else
@@ -2818,7 +2818,7 @@ void Pattern::export_dfa(const DFA::State *start) const
           if (state != start && !state->accept && state->heads.empty() && state->tails.empty())
             ::fprintf(file, "\n/*STATE*/\t");
           ::fprintf(file, "N%p [label=\"", (void*)state);
-#ifdef DEBUG_REFLEX
+#ifdef REFLEX_DEBUG
           size_t k = 1;
           size_t n = std::sqrt(state->size()) + 0.5;
           const char *sep = "";
@@ -2869,7 +2869,7 @@ void Pattern::export_dfa(const DFA::State *start) const
             ::fprintf(file, "\"];\n");
           for (DFA::State::Edges::const_iterator i = state->edges.begin(); i != state->edges.end(); ++i)
           {
-#if WITH_COMPACT_DFA == -1
+#if REFLEX_WITH_COMPACT_DFA == -1
             Char lo = i->first;
             Char hi = i->second.first;
 #else
@@ -3031,7 +3031,7 @@ void Pattern::export_code() const
 
 void Pattern::predict_match_dfa(DFA::State *start)
 {
-  DBGLOG("BEGIN Pattern::predict_match_dfa()");
+  REFLEX_DBGLOG("BEGIN Pattern::predict_match_dfa()");
   DFA::State *state = start;
   one_ = true;
   while (state->accept == 0)
@@ -3075,15 +3075,15 @@ void Pattern::predict_match_dfa(DFA::State *start)
   if (state != nullptr && state->accept == 0)
   {
     gen_predict_match(state);
-#ifdef DEBUG_REFLEX
+#ifdef REFLEX_DEBUG
     for (Char i = 0; i < 256; ++i)
     {
       if (bit_[i] != 0xFF)
       {
         if (isprint(i))
-          DBGLOGN("bit['%c'] = %02x", i, bit_[i]);
+          REFLEX_DBGLOGN("bit['%c'] = %02x", i, bit_[i]);
         else
-          DBGLOGN("bit[%3d] = %02x", i, bit_[i]);
+          REFLEX_DBGLOGN("bit[%3d] = %02x", i, bit_[i]);
       }
     }
     for (Hash i = 0; i < Const::HASH; ++i)
@@ -3091,9 +3091,9 @@ void Pattern::predict_match_dfa(DFA::State *start)
       if (pmh_[i] != 0xFF)
       {
         if (isprint(pmh_[i]))
-          DBGLOGN("pmh['%c'] = %02x", i, pmh_[i]);
+          REFLEX_DBGLOGN("pmh['%c'] = %02x", i, pmh_[i]);
         else
-          DBGLOGN("pmh[%3d] = %02x", i, pmh_[i]);
+          REFLEX_DBGLOGN("pmh[%3d] = %02x", i, pmh_[i]);
       }
     }
     for (Hash i = 0; i < Const::HASH; ++i)
@@ -3101,15 +3101,15 @@ void Pattern::predict_match_dfa(DFA::State *start)
       if (pma_[i] != 0xFF)
       {
         if (isprint(pma_[i]))
-          DBGLOGN("pma['%c'] = %02x", i, pma_[i]);
+          REFLEX_DBGLOGN("pma['%c'] = %02x", i, pma_[i]);
         else
-          DBGLOGN("pma[%3d] = %02x", i, pma_[i]);
+          REFLEX_DBGLOGN("pma[%3d] = %02x", i, pma_[i]);
       }
     }
 #endif
   }
-  DBGLOGN("min = %zu", min_);
-  DBGLOG("END Pattern::predict_match_dfa()");
+  REFLEX_DBGLOGN("min = %zu", min_);
+  REFLEX_DBGLOG("END Pattern::predict_match_dfa()");
 }
 
 void Pattern::gen_predict_match(DFA::State *state)

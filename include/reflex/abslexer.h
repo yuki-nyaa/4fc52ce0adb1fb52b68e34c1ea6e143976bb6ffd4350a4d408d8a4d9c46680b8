@@ -251,7 +251,7 @@ class AbstractLexer {
   /// Delete abstract lexer, deletes this matcher's internal buffer.
   virtual ~AbstractLexer()
   {
-    DBGLOG("AbstractLexer::~AbstractLexer()");
+    REFLEX_DBGLOG("AbstractLexer::~AbstractLexer()");
     if (own_)
     {
 #if defined(REFLEX_WITH_REALLOC)
@@ -275,7 +275,7 @@ class AbstractLexer {
   /// Reset this matcher's state to the initial state.
   void reset()
   {
-    DBGLOG("AbstractLexer::reset()");
+    REFLEX_DBGLOG("AbstractLexer::reset()");
     if (own_==false)
     {
       max_ = 2 * Const::BLOCK;
@@ -324,7 +324,7 @@ class AbstractLexer {
   {
     if (blk > Const::BLOCK)
       blk = Const::BLOCK;
-    DBGLOG("AbstractLexer::buffer(%zu)", blk);
+    REFLEX_DBGLOG("AbstractLexer::buffer(%zu)", blk);
     blk_ = blk;
     if (blk > 0 || eof_ || in.eof())
       return true;
@@ -373,13 +373,13 @@ class AbstractLexer {
   void interactive()
     /// @note Use this method before any matching is done and before any input is read since the last time input was (re)set.
   {
-    DBGLOG("AbstractLexer::interactive()");
+    REFLEX_DBGLOG("AbstractLexer::interactive()");
     (void)buffer(1);
   }
   /// Flush the buffer's remaining content.
   void flush()
   {
-    DBGLOG("AbstractLexer::flush()");
+    REFLEX_DBGLOG("AbstractLexer::flush()");
     pos_ = end_;
   }
   /// Returns more input data directly from the source (method can be overriden, as by reflex::FlexLexer::get(s, n) for example that invokes reflex::FlexLexer::LexerInput(s, n)).
@@ -400,7 +400,7 @@ class AbstractLexer {
   virtual AbstractLexer& input(const Input& input) ///< input character sequence for this matcher
     /// @returns this matcher
   {
-    DBGLOG("AbstractLexer::input()");
+    REFLEX_DBGLOG("AbstractLexer::input()");
     in = input;
     reset();
     return *this;
@@ -914,7 +914,7 @@ class AbstractLexer {
   int input()
     /// @returns the next character (unsigned char 0..255) from input or EOF (-1)
   {
-    DBGLOG("AbstractLexer::input() pos = %zu end = %zu", pos_, end_);
+    REFLEX_DBGLOG("AbstractLexer::input() pos = %zu end = %zu", pos_, end_);
     if (pos_ < end_)
     {
       if (chr_ != '\0' && buf_ + pos_ == txt_ + len_)
@@ -938,7 +938,7 @@ class AbstractLexer {
   int winput()
     /// @returns the next wide character (unsigned 0..U+10FFFF) or EOF (-1)
   {
-    DBGLOG("AbstractLexer::winput()");
+    REFLEX_DBGLOG("AbstractLexer::winput()");
     char tmp[8] = { 0 }, *s = tmp;
     int c;
     if ((c = input()) == EOF)
@@ -954,7 +954,7 @@ class AbstractLexer {
   /// Put back one character (8-bit) on the input character sequence for matching, DANGER: invalidates the previous text() pointer and match info, unput is not honored when matching in-place using buffer(base, size) and nothing has been read yet.
   void unput(char c) ///< 8-bit character to put back
   {
-    DBGLOG("AbstractLexer::unput()");
+    REFLEX_DBGLOG("AbstractLexer::unput()");
     reset_text();
     if (pos_ > 0)
     {
@@ -980,7 +980,7 @@ class AbstractLexer {
   /// Put back one (wide) character on the input character sequence for matching, DANGER: invalidates the previous text() pointer and match info, unput is not honored when matching in-place using buffer(base, size) and nothing has been read yet.
   void wunput(int c) ///< character to put back
   {
-    DBGLOG("AbstractLexer::wunput()");
+    REFLEX_DBGLOG("AbstractLexer::wunput()");
     char tmp[8];
     size_t n = utf8(c, tmp);
     if (pos_ >= n)
@@ -1007,7 +1007,7 @@ class AbstractLexer {
   /// Put back one (u32) character on the input character sequence for matching, DANGER: invalidates the previous text() pointer and match info, unput is not honored when matching in-place using buffer(base, size) and nothing has been read yet.
   void u32unput(char32_t c) ///< character to put back
   {
-    DBGLOG("AbstractLexer::u32unput()");
+    REFLEX_DBGLOG("AbstractLexer::u32unput()");
     char tmp[8];
     size_t n = toutf8(c, tmp);
     if (pos_ >= n)
@@ -1035,7 +1035,7 @@ class AbstractLexer {
   int peek()
     /// @returns the character (unsigned char 0..255) or EOF (-1)
   {
-    DBGLOG("AbstractLexer::peek()");
+    REFLEX_DBGLOG("AbstractLexer::peek()");
 #if defined(REFLEX_WITH_FAST_GET)
     return pos_ < end_ ? static_cast<unsigned char>(buf_[pos_]) : peek_more();
 #else
@@ -1050,7 +1050,7 @@ class AbstractLexer {
       end_ += get(buf_ + end_, blk_ > 0 ? blk_ : max_ - end_ - 1);
       if (pos_ < end_)
         return static_cast<unsigned char>(buf_[pos_]);
-      DBGLOGN("peek(): EOF");
+      REFLEX_DBGLOGN("peek(): EOF");
       if (!wrap())
       {
         eof_ = true;
@@ -1112,7 +1112,7 @@ class AbstractLexer {
   const char *span()
     /// @returns const char* span of text for the entire line
   {
-    DBGLOG("AbstractLexer::span()");
+    REFLEX_DBGLOG("AbstractLexer::span()");
     (void)lineno();
     len_ += txt_ - bol_;
     txt_ = bol_;
@@ -1128,7 +1128,7 @@ class AbstractLexer {
   std::string line()
     /// @returns matching line as a string
   {
-    DBGLOG("AbstractLexer::line()");
+    REFLEX_DBGLOG("AbstractLexer::line()");
     reset_text();
     const char *e = eol(); // warning: must call eol() before bol()
     const char *b = bol();
@@ -1138,7 +1138,7 @@ class AbstractLexer {
   std::wstring wline()
     /// @returns matching line as a wide string
   {
-    DBGLOG("AbstractLexer::wline()");
+    REFLEX_DBGLOG("AbstractLexer::wline()");
     reset_text();
     const char *e = eol(); // warning: must call eol() before bol()
     const char *b = bol();
@@ -1151,7 +1151,7 @@ class AbstractLexer {
   bool skip(char c) ///< ASCII character to skip to
     /// @returns true if skipped to c, false if EOF is reached
   {
-    DBGLOG("AbstractLexer::skip()");
+    REFLEX_DBGLOG("AbstractLexer::skip()");
     reset_text();
     len_ = 0;
     while (true)
@@ -1229,7 +1229,7 @@ class AbstractLexer {
   const char *rest()
     /// @returns const char* string of the remaining input (wrapped with more input when AbstractLexer::wrap is defined)
   {
-    DBGLOG("AbstractLexer::rest()");
+    REFLEX_DBGLOG("AbstractLexer::rest()");
     reset_text();
     cur_ = pos_;
     txt_ = buf_ + cur_;
@@ -1243,7 +1243,7 @@ class AbstractLexer {
     }
     len_ = end_ - cur_;
     pos_ = cur_ = end_;
-    DBGLOGN("rest() length = %zu", len_);
+    REFLEX_DBGLOGN("rest() length = %zu", len_);
     return text();
   }
   /// Append the next match to the currently matched text returned by AbstractLexer::text, when the next match found is adjacent to the current match.
@@ -1256,10 +1256,10 @@ class AbstractLexer {
   {
     if (n < len_)
     {
-      DBGCHK(pos_ < max_);
+      REFLEX_DBGCHK(pos_ < max_);
       reset_text();
       pos_ = txt_ - buf_ + n;
-      DBGCHK(pos_ < max_);
+      REFLEX_DBGCHK(pos_ < max_);
       len_ = n;
       cur_ = pos_;
     }
@@ -1387,7 +1387,7 @@ class AbstractLexer {
     if (bol_ + Const::BLOCK < txt_ && evh_ == nullptr)
     {
       // this line is very long, likely a binary file, so shift a block size away from the match instead
-      DBGLOG("Line in buffer to long to shift, moving bol position to text match position minus %zu", Const::BLOCK);
+      REFLEX_DBGLOG("Line in buffer to long to shift, moving bol position to text match position minus %zu", Const::BLOCK);
       bol_ = txt_ - Const::BLOCK;
     }
     size_t gap = bol_ - buf_;
@@ -1404,14 +1404,14 @@ class AbstractLexer {
     std::memmove(buf_, buf_ + gap, end_);
     if (max_ - end_ >= need)
     {
-      DBGLOG("Shift buffer to close gap of %zu bytes", gap);
+      REFLEX_DBGLOG("Shift buffer to close gap of %zu bytes", gap);
     }
     else
     {
       size_t newmax = end_ + need;
       while (max_ < newmax)
         max_ *= 2;
-      DBGLOG("Expand buffer to %zu bytes", max_);
+      REFLEX_DBGLOG("Expand buffer to %zu bytes", max_);
 #if defined(REFLEX_WITH_REALLOC)
 #if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__)
       char *newbuf = static_cast<char*>(_aligned_realloc(static_cast<void*>(buf_), max_, 4096));
@@ -1434,7 +1434,7 @@ class AbstractLexer {
     size_t gap = txt_ - buf_;
     if (max_ - end_ + gap >= need)
     {
-      DBGLOG("Shift buffer to close gap of %zu bytes", gap);
+      REFLEX_DBGLOG("Shift buffer to close gap of %zu bytes", gap);
       (void)lineno();
       cur_ -= gap;
       ind_ -= gap;
@@ -1454,7 +1454,7 @@ class AbstractLexer {
         max_ *= 2;
       if (oldmax < max_)
       {
-        DBGLOG("Expand buffer from %zu to %zu bytes", oldmax, max_);
+        REFLEX_DBGLOG("Expand buffer from %zu to %zu bytes", oldmax, max_);
         (void)lineno();
         cur_ -= gap;
         ind_ -= gap;
@@ -1487,7 +1487,7 @@ class AbstractLexer {
   int get()
     /// @returns the character read (unsigned char 0..255) or EOF (-1)
   {
-    DBGLOG("AbstractLexer::get()");
+    REFLEX_DBGLOG("AbstractLexer::get()");
 #if defined(REFLEX_WITH_FAST_GET)
     return pos_ < end_ ? static_cast<unsigned char>(buf_[pos_++]) : get_more();
 #else
@@ -1502,7 +1502,7 @@ class AbstractLexer {
       end_ += get(buf_ + end_, blk_ > 0 ? blk_ : max_ - end_ - 1);
       if (pos_ < end_)
         return static_cast<unsigned char>(buf_[pos_++]);
-      DBGLOGN("get(): EOF");
+      REFLEX_DBGLOGN("get(): EOF");
       if (!wrap())
       {
         eof_ = true;
@@ -1523,7 +1523,7 @@ class AbstractLexer {
   /// Set the current position in the buffer for the next match.
   void set_current(size_t loc) ///< new location in buffer
   {
-    DBGCHK(loc <= end_);
+    REFLEX_DBGCHK(loc <= end_);
     pos_ = cur_ = loc;
 #if defined(REFLEX_WITH_SPAN)
     got_ = loc > 0 ? static_cast<unsigned char>(buf_[loc - 1]) : '\n';
@@ -1541,7 +1541,7 @@ class AbstractLexer {
   int get_more()
     /// @returns the character read (unsigned char 0..255) or EOF (-1)
   {
-    DBGLOG("AbstractLexer::get_more()");
+    REFLEX_DBGLOG("AbstractLexer::get_more()");
     if (eof_)
       return EOF;
     while (true)
@@ -1551,7 +1551,7 @@ class AbstractLexer {
       end_ += get(buf_ + end_, blk_ > 0 ? blk_ : max_ - end_ - 1);
       if (pos_ < end_)
         return static_cast<unsigned char>(buf_[pos_++]);
-      DBGLOGN("get_more(): EOF");
+      REFLEX_DBGLOGN("get_more(): EOF");
       if (!wrap())
       {
         eof_ = true;
@@ -1563,7 +1563,7 @@ class AbstractLexer {
   int peek_more()
     /// @returns the character (unsigned char 0..255) or EOF (-1)
   {
-    DBGLOG("AbstractLexer::peek_more()");
+    REFLEX_DBGLOG("AbstractLexer::peek_more()");
     if (eof_)
       return EOF;
     while (true)
@@ -1573,7 +1573,7 @@ class AbstractLexer {
       end_ += get(buf_ + end_, blk_ > 0 ? blk_ : max_ - end_ - 1);
       if (pos_ < end_)
         return static_cast<unsigned char>(buf_[pos_]);
-      DBGLOGN("peek_more(): EOF");
+      REFLEX_DBGLOGN("peek_more(): EOF");
       if (!wrap())
       {
         eof_ = true;

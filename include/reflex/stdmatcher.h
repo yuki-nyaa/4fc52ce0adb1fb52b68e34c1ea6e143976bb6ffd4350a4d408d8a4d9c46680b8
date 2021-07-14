@@ -102,7 +102,7 @@ class StdMatcher : public PatternMatcher<std::regex> {
   /// Reset this matcher's state to the initial state and when assigned new input.
   virtual void reset(const char *opt = nullptr)
   {
-    DBGLOG("StdMatcher::reset()");
+    REFLEX_DBGLOG("StdMatcher::reset()");
     itr_ = fin_ = std::cregex_iterator();
     grp_ = 0;
     PatternMatcher::reset(opt);
@@ -187,7 +187,7 @@ class StdMatcher : public PatternMatcher<std::regex> {
   virtual size_t match(Method method) ///< match method Const::SCAN, Const::FIND, Const::SPLIT, or Const::MATCH
     /// @returns nonzero when input matched the pattern using method Const::SCAN, Const::FIND, Const::SPLIT, or Const::MATCH.
   {
-    DBGLOG("BEGIN StdMatcher::match(%d)", method);
+    REFLEX_DBGLOG("BEGIN StdMatcher::match(%d)", method);
     reset_text();
     txt_ = buf_ + cur_; // set first of text(), cur_ was last pos_, or cur_ was set with more()
     cur_ = pos_; // reset cur_ when changed in more()
@@ -195,7 +195,7 @@ class StdMatcher : public PatternMatcher<std::regex> {
     {
       if ((*itr_)[0].second == buf_ + pos_) // if last of regex iterator is still valid in buf_[] then
       {
-        DBGLOGN("Continue iterating, pos = %zu", pos_);
+        REFLEX_DBGLOGN("Continue iterating, pos = %zu", pos_);
         ++itr_;
         if (itr_ != fin_) // set pos_ to last of the match
         {
@@ -210,7 +210,7 @@ class StdMatcher : public PatternMatcher<std::regex> {
               --txt_;
               --cur_;
               pos_ = (*itr_)[0].second - buf_;
-              DBGLOGN("Force iterator forward pos = %zu", pos_);
+              REFLEX_DBGLOGN("Force iterator forward pos = %zu", pos_);
             }
           }
         }
@@ -227,13 +227,13 @@ class StdMatcher : public PatternMatcher<std::regex> {
         if (end_ + blk_ + 1 >= max_ && grow()) // make sure we have enough storage to read input
           itr_ = fin_; // buffer shifting/growing invalidates iterator
         (void)peek_more();
-        DBGLOGN("Got more input pos = %zu end = %zu max = %zu", pos_, end_, max_);
+        REFLEX_DBGLOGN("Got more input pos = %zu end = %zu max = %zu", pos_, end_, max_);
       }
       if (pos_ == end_) // if pos_ is hitting the end_ then
       {
         if (method == Const::SPLIT)
         {
-          DBGLOGN("Split end");
+          REFLEX_DBGLOGN("Split end");
           if (got_ == Const::EOB)
           {
             cap_ = 0;
@@ -252,7 +252,7 @@ class StdMatcher : public PatternMatcher<std::regex> {
             }
             else
             {
-              DBGLOGN("Matched empty end");
+              REFLEX_DBGLOGN("Matched empty end");
               cap_ = Const::EMPTY;
               len_ = pos_ - (txt_ - buf_); // size() spans txt_ to cur_ in buf_[]
               got_ = Const::EOB;
@@ -260,15 +260,15 @@ class StdMatcher : public PatternMatcher<std::regex> {
             }
             itr_ = fin_;
             cur_ = pos_;
-            DBGLOGN("Split: act = %zu txt = '%s' len = %zu pos = %zu eof = %d", cap_, txt_, len_, pos_, eof_ == true);
+            REFLEX_DBGLOGN("Split: act = %zu txt = '%s' len = %zu pos = %zu eof = %d", cap_, txt_, len_, pos_, eof_ == true);
           }
-          DBGLOG("END StdMatcher::match()");
+          REFLEX_DBGLOG("END StdMatcher::match()");
           return cap_;
         }
         if (method == Const::FIND && opt_.N && eof_ && (itr_ == fin_ || (*itr_)[0].first == buf_ + end_))
         {
-          DBGLOGN("No match, pos = %zu", pos_);
-          DBGLOG("END StdMatcher::match()");
+          REFLEX_DBGLOGN("No match, pos = %zu", pos_);
+          REFLEX_DBGLOG("END StdMatcher::match()");
           return 0;
         }
         if (itr_ != fin_)
@@ -277,9 +277,9 @@ class StdMatcher : public PatternMatcher<std::regex> {
       new_itr(method); // need new iterator
       if (itr_ != fin_)
       {
-        DBGLOGN("Match, pos = %zu", pos_);
+        REFLEX_DBGLOGN("Match, pos = %zu", pos_);
         pos_ = (*itr_)[0].second - buf_; // set pos_ to last of the match
-        DBGLOGN("Match, new pos = %zu end_ = %zu", pos_, end_);
+        REFLEX_DBGLOGN("Match, new pos = %zu end_ = %zu", pos_, end_);
       }
       else // no match
       {
@@ -288,8 +288,8 @@ class StdMatcher : public PatternMatcher<std::regex> {
           pos_ = cur_;
           len_ = 0;
           cap_ = 0;
-          DBGLOGN("No match, pos = %zu", pos_);
-          DBGLOG("END StdMatcher::match()");
+          REFLEX_DBGLOGN("No match, pos = %zu", pos_);
+          REFLEX_DBGLOG("END StdMatcher::match()");
           return 0;
         }
         pos_ = end_;
@@ -299,22 +299,22 @@ class StdMatcher : public PatternMatcher<std::regex> {
             continue;
           len_ = 0;
           cap_ = 0;
-          DBGLOGN("No match at EOF, pos = %zu", pos_);
-          DBGLOG("END StdMatcher::match()");
+          REFLEX_DBGLOGN("No match at EOF, pos = %zu", pos_);
+          REFLEX_DBGLOG("END StdMatcher::match()");
           return 0;
         }
       }
     }
     if (method == Const::SPLIT)
     {
-      DBGLOGN("Split match");
+      REFLEX_DBGLOGN("Split match");
       size_t n = (*itr_).size();
       for (cap_ = 1; cap_ < n && !(*itr_)[cap_].matched; ++cap_)
         continue; // set cap_ to the capture index
       len_ = (*itr_)[0].first - txt_;
       set_current(pos_);
-      DBGLOGN("Split: act = %zu txt = '%s' len = %zu pos = %zu", cap_, txt_, len_, pos_);
-      DBGLOG("END StdMatcher::match()");
+      REFLEX_DBGLOGN("Split: act = %zu txt = '%s' len = %zu pos = %zu", cap_, txt_, len_, pos_);
+      REFLEX_DBGLOG("END StdMatcher::match()");
       return cap_;
     }
     else if ((cur_ == end_ && eof_ && method != Const::MATCH) || !(*itr_)[0].matched || (buf_ + cur_ != (*itr_)[0].first && method != Const::FIND)) // if no match at first and we're not searching then
@@ -323,8 +323,8 @@ class StdMatcher : public PatternMatcher<std::regex> {
       pos_ = cur_;
       len_ = 0;
       cap_ = 0;
-      DBGLOGN("No match, pos = %zu", pos_);
-      DBGLOG("END StdMatcher::match()");
+      REFLEX_DBGLOGN("No match, pos = %zu", pos_);
+      REFLEX_DBGLOG("END StdMatcher::match()");
       return 0;
     }
     if (method == Const::FIND)
@@ -338,15 +338,15 @@ class StdMatcher : public PatternMatcher<std::regex> {
       set_current(end_);
     if (len_ == 0 && (method == Const::SCAN || (method == Const::FIND && !opt_.N))) // work around std::regex match_not_null bug
       return 0;
-    DBGLOGN("Accept: act = %zu txt = '%s' len = %zu", cap_, txt_, len_);
-    DBGCHK(len_ != 0 || method == Const::MATCH || (method == Const::FIND && opt_.N));
-    DBGLOG("END StdMatcher::match()");
+    REFLEX_DBGLOGN("Accept: act = %zu txt = '%s' len = %zu", cap_, txt_, len_);
+    REFLEX_DBGCHK(len_ != 0 || method == Const::MATCH || (method == Const::FIND && opt_.N));
+    REFLEX_DBGLOG("END StdMatcher::match()");
     return cap_;
   }
   /// Create a new std::regex iterator to (continue to) advance over input.
   inline void new_itr(Method method)
   {
-    DBGLOGN("New iterator");
+    REFLEX_DBGLOGN("New iterator");
     std::regex_constants::match_flag_type flg = flg_;
     if (!at_bol())
       flg |= std::regex_constants::match_not_bol;

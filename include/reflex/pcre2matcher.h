@@ -149,7 +149,7 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
   /// Reset this matcher's state to the initial state and when assigned new input.
   virtual void reset(const char *opt = nullptr)
   {
-    DBGLOG("PCRE2Matcher::reset()");
+    REFLEX_DBGLOG("PCRE2Matcher::reset()");
     flg_ = 0;
     grp_ = 0;
     PatternMatcher::reset(opt);
@@ -279,7 +279,7 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
   /// Compile pattern for jit partial matching and allocate match data.
   void compile()
   {
-    DBGLOG("BEGIN PCRE2Matcher::compile()");
+    REFLEX_DBGLOG("BEGIN PCRE2Matcher::compile()");
     if (dat_ != nullptr)
     {
       pcre2_match_data_free(dat_);
@@ -302,13 +302,13 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
     }
     jit_ = pcre2_jit_compile(opc_, PCRE2_JIT_PARTIAL_HARD) == 0 && pcre2_pattern_info(opc_, PCRE2_INFO_JITSIZE, nullptr) != 0;
     dat_ = pcre2_match_data_create_from_pattern(opc_, nullptr);
-    DBGLOGN("jit=%d", jit_);
+    REFLEX_DBGLOGN("jit=%d", jit_);
   }
   /// The match method Const::SCAN, Const::FIND, Const::SPLIT, or Const::MATCH, implemented with PCRE2.
   virtual size_t match(Method method) ///< match method Const::SCAN, Const::FIND, Const::SPLIT, or Const::MATCH
     /// @returns nonzero when input matched the pattern using method Const::SCAN, Const::FIND, Const::SPLIT, or Const::MATCH.
   {
-    DBGLOG("BEGIN PCRE2Matcher::match(%d)", method);
+    REFLEX_DBGLOG("BEGIN PCRE2Matcher::match(%d)", method);
     reset_text();
     txt_ = buf_ + cur_; // set first of text(), cur_ was last pos_, or cur_ was set with more()
     cur_ = pos_;
@@ -316,7 +316,7 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
     {
       if (method == Const::SPLIT)
       {
-        DBGLOGN("Split match");
+        REFLEX_DBGLOGN("Split match");
         len_ = cur_ - (txt_ - buf_); // size() spans txt_ to cur_ in buf_[]
         if (cur_ == pos_ && at_bob() && at_end())
         {
@@ -327,8 +327,8 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
         {
           set_current(pos_);
         }
-        DBGLOGN("Split: act = %zu txt = '%s' len = %zu pos = %zu", cap_, txt_, len_, pos_);
-        DBGLOG("END PCRE2Matcher::match()");
+        REFLEX_DBGLOGN("Split: act = %zu txt = '%s' len = %zu pos = %zu", cap_, txt_, len_, pos_);
+        REFLEX_DBGLOG("END PCRE2Matcher::match()");
         return cap_;
       }
       if (method == Const::FIND)
@@ -337,9 +337,9 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
       len_ = cur_ - (txt_ - buf_);
       if (len_ == 0 && cap_ != 0 && opt_.N && at_end())
         cap_ = 0;
-      DBGLOGN("Accept: act = %zu txt = '%s' len = %zu", cap_, txt_, len_);
-      DBGCHK(len_ != 0 || method == Const::MATCH || (method == Const::FIND && opt_.N));
-      DBGLOG("END PCRE2Matcher::match()");
+      REFLEX_DBGLOGN("Accept: act = %zu txt = '%s' len = %zu", cap_, txt_, len_);
+      REFLEX_DBGCHK(len_ != 0 || method == Const::MATCH || (method == Const::FIND && opt_.N));
+      REFLEX_DBGLOG("END PCRE2Matcher::match()");
       return cap_;
     }
     cap_ = 0;
@@ -351,13 +351,13 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
       set_current(end_);
       got_ = Const::EOB;
       len_ = cur_ - (txt_ - buf_); // size() spans txt_ to cur_ in buf_[]
-      DBGLOGN("Split: act = %zu txt = '%s' len = %zu pos = %zu", cap_, txt_, len_, pos_);
-      DBGLOG("END PCRE2Matcher::match()");
+      REFLEX_DBGLOGN("Split: act = %zu txt = '%s' len = %zu pos = %zu", cap_, txt_, len_, pos_);
+      REFLEX_DBGLOG("END PCRE2Matcher::match()");
       return cap_;
     }
     len_ = 0;
-    DBGLOGN("No match, pos = %zu", pos_);
-    DBGLOG("END PCRE2Matcher::match()");
+    REFLEX_DBGLOGN("No match, pos = %zu", pos_);
+    REFLEX_DBGLOG("END PCRE2Matcher::match()");
     return cap_;
   }
   /// Perform next PCRE2 match, return true if a match is found.
@@ -377,7 +377,7 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
       flg_ &= ~(PCRE2_NOTEMPTY_ATSTART | PCRE2_ANCHORED);
     while (true)
     {
-      DBGLOGN("pcre2_match() pos = %zu end = %zu", pos_, end_);
+      REFLEX_DBGLOGN("pcre2_match() pos = %zu end = %zu", pos_, end_);
       int rc;
       /* TODO this may be a bug in PCRE2? If JIT is used to compile the
          pattern for complete and partial matching (these are not exclusive):
@@ -442,10 +442,10 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
       }
       else
       {
-#if defined(DEBUG_REFLEX)
+#if defined(REFLEX_DEBUG)
         PCRE2_UCHAR message[120];
         pcre2_get_error_message(rc, message, sizeof(message));
-        DBGLOGN("Return code: %d '%s' flg=%x", rc, message, flg);
+        REFLEX_DBGLOGN("Return code: %d '%s' flg=%x", rc, message, flg);
 #endif
         return false;
       }

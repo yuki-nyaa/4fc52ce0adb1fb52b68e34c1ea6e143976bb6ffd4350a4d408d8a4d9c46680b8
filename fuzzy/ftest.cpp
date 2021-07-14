@@ -26,7 +26,7 @@
 //   ./ftest 'ab_cd' 'abCd' 2
 //   ./ftest 'ab_cd' 'ab_ab_cd' 2
 
-// #define DEBUG_REFLEX // enable debugging to stderr
+// #define REFLEX_DEBUG // enable debugging to stderr
 
 #include "fuzzymatcher.h"
 

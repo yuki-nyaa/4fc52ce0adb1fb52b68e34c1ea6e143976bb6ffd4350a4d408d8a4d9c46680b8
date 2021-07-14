@@ -41,7 +41,7 @@
 #include <string>
 #include<cuchar>
 
-#if defined(WITH_STANDARD_REPLACEMENT_CHARACTER)
+#if defined(REFLEX_WITH_STANDARD_REPLACEMENT_CHARACTER)
 /// Replace invalid UTF-8 with the standard replacement character U+FFFD.  This is not the default in RE/flex.
 # define REFLEX_NONCHAR      (0xFFFD)
 # define REFLEX_NONCHAR_UTF8 "\xef\xbf\xbd"
@@ -72,9 +72,9 @@ std::string utf8(
   /// @returns regex string to match the UCS range encoded in UTF-8
   ;
 
-/// Convert UCS-4 to UTF-8, fills with REFLEX_NONCHAR_UTF8 when out of range, or unrestricted UTF-8 with WITH_UTF8_UNRESTRICTED.
+/// Convert UCS-4 to UTF-8, fills with REFLEX_NONCHAR_UTF8 when out of range, or unrestricted UTF-8 with REFLEX_WITH_UTF8_UNRESTRICTED.
 inline size_t utf8(
-    int   c, ///< UCS-4 character U+0000 to U+10ffff (unless WITH_UTF8_UNRESTRICTED)
+    int   c, ///< UCS-4 character U+0000 to U+10ffff (unless REFLEX_WITH_UTF8_UNRESTRICTED)
     char *s) ///< points to the buffer to populate with UTF-8 (1 to 6 bytes) not NUL-terminated
   /// @returns length (in bytes) of UTF-8 character sequence stored in s
 {
@@ -83,7 +83,7 @@ inline size_t utf8(
     *s++ = static_cast<char>(c);
     return 1;
   }
-#ifndef WITH_UTF8_UNRESTRICTED
+#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
   if (c > 0x10FFFF)
   {
     static const size_t n = sizeof(REFLEX_NONCHAR_UTF8) - 1;
@@ -105,7 +105,7 @@ inline size_t utf8(
     else
     {
       size_t w = c;
-#ifndef WITH_UTF8_UNRESTRICTED
+#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
       *s++ = static_cast<char>(0xF0 | ((w >> 18) & 0x07));
 #else
       if (c < 0x200000)
@@ -134,7 +134,7 @@ inline size_t utf8(
   return s - t;
 }
 
-/// Convert UTF-8 to UCS, returns REFLEX_NONCHAR for invalid UTF-8 except for MUTF-8 U+0000 and 0xD800-0xDFFF surrogate halves (use WITH_UTF8_UNRESTRICTED to remove any limits on UTF-8 encodings up to 6 bytes).
+/// Convert UTF-8 to UCS, returns REFLEX_NONCHAR for invalid UTF-8 except for MUTF-8 U+0000 and 0xD800-0xDFFF surrogate halves (use REFLEX_WITH_UTF8_UNRESTRICTED to remove any limits on UTF-8 encodings up to 6 bytes).
 inline int utf8(
     const char *s,         ///< points to the buffer with UTF-8 (1 to 6 bytes)
     const char **r = nullptr) ///< points to pointer to set to the new position in s after the UTF-8 sequence, optional
@@ -145,7 +145,7 @@ inline int utf8(
   if (c >= 0x80)
   {
     int c1 = static_cast<unsigned char>(*s);
-#ifndef WITH_UTF8_UNRESTRICTED
+#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
     // reject invalid UTF-8 but permit Modified UTF-8 (MUTF-8) U+0000
     if (c < 0xC0 || (c == 0xC0 && c1 != 0x80) || c == 0xC1 || (c1 & 0xC0) != 0x80)
     {
@@ -163,7 +163,7 @@ inline int utf8(
       else
       {
         int c2 = static_cast<unsigned char>(*s);
-#ifndef WITH_UTF8_UNRESTRICTED
+#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
         // reject invalid UTF-8
         if ((c == 0xE0 && c1 < 0x20) || (c2 & 0xC0) != 0x80)
         {
@@ -181,7 +181,7 @@ inline int utf8(
           else
           {
             int c3 = static_cast<unsigned char>(*s);
-#ifndef WITH_UTF8_UNRESTRICTED
+#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
             // reject invalid UTF-8
             if ((c == 0xF0 && c1 < 0x10) || (c == 0xF4 && c1 >= 0x10) || c >= 0xF5 || (c3 & 0xC0) != 0x80)
             {
@@ -298,7 +298,7 @@ inline std::u32string u32cs(
   char32_t c32;
   std::mbstate_t state{};
   while(std::size_t rc = std::mbrtoc32(&c32, s, n, &state))
-  {   
+  {
       u32s.push_back(c32);
       if(rc==(std::size_t)-1 || rc==(std::size_t)-2) break;
       s += rc;

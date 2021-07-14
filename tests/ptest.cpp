@@ -1,13 +1,13 @@
 
 #include <reflex/pcre2matcher.h>
 
-// #define INTERACTIVE // for interactive mode testing
-// #define UTF // for native PCRE2_UTF+PCRE2_UCP matching, only matches ASCII and Unicode not binary 0-255
+// #define REFLEX_PTEST_INTERACTIVE // for interactive mode testing
+// #define REFLEX_PTEST_UTF // for native PCRE2_UTF+PCRE2_UCP matching, only matches ASCII and Unicode not binary 0-255
 
-#ifdef UTF
-#define MATCHER PCRE2UTFMatcher
+#ifdef REFLEX_PTEST_UTF
+#define REFLEX_PTEST_MATCHER PCRE2UTFMatcher
 #else
-#define MATCHER PCRE2Matcher
+#define REFLEX_PTEST_MATCHER PCRE2Matcher
 #endif
 
 static void banner(const char *title)
@@ -30,9 +30,9 @@ static void error(const char *text)
 
 using namespace reflex;
 
-class WrappedMatcher : public MATCHER {
+class WrappedMatcher : public REFLEX_PTEST_MATCHER {
  public:
-  WrappedMatcher() : MATCHER(), source(0)
+  WrappedMatcher() : REFLEX_PTEST_MATCHER(), source(0)
   { }
  private:
   virtual bool wrap()
@@ -239,7 +239,7 @@ int main()
     std::string regex;
     try
     {
-      regex = MATCHER::convert(test->pattern, convert_flag::recap);
+      regex = REFLEX_PTEST_MATCHER::convert(test->pattern, convert_flag::recap);
     }
     catch (const regex_error& e)
     {
@@ -247,8 +247,8 @@ int main()
     }
     std::cout << regex << std::endl;
     std::string pattern(regex);
-    MATCHER matcher(pattern, test->cstring, test->mopts);
-#ifdef INTERACTIVE
+    REFLEX_PTEST_MATCHER matcher(pattern, test->cstring, test->mopts);
+#ifdef REFLEX_PTEST_INTERACTIVE
     matcher.interactive(); // test with blk=1
 #endif
     printf("Test \"%s\" against \"%s\"\n", test->pattern, test->cstring);
@@ -274,17 +274,17 @@ int main()
     }
     printf("OK\n\n");
   }
-  MATCHER pattern1("(\\w+)|(\\W)");
-  MATCHER pattern2(MATCHER::convert("\\<.*\\>"));
-  MATCHER pattern3(" ");
-  MATCHER pattern4("[ \\t]+");
-  MATCHER pattern5("\\b");
-  MATCHER pattern6("");
-  MATCHER pattern7("[[:alpha:]]");
-  MATCHER pattern8("\\w+");
-  MATCHER pattern9(MATCHER::convert("(?u:\\p{L})"));
+  REFLEX_PTEST_MATCHER pattern1("(\\w+)|(\\W)");
+  REFLEX_PTEST_MATCHER pattern2(REFLEX_PTEST_MATCHER::convert("\\<.*\\>"));
+  REFLEX_PTEST_MATCHER pattern3(" ");
+  REFLEX_PTEST_MATCHER pattern4("[ \\t]+");
+  REFLEX_PTEST_MATCHER pattern5("\\b");
+  REFLEX_PTEST_MATCHER pattern6("");
+  REFLEX_PTEST_MATCHER pattern7("[[:alpha:]]");
+  REFLEX_PTEST_MATCHER pattern8("\\w+");
+  REFLEX_PTEST_MATCHER pattern9(REFLEX_PTEST_MATCHER::convert("(?u:\\p{L})"));
 
-  MATCHER matcher(pattern1);
+  REFLEX_PTEST_MATCHER matcher(pattern1);
   std::string test;
   //
   banner("TEST FIND");
@@ -698,12 +698,12 @@ int main()
   //
   banner("TEST MATCHES");
   //
-  if (MATCHER("\\w+", "hello").matches()) // on the fly string matching
+  if (REFLEX_PTEST_MATCHER("\\w+", "hello").matches()) // on the fly string matching
     std::cout << "OK";
   else
     error("match results");
   std::cout << std::endl;
-  if (MATCHER("\\d", "0").matches())
+  if (REFLEX_PTEST_MATCHER("\\d", "0").matches())
     std::cout << "OK";
   else
     error("match results");

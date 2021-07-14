@@ -6,7 +6,7 @@
 
 #include <reflex/lexer.h>
 
-// #define INTERACTIVE // for interactive mode testing
+// #define REFLEX_RTEST_INTERACTIVE // for interactive mode testing
 
 void banner(const char *title)
 {
@@ -262,7 +262,7 @@ int main()
     Pattern pattern(test->pattern, test->popts);
     Lexer lexer(test->cstring, test->mopts);
     lexer.patterns.push_back(std::move(pattern));
-#ifdef INTERACTIVE
+#ifdef REFLEX_RTEST_INTERACTIVE
     lexer.interactive();
 #endif
     printf("Test \"%s\" against \"%s\"\n", test->pattern, test->cstring);

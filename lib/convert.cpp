@@ -1544,7 +1544,7 @@ std::string convert(const char *pattern, const char *signature, convert_flag_typ
         {
           if (!is_modified(mod, 'u') || !supports_escape(signature, 'X'))
           {
-#ifndef WITH_UTF8_UNRESTRICTED
+#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
             // translate \X to match any ISO-8859-1 and valid UTF-8
             regex.append(&pattern[loc], pos - loc - 1).append(par).append("[\\x00-\\xff]|[\\xc2-\\xdf][\\x80-\\xbf]|\\xe0[\\xa0-\\xbf][\\x80-\\xbf]|[\\xe1-\\xec][\\x80-\\xbf][\\x80-\\xbf]|\\xed[\\x80-\\x9f][\\x80-\\xbf]|[\\xee\\xef][\\x80-\\xbf][\\x80-\\xbf]|\\xf0[\\x90-\\xbf][\\x80-\\xbf][\\x80-\\xbf]|[\\xf1-\\xf3][\\x80-\\xbf][\\x80-\\xbf][\\x80-\\xbf]|\\xf4[\\x80-\\x8f][\\x80-\\xbf][\\x80-\\xbf]").push_back(')');
 #else

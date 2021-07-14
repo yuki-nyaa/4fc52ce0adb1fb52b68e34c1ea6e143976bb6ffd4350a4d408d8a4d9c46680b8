@@ -5,10 +5,10 @@
 #include <reflex/timer.h>
 #include <fstream>
 
-#ifndef DEBUG_REFLEX
-#define RUNS 100
+#ifndef REFLEX_DEBUG
+#define REFLEX_LOREM_RUNS 100
 #else
-#define RUNS 1
+#define REFLEX_LOREM_RUNS 1
 #endif
 
 #include "test_lorem_tokenizer.cpp"  // reflex_code_tokenizer
@@ -35,7 +35,7 @@ void timer(const char *text = nullptr)
   if (text)
   {
     float ms = timer_elapsed(t);
-    printf("%s %g micro seconds\n", text, 1000*ms/RUNS);
+    printf("%s %g micro seconds\n", text, 1000*ms/REFLEX_LOREM_RUNS);
   }
   else
   {
@@ -100,10 +100,10 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
 
   banner(title);
 
-  printf("Number of runs per timed test = %d\n\n", RUNS);
+  printf("Number of runs per timed test = %d\n\n", REFLEX_LOREM_RUNS);
 
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     tokenizer.input(lorem);
     hits = 0;
@@ -114,7 +114,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   if (hits != lorem.size())
     printf("FAIL hits=%zu\n", hits);
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     tokenizer.input(wlorem);
     hits = 0;
@@ -126,7 +126,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
     printf("FAIL hits=%zu\n", hits);
 
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     tokenizer.input(lorem);
     hits = 0;
@@ -137,7 +137,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   if (hits != 2682)
     printf("FAIL hits=%zu\n", hits);
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     tokenizer.input(wlorem);
     hits = 0;
@@ -149,7 +149,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
     printf("FAIL hits=%zu\n", hits);
 
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     filter.input(lorem);
     hits = 0;
@@ -160,7 +160,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   if (hits != 1211)
     printf("FAIL hits=%zu\n", hits);
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     filter.input(wlorem);
     hits = 0;
@@ -172,7 +172,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
     printf("FAIL hits=%zu\n", hits);
 
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     splitter.input(lorem);
     hits = 0;
@@ -183,7 +183,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   if (hits != 1201)
     printf("FAIL hits=%zu\n", hits);
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     splitter.input(wlorem);
     hits = 0;
@@ -195,7 +195,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
     printf("FAIL hits=%zu\n", hits);
 
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     filter.input(lorem);
     std::vector<std::string> words(filter.find.begin(), filter.find.end());
@@ -208,7 +208,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   file = fopen("lorem.txt", "r");
   tokenizer.input(file);
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     rewind(file);
     tokenizer.input(file);
@@ -224,7 +224,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   file = fopen("utf8lorem.txt", "r");
   tokenizer.input(file);
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     rewind(file);
     tokenizer.input(file);
@@ -240,7 +240,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   file = fopen("utf16lorem.txt", "r");
   tokenizer.input(file);
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     rewind(file);
     tokenizer.input(file);
@@ -256,7 +256,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   file = fopen("utf16lelorem.txt", "r");
   tokenizer.input(file);
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     rewind(file);
     tokenizer.input(file);
@@ -272,7 +272,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   file = fopen("utf32lorem.txt", "r");
   tokenizer.input(file);
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     rewind(file);
     tokenizer.input(file);
@@ -288,7 +288,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   file = fopen("latin1lorem.txt", "r");
   tokenizer.input(Input(file, Input::file_encoding::latin));
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     rewind(file);
     tokenizer.input(Input(file, Input::file_encoding::latin));
@@ -304,7 +304,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   file = fopen("ebcdiclorem.txt", "r");
   tokenizer.input(Input(file, Input::file_encoding::ebcdic));
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     rewind(file);
     tokenizer.input(Input(file, Input::file_encoding::ebcdic));
@@ -319,7 +319,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
 
   std::istringstream stream(lorem);
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     stream.clear(); // always do this before seekg()
     stream.seekg(0);
@@ -334,7 +334,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
 
   std::ifstream ifs("lorem.txt", std::ifstream::in);
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     ifs.clear(); // always do this before seekg()
     ifs.seekg(0);
@@ -347,7 +347,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   if (hits != 2682)
     printf("FAIL hits=%zu\n", hits);
   timer();
-  for (size_t run = 0; run < RUNS; ++run)
+  for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
     ifs.clear(); // always do this before seekg()
     ifs.seekg(0);

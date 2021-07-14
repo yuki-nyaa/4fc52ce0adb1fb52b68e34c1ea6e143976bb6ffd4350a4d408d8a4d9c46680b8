@@ -1,7 +1,7 @@
 
 #include <reflex/boostmatcher.h>
 
-// #define INTERACTIVE // for interactive mode testing
+// #define REFLEX_BTEST_INTERACTIVE // for interactive mode testing
 
 static void banner(const char *title)
 {
@@ -112,7 +112,7 @@ Test tests[] = {
   { "^a$", "", "", "a", { 1 } },
   { "(?m)^a$|\\n", "m", "", "a\na", { 1, 2, 1 } },
   { "(?m)^a|a$|a|\\n", "m", "", "aa\naaa", { 1, 2, 4, 1, 3, 2 } },
-#ifndef INTERACTIVE
+#ifndef REFLEX_BTEST_INTERACTIVE
   { "(?m)\\Aa\\Z|\\Aa|a\\Z|^a$|^a|a$|a|^ab$|^ab|ab$|ab|\\n", "m", "", "a\na\naa\naaa\nab\nabab\nababab\na", { 2, 12, 4, 12, 5, 6, 12, 5, 7, 6, 12, 8, 12, 9, 10, 12, 9, 11, 10, 12, 3 } },  // boost has a partial match bug when interactive() blk=1
 #endif
   // Optional X?
@@ -198,7 +198,7 @@ Test tests[] = {
   { "a(?=bc)|ab(?=d)|bc|d", "", "", "abcdabd", { 1, 3, 4, 2, 4 } },
   // { "[ab]+(?=ab)|-|ab", "", "", "aaab-bbab", { 1, 3, 2, 1, 3 } }, // has trailing context (undefined as per POSIX)
   { "(?m)a(?=b?)|bc", "m", "", "aabc", { 1, 1, 2 } },
-#ifndef INTERACTIVE
+#ifndef REFLEX_BTEST_INTERACTIVE
   { "(?m)a(?=\\nb)|a|^b|\\n", "m", "", "aa\nb\n", { 2, 1, 4, 3, 4 } }, // boost has a partial match bug when interactive() blk=1
 #endif
   { "(?m)^a(?=b$)|b|\\n", "m", "", "ab\n", { 1, 2, 3 } },
@@ -207,7 +207,7 @@ Test tests[] = {
   // Word boundaries \<, \>, \b, and \B
   { "\\<a\\>|\\<a|a\\>|a|-", "", "", "a-aaa", { 1, 5, 2, 4, 3 } },
   { "\\<.*ab\\>|[ab]*|-|\\n", "", "", "-aaa-aaba-aab-\n-aaa", { 3, 1, 3, 4, 3, 2 } },
-#ifndef INTERACTIVE
+#ifndef REFLEX_BTEST_INTERACTIVE
   { "\\<.*\\>", "", "", "abc def", { 1 } }, // boost has a partial match bug when interactive() blk=1
 #endif
   { "\\<.*\\>|-", "", "", "abc-", { 1, 2 } },
@@ -219,18 +219,18 @@ Test tests[] = {
   { "(-|a)\\B(-|a)\\B(-|a)", "", "", "---aaa", { 1, 1 } },
   { "\\<(-|a)(-|a)\\>| ", "", "", "aa aa", { 1, 2, 1 } },
   { "\\b(-|a)(-|a)\\b| ", "", "", "aa aa", { 1, 2, 1 } },
-#ifndef INTERACTIVE
+#ifndef REFLEX_BTEST_INTERACTIVE
   { "\\B(-|a)(-|a)\\B|b|#", "", "", "baab#--#", { 2, 1, 2, 3, 1, 3 } }, // boost has a partial match bug when interactive() blk=1
 #endif
   { "-\\b(-|a)(-|a)\\b", "", "", "-aa", { 1 } },
   { "a\\b(-|a)(-|a)\\b", "", "", "a-a", { 1 } },
-#ifndef INTERACTIVE
+#ifndef REFLEX_BTEST_INTERACTIVE
   { "a?\\>(-|a)(-|a)\\b| ", "", "", "a-a-a", { 1, 1 } }, // boost has a partial match bug when interactive() blk=1 & does not check \> at start, so accepts more liberally
 #endif
   { "\\b(-|a)(-|a)\\bz?| ", "", "", "aa a-z", { 1, 2, 1 } },
   { "(-|a)(-|a)\\bz?| ", "", "", "aa a-z", { 1, 2, 1 } },
   { "a?\\b(-|a)(-|a)\\b| ", "", "", "a-a", { 1 } },
-#ifndef INTERACTIVE
+#ifndef REFLEX_BTEST_INTERACTIVE
   { "-(?=\\<a\\>)|-|a|b", "", "", "-a-ab", { 1, 3, 2, 3, 4 } }, // boost has a partial match bug when interactive() blk=1
 #endif
   // Unicode
@@ -255,7 +255,7 @@ int main()
     std::cout << regex << std::endl;
     boost::regex pattern(regex);
     BoostPosixMatcher matcher(pattern, test->cstring, test->mopts);
-#ifdef INTERACTIVE
+#ifdef REFLEX_BTEST_INTERACTIVE
     matcher.interactive(); // test with blk=1
 #endif
     printf("Test \"%s\" against \"%s\"\n", test->pattern, test->cstring);

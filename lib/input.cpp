@@ -1025,7 +1025,7 @@ void Input::wstring_size()
     }
     else
     {
-#ifndef WITH_UTF8_UNRESTRICTED
+#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
       size_ += 1 + (c >= 0x80) + (c >= 0x0800) + (c >= 0x010000);
 #else
       size_ += 1 + (c >= 0x80) + (c >= 0x0800) + (c >= 0x010000) + (c >= 0x200000) + (c >= 0x04000000);
@@ -1096,7 +1096,7 @@ void Input::file_size()
             else
               c = REFLEX_NONCHAR;
           }
-#ifndef WITH_UTF8_UNRESTRICTED
+#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
           else if (c > 0x10FFFF)
           {
             c = REFLEX_NONCHAR;
@@ -1117,7 +1117,7 @@ void Input::file_size()
             else
               c = REFLEX_NONCHAR;
           }
-#ifndef WITH_UTF8_UNRESTRICTED
+#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
           else if (c > 0x10FFFF)
           {
             c = REFLEX_NONCHAR;
@@ -1130,7 +1130,7 @@ void Input::file_size()
         while (::fread(buf, 4, 1, source_.file_) == 1)
         {
           int c = buf[0] << 24 | buf[1] << 16 | buf[2] << 8 | buf[3];
-#ifndef WITH_UTF8_UNRESTRICTED
+#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
           if (c > 0x10FFFF)
             c = REFLEX_NONCHAR;
 #endif
@@ -1141,7 +1141,7 @@ void Input::file_size()
         while (::fread(buf, 4, 1, source_.file_) == 1)
         {
           int c = buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
-#ifndef WITH_UTF8_UNRESTRICTED
+#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
           if (c > 0x10FFFF)
             c = REFLEX_NONCHAR;
 #endif
