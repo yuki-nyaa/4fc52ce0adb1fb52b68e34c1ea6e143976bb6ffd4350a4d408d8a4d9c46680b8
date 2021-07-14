@@ -650,16 +650,16 @@ void Input::file_init(file_encoding enc)
 {
 // open in binary mode to detect BOM, then reset to original mode afterwards unless UTF-16 or UTF-32
 #if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
-  int mode = _setmode(_fileno(underlying_input_.file_), _O_BINARY);
+  int mode = _setmode(_fileno(source_.file_), _O_BINARY);
 #endif
   // attempt to determine the file size with fstat()
 #if !defined(HAVE_CONFIG_H) || defined(HAVE_FSTAT)
 #if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
   struct _stat st;
-  if (_fstat(_fileno(underlying_input_.file_), &st) == 0 && ((st.st_mode & S_IFMT) == S_IFREG) && st.st_size <= 4294967295LL)
+  if (_fstat(_fileno(source_.file_), &st) == 0 && ((st.st_mode & S_IFMT) == S_IFREG) && st.st_size <= 4294967295LL)
 #else
   struct stat st;
-  if (::fstat(::fileno(underlying_input_.file_), &st) == 0 && S_ISREG(st.st_mode) && st.st_size <= 4294967295LL)
+  if (::fstat(::fileno(source_.file_), &st) == 0 && S_ISREG(st.st_mode) && st.st_size <= 4294967295LL)
 #endif
     size_ = static_cast<size_t>(st.st_size);
 #endif
@@ -668,18 +668,18 @@ void Input::file_init(file_encoding enc)
   while (true)
   {
     // check first UTF BOM byte
-    if (::fread(utf8_, 1, 1, underlying_input_.file_) == 1)
+    if (::fread(utf8_, 1, 1, source_.file_) == 1)
     {
       ulen_ = 1;
       if (utf8_[0] == '\0' || utf8_[0] == '\xef' || utf8_[0] == '\xfe' || utf8_[0] == '\xff')
       {
         // check second UTF BOM byte
-        if (::fread(utf8_ + 1, 1, 1, underlying_input_.file_) == 1)
+        if (::fread(utf8_ + 1, 1, 1, source_.file_) == 1)
         {
           ulen_ = 2;
           if (utf8_[0] == '\0' && utf8_[1] == '\0')  // UTF-32 big endian BOM 0000XXXX?
           {
-            if (::fread(&utf8_[2], 2, 1, underlying_input_.file_) == 1)
+            if (::fread(&utf8_[2], 2, 1, source_.file_) == 1)
             {
               ulen_ = 4;
               if (utf8_[2] == '\xfe' && utf8_[3] == '\xff') // UTF-32 big endian BOM 0000FEFF?
@@ -698,7 +698,7 @@ void Input::file_init(file_encoding enc)
           }
           else if (utf8_[0] == '\xff' && utf8_[1] == '\xfe') // UTF-16 or UTF-32 little endian BOM FFFEXXXX?
           {
-            if (::fread(&utf8_[2], 2, 1, underlying_input_.file_) == 1)
+            if (::fread(&utf8_[2], 2, 1, source_.file_) == 1)
             {
               if (utf8_[2] == '\0' && utf8_[3] == '\0') // UTF-32 little endian BOM FFFE0000?
               {
@@ -717,7 +717,7 @@ void Input::file_init(file_encoding enc)
           }
           else if (utf8_[0] == '\xef' && utf8_[1] == '\xbb') // UTF-8 BOM EFBBXX?
           {
-            if (::fread(&utf8_[2], 1, 1, underlying_input_.file_) == 1)
+            if (::fread(&utf8_[2], 1, 1, source_.file_) == 1)
             {
               ulen_ = 3;
               if (utf8_[2] == '\xbf') // UTF-8 BOM EFBBBF?
@@ -733,13 +733,13 @@ void Input::file_init(file_encoding enc)
       }
       break;
     }
-    if (handler_ == nullptr || feof(underlying_input_.file_) || (*handler_)() == 0)
+    if (handler == nullptr || feof(source_.file_) || (*handler)() == 0)
       break;
   }
 #if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
   // if not UTF-16 or UTF-32, then reset mode to original mode (unless the original mode was binary)
   if (mode != _O_BINARY && ((utfx_ == file_encoding::plain && enc != file_encoding::utf16be && enc != file_encoding::utf16le && enc != file_encoding::utf32be && enc != file_encoding::utf32le) || utfx_ == file_encoding::utf8))
-    _setmode(_fileno(underlying_input_.file_), mode);
+    _setmode(_fileno(source_.file_), mode);
 #else
   UNUSED(enc);
 #endif
@@ -768,7 +768,7 @@ size_t Input::file_get(char *s, size_t n)
   switch (utfx_)
   {
     case file_encoding::utf16be:
-      while (n > 0 && ::fread(buf, 2, 1, underlying_input_.file_) == 1)
+      while (n > 0 && ::fread(buf, 2, 1, source_.file_) == 1)
       {
         int c = buf[0] << 8 | buf[1];
         if (c < 0x80)
@@ -781,7 +781,7 @@ size_t Input::file_get(char *s, size_t n)
           if (c >= 0xD800 && c < 0xE000)
           {
             // UTF-16 surrogate pair
-            if (c < 0xDC00 && ::fread(buf + 2, 2, 1, underlying_input_.file_) == 1 && (buf[2] & 0xFC) == 0xDC)
+            if (c < 0xDC00 && ::fread(buf + 2, 2, 1, source_.file_) == 1 && (buf[2] & 0xFC) == 0xDC)
               c = 0x010000 - 0xDC00 + ((c - 0xD800) << 10) + (buf[2] << 8 | buf[3]);
             else
               c = REFLEX_NONCHAR;
@@ -807,7 +807,7 @@ size_t Input::file_get(char *s, size_t n)
         size_ -= t - s;
       return t - s;
     case file_encoding::utf16le:
-      while (n > 0 && ::fread(buf, 2, 1, underlying_input_.file_) == 1)
+      while (n > 0 && ::fread(buf, 2, 1, source_.file_) == 1)
       {
         int c = buf[0] | buf[1] << 8;
         if (c < 0x80)
@@ -820,7 +820,7 @@ size_t Input::file_get(char *s, size_t n)
           if (c >= 0xD800 && c < 0xE000)
           {
             // UTF-16 surrogate pair
-            if (c < 0xDC00 && ::fread(buf + 2, 2, 1, underlying_input_.file_) == 1 && (buf[3] & 0xFC) == 0xDC)
+            if (c < 0xDC00 && ::fread(buf + 2, 2, 1, source_.file_) == 1 && (buf[3] & 0xFC) == 0xDC)
               c = 0x010000 - 0xDC00 + ((c - 0xD800) << 10) + (buf[2] | buf[3] << 8);
             else
               c = REFLEX_NONCHAR;
@@ -846,7 +846,7 @@ size_t Input::file_get(char *s, size_t n)
         size_ -= t - s;
       return t - s;
     case file_encoding::utf32be:
-      while (n > 0 && ::fread(buf, 4, 1, underlying_input_.file_) == 1)
+      while (n > 0 && ::fread(buf, 4, 1, source_.file_) == 1)
       {
         int c = buf[0] << 24 | buf[1] << 16 | buf[2] << 8 | buf[3];
         if (c < 0x80)
@@ -877,7 +877,7 @@ size_t Input::file_get(char *s, size_t n)
         size_ -= t - s;
       return t - s;
     case file_encoding::utf32le:
-      while (n > 0 && ::fread(buf, 4, 1, underlying_input_.file_) == 1)
+      while (n > 0 && ::fread(buf, 4, 1, source_.file_) == 1)
       {
         int c = buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
         if (c < 0x80)
@@ -908,7 +908,7 @@ size_t Input::file_get(char *s, size_t n)
         size_ -= t - s;
       return t - s;
     case file_encoding::latin:
-      while (n > 0 && ::fread(t, 1, 1, underlying_input_.file_) == 1)
+      while (n > 0 && ::fread(t, 1, 1, source_.file_) == 1)
       {
         int c = static_cast<unsigned char>(*t);
         if (c < 0x80)
@@ -968,7 +968,7 @@ size_t Input::file_get(char *s, size_t n)
     case file_encoding::koi8_u:
     case file_encoding::koi8_ru:
     case file_encoding::custom:
-      while (n > 0 && ::fread(t, 1, 1, underlying_input_.file_) == 1)
+      while (n > 0 && ::fread(t, 1, 1, source_.file_) == 1)
       {
         int c = page_[static_cast<unsigned char>(*t)];
         if (c < 0x80)
@@ -999,7 +999,7 @@ size_t Input::file_get(char *s, size_t n)
         size_ -= t - s;
       return t - s;
     default:
-      t += ::fread(t, 1, n, underlying_input_.file_);
+      t += ::fread(t, 1, n, source_.file_);
       if (size_ + s >= t)
         size_ -= t - s;
       return t - s;
@@ -1009,7 +1009,7 @@ size_t Input::file_get(char *s, size_t n)
 void Input::wstring_size()
 {
   unsigned int c;
-  for (const wchar_t *s = underlying_input_.wstring_; (c = *s) != L'\0'; ++s)
+  for (const wchar_t *s = source_.wstring_; (c = *s) != L'\0'; ++s)
   {
     if (c >= 0xD800 && c < 0xE000)
     {
@@ -1036,14 +1036,14 @@ void Input::wstring_size()
 
 void Input::file_size()
 {
-  off_t k = ftello(underlying_input_.file_);
+  off_t k = ftello(source_.file_);
   if (k >= 0)
   {
     unsigned char buf[4];
     switch (utfx_)
     {
       case file_encoding::latin:
-        while (::fread(buf, 1, 1, underlying_input_.file_) == 1)
+        while (::fread(buf, 1, 1, source_.file_) == 1)
           size_ += 1 + (buf[0] >= 0x80);
         break;
       case file_encoding::cp437:
@@ -1078,20 +1078,20 @@ void Input::file_size()
       case file_encoding::koi8_u:
       case file_encoding::koi8_ru:
       case file_encoding::custom:
-        while (::fread(buf, 1, 1, underlying_input_.file_) == 1)
+        while (::fread(buf, 1, 1, source_.file_) == 1)
         {
           int c = page_[buf[0]];
           size_ += 1 + (c >= 0x80) + (c >= 0x0800); // + (c >= 0x010000); NOTE: page_[] value range < Unicode range
         }
         break;
       case file_encoding::utf16be:
-        while (::fread(buf, 2, 1, underlying_input_.file_) == 1)
+        while (::fread(buf, 2, 1, source_.file_) == 1)
         {
           int c = buf[0] << 8 | buf[1];
           if (c >= 0xD800 && c < 0xE000)
           {
             // UTF-16 surrogate pair
-            if (c < 0xDC00 && ::fread(buf + 2, 2, 1, underlying_input_.file_) == 1 && (buf[2] & 0xFC) == 0xDC)
+            if (c < 0xDC00 && ::fread(buf + 2, 2, 1, source_.file_) == 1 && (buf[2] & 0xFC) == 0xDC)
               c = 0x010000 - 0xDC00 + ((c - 0xD800) << 10) + (buf[2] << 8 | buf[3]);
             else
               c = REFLEX_NONCHAR;
@@ -1106,13 +1106,13 @@ void Input::file_size()
         }
         break;
       case file_encoding::utf16le:
-        while (::fread(buf, 2, 1, underlying_input_.file_) == 1)
+        while (::fread(buf, 2, 1, source_.file_) == 1)
         {
           int c = buf[0] | buf[1] << 8;
           if (c >= 0xD800 && c < 0xE000)
           {
             // UTF-16 surrogate pair
-            if (c < 0xDC00 && ::fread(buf + 2, 2, 1, underlying_input_.file_) == 1 && (buf[2] & 0xFC) == 0xDC)
+            if (c < 0xDC00 && ::fread(buf + 2, 2, 1, source_.file_) == 1 && (buf[2] & 0xFC) == 0xDC)
               c = 0x010000 - 0xDC00 + ((c - 0xD800) << 10) + (buf[2] << 8 | buf[3]);
             else
               c = REFLEX_NONCHAR;
@@ -1127,7 +1127,7 @@ void Input::file_size()
         }
         break;
       case file_encoding::utf32be:
-        while (::fread(buf, 4, 1, underlying_input_.file_) == 1)
+        while (::fread(buf, 4, 1, source_.file_) == 1)
         {
           int c = buf[0] << 24 | buf[1] << 16 | buf[2] << 8 | buf[3];
 #ifndef WITH_UTF8_UNRESTRICTED
@@ -1138,7 +1138,7 @@ void Input::file_size()
         }
         break;
       case file_encoding::utf32le:
-        while (::fread(buf, 4, 1, underlying_input_.file_) == 1)
+        while (::fread(buf, 4, 1, source_.file_) == 1)
         {
           int c = buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
 #ifndef WITH_UTF8_UNRESTRICTED
@@ -1149,33 +1149,33 @@ void Input::file_size()
         }
         break;
       default:
-        fseeko(underlying_input_.file_, k, SEEK_END);
-        off_t n = ftello(underlying_input_.file_);
+        fseeko(source_.file_, k, SEEK_END);
+        off_t n = ftello(source_.file_);
         if (n >= k)
           size_ = static_cast<size_t>(n - k);
     }
-    ::clearerr(underlying_input_.file_);
-    fseeko(underlying_input_.file_, k, SEEK_SET);
+    ::clearerr(source_.file_);
+    fseeko(source_.file_, k, SEEK_SET);
   }
-  ::clearerr(underlying_input_.file_);
+  ::clearerr(source_.file_);
 }
 
 void Input::istream_size()
 {
-  std::streampos k = underlying_input_.istream_->tellg();
+  std::streampos k = source_.istream_->tellg();
   if (k >= 0)
   {
-    underlying_input_.istream_->seekg(0, underlying_input_.istream_->end);
-    std::streampos n = underlying_input_.istream_->tellg();
+    source_.istream_->seekg(0, source_.istream_->end);
+    std::streampos n = source_.istream_->tellg();
     if (n >= k)
       size_ = (size_t)(n - k);
-    underlying_input_.istream_->seekg(k, underlying_input_.istream_->beg);
+    source_.istream_->seekg(k, source_.istream_->beg);
   }
 }
 
 void Input::set_file_encoding(file_encoding enc, const unsigned short *page)
 {
-  if (input_type_==input_type_enum::FILE_P && utfx_ != enc)
+  if (source_type_==Source_Type::FILE_P && utfx_ != enc)
   {
     if (utfx_ == file_encoding::plain && ulen_ > 0)
     {
@@ -1264,10 +1264,10 @@ void Input::set_file_encoding(file_encoding enc, const unsigned short *page)
           break;
         case file_encoding::utf16be:
           // enforcing non-BOM UTF-16: translate utf8_[] to UTF-16 then to UTF-8
-          if (b[1] == '\0' && ::fread(b + 1, 1, 1, underlying_input_.file_) == 1)
+          if (b[1] == '\0' && ::fread(b + 1, 1, 1, source_.file_) == 1)
           {
-            if (b[2] == '\0' ? ::fread(b + 2, 2, 1, underlying_input_.file_) == 1 :
-                b[3] == '\0' ? ::fread(b + 3, 1, 1, underlying_input_.file_) == 1 :
+            if (b[2] == '\0' ? ::fread(b + 2, 2, 1, source_.file_) == 1 :
+                b[3] == '\0' ? ::fread(b + 3, 1, 1, source_.file_) == 1 :
                 false
                )
             {
@@ -1294,10 +1294,10 @@ void Input::set_file_encoding(file_encoding enc, const unsigned short *page)
           break;
         case file_encoding::utf16le:
           // enforcing non-BOM UTF-16: translate utf8_[] to UTF-16 then to UTF-8
-          if (b[1] == '\0' && ::fread(b + 1, 1, 1, underlying_input_.file_) == 1)
+          if (b[1] == '\0' && ::fread(b + 1, 1, 1, source_.file_) == 1)
           {
-            if (b[2] == '\0' ? ::fread(b + 2, 2, 1, underlying_input_.file_) == 1 :
-                b[3] == '\0' ? ::fread(b + 3, 1, 1, underlying_input_.file_) == 1 :
+            if (b[2] == '\0' ? ::fread(b + 2, 2, 1, source_.file_) == 1 :
+                b[3] == '\0' ? ::fread(b + 3, 1, 1, source_.file_) == 1 :
                 false
                )
             {
@@ -1324,9 +1324,9 @@ void Input::set_file_encoding(file_encoding enc, const unsigned short *page)
           break;
         case file_encoding::utf32be:
           // enforcing non-BOM UTF-32: translate utf8_[] to UTF-32 then to UTF-8
-          if (b[1] == '\0' ? ::fread(b + 1, 3, 1, underlying_input_.file_) == 1 :
-              b[2] == '\0' ? ::fread(b + 2, 2, 1, underlying_input_.file_) == 1 :
-              b[3] == '\0' ? ::fread(b + 3, 1, 1, underlying_input_.file_) == 1 :
+          if (b[1] == '\0' ? ::fread(b + 1, 3, 1, source_.file_) == 1 :
+              b[2] == '\0' ? ::fread(b + 2, 2, 1, source_.file_) == 1 :
+              b[3] == '\0' ? ::fread(b + 3, 1, 1, source_.file_) == 1 :
               false
              )
           {
@@ -1338,9 +1338,9 @@ void Input::set_file_encoding(file_encoding enc, const unsigned short *page)
           break;
         case file_encoding::utf32le:
           // enforcing non-BOM UTF-32: translate utf8_[] to UTF-32 then to UTF-8
-          if (b[1] == '\0' ? ::fread(b + 1, 3, 1, underlying_input_.file_) == 1 :
-              b[2] == '\0' ? ::fread(b + 2, 2, 1, underlying_input_.file_) == 1 :
-              b[3] == '\0' ? ::fread(b + 3, 1, 1, underlying_input_.file_) == 1 :
+          if (b[1] == '\0' ? ::fread(b + 1, 3, 1, source_.file_) == 1 :
+              b[2] == '\0' ? ::fread(b + 2, 2, 1, source_.file_) == 1 :
+              b[3] == '\0' ? ::fread(b + 3, 1, 1, source_.file_) == 1 :
               false
              )
           {

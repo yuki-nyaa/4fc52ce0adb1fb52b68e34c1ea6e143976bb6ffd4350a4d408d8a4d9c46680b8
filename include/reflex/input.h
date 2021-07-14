@@ -290,7 +290,7 @@ With reflex::BufferedInput::streambuf to create a buffered std::istream:
 class Input {
  public:
   /// Input type
-  enum struct input_type_enum : unsigned char {NIL,FILE_P,STD_ISTREAM_P,CCHAR_P,CWCHAR_P};
+  enum struct Source_Type : unsigned char {NIL,FILE_P,STD_ISTREAM_P,CCHAR_P,CWCHAR_P};
   /// Common file_encoding constants.
   enum struct file_encoding : unsigned char  {
     plain, ///< plain octets: 7-bit ASCII, 8-bit binary or UTF-8 without BOM detected
@@ -340,17 +340,17 @@ class Input {
   {
     init();
   }
-  /// Copy constructor (with intended "move semantics" as internal state is shared, should not rely on using the rhs after copying).
-  Input(const Input& input) ///< an Input object to share state with (undefined behavior results from using both objects)
+  /// Copy constructor. Since the source input is read-only, sharing the source should not be a problem.
+  Input(const Input& input) ///< an Input object to share state with
     :
-      input_type_(input.input_type_),
-      underlying_input_(input.underlying_input_),
+      source_type_(input.source_type_),
+      source_(input.source_),
       size_(input.size_),
       uidx_(input.uidx_),
       ulen_(input.ulen_),
       utfx_(input.utfx_),
       page_(input.page_),
-      handler_(input.handler_)
+      handler(input.handler)
   {
     std::memcpy(utf8_, input.utf8_, sizeof(utf8_));
   }
@@ -359,8 +359,8 @@ class Input {
       const char *cstring, ///< char string
       size_t      size)    ///< length of the string
     :
-      input_type_(input_type_enum::CCHAR_P),
-      underlying_input_(cstring),
+      source_type_(Source_Type::CCHAR_P),
+      source_(cstring),
       size_(size)
   {
     init();
@@ -384,8 +384,8 @@ class Input {
       const wchar_t *wstring, ///< wchar_t string
       size_t      size)    ///< length of the string
     :
-      input_type_(input_type_enum::CWCHAR_P),
-      underlying_input_(wstring),
+      source_type_(Source_Type::CWCHAR_P),
+      source_(wstring),
       size_(size)
   {
     init();
@@ -407,8 +407,8 @@ class Input {
   /// Construct input character sequence from an open FILE* file descriptor, supports UTF-8 conversion from UTF-16 and UTF-32.
   Input(FILE *file) ///< input file
     :
-      input_type_(input_type_enum::FILE_P),
-      underlying_input_(file),
+      source_type_(Source_Type::FILE_P),
+      source_(file),
       size_(0)
   {
     init();
@@ -428,8 +428,8 @@ class Input {
   /// Construct input character sequence from a std::istream.
   Input(std::istream& istream) ///< input stream
     :
-      input_type_(input_type_enum::STD_ISTREAM_P),
-      underlying_input_(&istream),
+      source_type_(Source_Type::STD_ISTREAM_P),
+      source_(&istream),
       size_(0)
   {
     init();
@@ -437,47 +437,19 @@ class Input {
   /// Copy assignment operator.
   Input& operator=(const Input& input)
   {
-    input_type_=input.input_type_;
-    underlying_input_=input.underlying_input_;
+    source_type_=input.source_type_;
+    source_=input.source_;
     size_ = input.size_;
     uidx_ = input.uidx_;
     ulen_ = input.ulen_;
     utfx_ = input.utfx_;
     page_ = input.page_;
-    handler_ = input.handler_;
+    handler = input.handler;
     std::memcpy(utf8_, input.utf8_, sizeof(utf8_));
     return *this;
   }
-  /// Cast this Input object to a string, returns nullptr when this Input is not a string.
-  operator const char *() const
-    /// @returns remaining unbuffered part of a NUL-terminated string or nullptr
-  {
-    assert(input_type_==input_type_enum::CCHAR_P);
-    return underlying_input_.cstring_;
-  }
-  /// Cast this Input object to a wide character string, returns nullptr when this Input is not a wide string.
-  operator const wchar_t *() const
-    /// @returns remaining unbuffered part of the NUL-terminated wide character string or nullptr
-  {
-    assert(input_type_==input_type_enum::CWCHAR_P);
-    return underlying_input_.wstring_;
-  }
-  /// Cast this Input object to a file descriptor FILE*, returns nullptr when this Input is not a FILE*.
-  operator FILE *() const
-    /// @returns pointer to current file descriptor or nullptr
-  {
-    assert(input_type_==input_type_enum::FILE_P);
-    return underlying_input_.file_;
-  }
-  /// Cast this Input object to a std::istream*, returns nullptr when this Input is not a std::istream.
-  operator std::istream *() const
-    /// @returns pointer to current std::istream or nullptr
-  {
-    assert(input_type_==input_type_enum::STD_ISTREAM_P);
-    return underlying_input_.istream_;
-  }
   // Cast this Input object to bool, same as checking good().
-  operator bool() const
+  explicit operator bool() const
     /// @returns true if a non-empty sequence of characters is available to get
   {
     return good();
@@ -486,46 +458,46 @@ class Input {
   const char *cstring() const
     /// @returns remaining unbuffered part of the NUL-terminated string or nullptr
   {
-    assert(input_type_==input_type_enum::CCHAR_P);
-    return underlying_input_.cstring_;
+    assert(source_type_==Source_Type::CCHAR_P);
+    return source_.cstring_;
   }
   /// Get the remaining wide character string of this Input object, returns nullptr when this Input is not a wide string.
   const wchar_t *wstring() const
     /// @returns remaining unbuffered part of the NUL-terminated wide character string or nullptr
   {
-    assert(input_type_==input_type_enum::CWCHAR_P);
-    return underlying_input_.wstring_;
+    assert(source_type_==Source_Type::CWCHAR_P);
+    return source_.wstring_;
   }
   /// Get the FILE* of this Input object, returns nullptr when this Input is not a FILE*.
   FILE *file() const
     /// @returns pointer to current file descriptor or nullptr
   {
-    assert(input_type_==input_type_enum::FILE_P);
-    return underlying_input_.file_;
+    assert(source_type_==Source_Type::FILE_P);
+    return source_.file_;
   }
   /// Get the std::istream of this Input object, returns nullptr when this Input is not a std::istream.
   std::istream *istream() const
     /// @returns pointer to current std::istream or nullptr
   {
-    assert(input_type_==input_type_enum::STD_ISTREAM_P);
-    return underlying_input_.istream_;
+    assert(source_type_==Source_Type::STD_ISTREAM_P);
+    return source_.istream_;
   }
   /// Get the size of the input character sequence in number of ASCII/UTF-8 bytes (zero if size is not determinable from a `FILE*` or `std::istream` source).
   size_t size()
     /// @returns the nonzero number of ASCII/UTF-8 bytes available to read, or zero when source is empty or if size is not determinable e.g. when reading from standard input
   {
-    switch(input_type_){
-      case input_type_enum::CCHAR_P :
+    switch(source_type_){
+      case Source_Type::CCHAR_P :
         return size_;
-      case input_type_enum::CWCHAR_P :
+      case Source_Type::CWCHAR_P :
         if (size_ == 0)
           wstring_size();
         return size_;
-      case input_type_enum::FILE_P :
+      case Source_Type::FILE_P :
         if (size_ == 0)
           file_size();
         return size_;
-      case input_type_enum::STD_ISTREAM_P :
+      case Source_Type::STD_ISTREAM_P :
         if (size_ == 0)
           istream_size();
         return size_;
@@ -537,27 +509,28 @@ class Input {
   bool assigned() const
     /// @returns true if this Input object was assigned (not default constructed or cleared)
   {
-    return input_type_!=input_type_enum::NIL;
+    return source_type_!=Source_Type::NIL;
   }
-  /// Clear this Input by unassigning it.
+  /// Clear this Input.
   void clear()
   {
-    input_type_=input_type_enum::NIL;
+    source_type_=Source_Type::NIL;
     size_ = 0;
+    init();
   }
   /// Check if input is available.
   bool good() const
     /// @returns true if a non-empty sequence of characters is available to get
   {
-    switch(input_type_){
-      case input_type_enum::CCHAR_P :
+    switch(source_type_){
+      case Source_Type::CCHAR_P :
         return size_ > 0;
-      case input_type_enum::CWCHAR_P :
-        return *(underlying_input_.wstring_) != L'\0';
-      case input_type_enum::FILE_P :
-        return !::feof(underlying_input_.file_) && !::ferror(underlying_input_.file_);
-      case input_type_enum::STD_ISTREAM_P :
-        return (underlying_input_.istream_)->good();
+      case Source_Type::CWCHAR_P :
+        return *(source_.wstring_) != L'\0';
+      case Source_Type::FILE_P :
+        return !::feof(source_.file_) && !::ferror(source_.file_);
+      case Source_Type::STD_ISTREAM_P :
+        return (source_.istream_)->good();
       default :
         return false;
     }
@@ -566,15 +539,15 @@ class Input {
   bool eof() const
     /// @returns true if input is at EOF and no characters are available
   {
-    switch(input_type_){
-      case input_type_enum::CCHAR_P :
+    switch(source_type_){
+      case Source_Type::CCHAR_P :
         return size_ == 0;
-      case input_type_enum::CWCHAR_P :
-        return *(underlying_input_.wstring_) == L'\0';
-      case input_type_enum::FILE_P :
-        return ::feof(underlying_input_.file_) != 0;
-      case input_type_enum::STD_ISTREAM_P :
-        return (underlying_input_.istream_)->eof();
+      case Source_Type::CWCHAR_P :
+        return *(source_.wstring_) == L'\0';
+      case Source_Type::FILE_P :
+        return ::feof(source_.file_) != 0;
+      case Source_Type::STD_ISTREAM_P :
+        return (source_.istream_)->eof();
       default :
         return true;
     }
@@ -593,17 +566,17 @@ class Input {
       size_t n) ///< size of buffer pointed to by s
     /// @returns the nonzero number of (less or equal to n) 8-bit characters added to buffer s from the current input, or zero when EOF
   {
-    switch(input_type_){
-      case input_type_enum::CCHAR_P : {
+    switch(source_type_){
+      case Source_Type::CCHAR_P : {
         size_t k = size_;
         if (k > n)
           k = n;
-        std::memcpy(s, underlying_input_.cstring_, k);
-        underlying_input_.cstring_ += k;
+        std::memcpy(s, source_.cstring_, k);
+        source_.cstring_ += k;
         size_ -= k;
         return k;
       }
-      case input_type_enum::CWCHAR_P : {
+      case Source_Type::CWCHAR_P : {
         size_t k = n;
         if (ulen_ > 0)
         {
@@ -624,7 +597,7 @@ class Input {
           ulen_ = 0;
         }
         wchar_t c;
-        while ((c = *underlying_input_.wstring_) != L'\0' && k > 0)
+        while ((c = *source_.wstring_) != L'\0' && k > 0)
         {
           if (c < 0x80)
           {
@@ -637,8 +610,8 @@ class Input {
             if (c >= 0xD800 && c < 0xE000)
             {
               // UTF-16 surrogate pair
-              if (c < 0xDC00 && (underlying_input_.wstring_[1] & 0xFC00) == 0xDC00)
-                l = utf8(0x010000 - 0xDC00 + ((c - 0xD800) << 10) + *++underlying_input_.wstring_, utf8_);
+              if (c < 0xDC00 && (source_.wstring_[1] & 0xFC00) == 0xDC00)
+                l = utf8(0x010000 - 0xDC00 + ((c - 0xD800) << 10) + *++source_.wstring_, utf8_);
               else
                 l = utf8(REFLEX_NONCHAR, utf8_);
             }
@@ -661,22 +634,22 @@ class Input {
               k -= l;
             }
           }
-          ++underlying_input_.wstring_;
+          ++source_.wstring_;
         }
         if (size_ >= n - k)
           size_ -= n - k;
         return n - k;
-      } // case input_type_enum::CWCHAR_P
-      case input_type_enum::FILE_P : {
+      } // case Source_Type::CWCHAR_P
+      case Source_Type::FILE_P : {
         while (true)
         {
           size_t k = file_get(s, n);
-          if (k > 0 || feof(underlying_input_.file_) || handler_ == nullptr || (*handler_)() == 0)
+          if (k > 0 || feof(source_.file_) || handler == nullptr || (*handler)() == 0)
             return k;
         }
       }
-      case input_type_enum::STD_ISTREAM_P : {
-        size_t k = static_cast<size_t>(n == 1 ? underlying_input_.istream_->get(s[0]).gcount() : underlying_input_.istream_->read(s, static_cast<std::streamsize>(n)) ? n : underlying_input_.istream_->gcount());
+      case Source_Type::STD_ISTREAM_P : {
+        size_t k = static_cast<size_t>(n == 1 ? source_.istream_->get(s[0]).gcount() : source_.istream_->read(s, static_cast<std::streamsize>(n)) ? n : source_.istream_->gcount());
         if (size_ >= k)
           size_ -= k;
         return k;
@@ -696,14 +669,15 @@ class Input {
   {
     return utfx_;
   }
-  /// Initialize the state after (re)setting the input source, auto-detects UTF BOM in FILE* input if the file size is known.
+ private:
+ /// Initialize the state after (re)setting the input source, auto-detects UTF BOM in FILE* input if the file size is known.
   void init(file_encoding enc = file_encoding::plain)
   {
     std::memset(utf8_, 0, sizeof(utf8_));
     uidx_ = 0;
     ulen_ = 0;
     page_ = nullptr;
-    if (input_type_==input_type_enum::FILE_P)
+    if (source_type_==Source_Type::FILE_P)
       file_init(enc);
   }
   /// Called by init() for a FILE*.
@@ -719,38 +693,50 @@ class Input {
       char  *s, ///< points to the string buffer to fill with input
       size_t n) ///< size of buffer pointed to by s
       ;
-  /// Set FILE* handler
-  void set_handler(Handler *handler)
-  {
-    handler_ = handler;
-  }
- protected:
-  input_type_enum         input_type_ = input_type_enum::NIL;
-  union underlying_input_union_{
+  Source_Type source_type_ = Source_Type::NIL;
+  union Source_Union_{
     FILE                 *file_=nullptr;    ///< FILE* input (when non-null)
     std::istream         *istream_; ///< stream input (when non-null)
     const char           *cstring_; ///< char string input (when non-null) of length reflex::Input::size_
     const wchar_t        *wstring_; ///< NUL-terminated wide string input (when non-null)
-    constexpr underlying_input_union_() noexcept = default;
-    constexpr underlying_input_union_(FILE* file_other) noexcept : file_(file_other) {}
-    constexpr underlying_input_union_(std::istream* istream_other) noexcept : istream_(istream_other) {}
-    constexpr underlying_input_union_(const char* cstring_other) noexcept : cstring_(cstring_other) {}
-    constexpr underlying_input_union_(const wchar_t* wstring_other) noexcept : wstring_(wstring_other) {}
-  } underlying_input_;
+    constexpr Source_Union_() noexcept = default;
+    constexpr Source_Union_(FILE* file_other) noexcept : file_(file_other) {}
+    constexpr Source_Union_(std::istream* istream_other) noexcept : istream_(istream_other) {}
+    constexpr Source_Union_(const char* cstring_other) noexcept : cstring_(cstring_other) {}
+    constexpr Source_Union_(const wchar_t* wstring_other) noexcept : wstring_(wstring_other) {}
+  } source_;
   size_t                size_=0;    ///< size of the remaining input in bytes (size_ == 0 may indicate size is not set)
   char                  utf8_[8]={}; ///< UTF-8 normalization buffer, >=8 bytes
   unsigned short        uidx_=0;    ///< index in utf8_[]
   unsigned short        ulen_=0;    ///< length of data in utf8_[] or 0 if no data
   file_encoding    utfx_=file_encoding::plain;    ///< file_encoding
   const unsigned short *page_=nullptr;    ///< custom code page
-  Handler              *handler_=nullptr; ///< to handle FILE* errors and non-blocking FILE* reads
+ public:
+  Handler              *handler=nullptr; ///< to handle FILE* errors and non-blocking FILE* reads
 };
 
 /// Buffered input.
-class BufferedInput : public Input {
+class BufferedInput : private Input {
  public:
+  using Input::Source_Type;
+  using Input::file_encoding;
+  using Input::Handler;
+  // `explicit operator bool() const` is overriden
+  using Input::cstring;
+  using Input::wstring;
+  using Input::file;
+  using Input::istream;
+  // `size()` is overriden.
+  using Input::assigned;
+  // `clear()` is overriden
+  // `good()` is overriden
+  // `eof()` is overriden
+  // `int get()` is overriden
+  // `size_t get(char*,size_t)` is overriden
+  using Input::set_file_encoding;
+  using Input::get_file_encoding;
   /// Buffer size.
-  static const size_t SIZE = 16384;
+  static constexpr size_t SIZE = 16384;
   /// Copy constructor (with intended "move semantics" as internal state is shared, should not rely on using the rhs after copying).
   /// Construct empty buffered input.
   BufferedInput()
@@ -769,20 +755,13 @@ class BufferedInput : public Input {
     std::memcpy(buf_, input.buf_, len_);
   }
   /// Construct buffered input from unbuffered input.
-  BufferedInput(const Input& input)
+  template<typename... Args>
+  BufferedInput(Args&&... args)
     :
-      Input(input)
+      Input(std::forward<Args>(args)...)
   {
     len_ = Input::get(buf_, SIZE);
     pos_ = 0;
-  }
-  /// Assignment operator from unbuffered input.
-  BufferedInput& operator=(const Input& input)
-  {
-    Input::operator=(input);
-    len_ = Input::get(buf_, SIZE);
-    pos_ = 0;
-    return *this;
   }
   /// Copy assignment operator.
   BufferedInput& operator=(const BufferedInput& input)
@@ -793,19 +772,17 @@ class BufferedInput : public Input {
     std::memcpy(buf_, input.buf_, len_);
     return *this;
   }
-  /// Construct buffered input character sequence from an open FILE* file descriptor, using the specified file encoding
-  BufferedInput(
-      FILE                 *file,        ///< input file
-      file_encoding         enc,         ///< file_encoding (when UTF BOM is not present)
-      const unsigned short *page = nullptr) ///< code page for file_encoding::custom
-    :
-      Input(file, enc, page)
+  /// Assignment operator from unbuffered input.
+  template<typename... Args>
+  BufferedInput& operator=(Args&&... args)
   {
+    Input::operator=(std::forward<Args>(args)...);
     len_ = Input::get(buf_, SIZE);
     pos_ = 0;
+    return *this;
   }
   // Cast this Input object to bool, same as checking good().
-  operator bool()
+  explicit operator bool() const
     /// @returns true if a non-empty sequence of characters is available to get
   {
     return good();
@@ -816,14 +793,22 @@ class BufferedInput : public Input {
   {
     return len_ - pos_ + Input::size();
   }
+  /// Clear this Input.
+  void clear()
+  {
+    Input::clear();
+    std::memset(buf_,0,SIZE);
+    len_ = 0;
+    pos_ = 0;
+  }
   /// Check if input is available.
-  bool good()
+  bool good() const
     /// @returns true if a non-empty sequence of characters is available to get
   {
     return pos_ < len_ || Input::good();
   }
   /// Check if input reached EOF.
-  bool eof()
+  bool eof() const
     /// @returns true if input is at EOF and no characters are available
   {
     return pos_ >= len_ && Input::eof();
@@ -879,10 +864,10 @@ class BufferedInput : public Input {
     }
     return n - k;
   }
- protected:
-  char   buf_[SIZE];
-  size_t len_;
-  size_t pos_;
+ private:
+  char   buf_[SIZE]; ///< Buffer
+  size_t len_; ///< Length of data to be read, in the buffer. Can be smaller than `SIZE` when the source is smaller than the buffer.
+  size_t pos_; ///< Current position in the buffer.
 };
 
 #if defined(HAVE_AVX512BW) || defined(HAVE_AVX2) || defined(HAVE_SSE2)
