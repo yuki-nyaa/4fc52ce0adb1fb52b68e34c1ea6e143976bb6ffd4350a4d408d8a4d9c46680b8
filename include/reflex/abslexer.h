@@ -265,8 +265,6 @@ class AbstractLexer {
 #endif
     }
   }
-  /// Polymorphic cloning.
-  virtual AbstractLexer *clone() = 0;
   /// Reset this matcher's state to the initial state and set options.
   void reset(Option opt){
     opt_=opt;

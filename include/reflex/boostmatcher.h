@@ -97,11 +97,6 @@ class BoostMatcher : public PatternMatcher<boost::regex> {
     flg_ = matcher.flg_;
     return *this;
   }
-  /// Polymorphic cloning.
-  virtual BoostMatcher *clone()
-  {
-    return new BoostMatcher(*this);
-  }
   /// Reset this matcher's state to the initial state and when assigned new input.
   virtual void reset(const char *opt = nullptr)
   {

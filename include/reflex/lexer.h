@@ -89,11 +89,6 @@ class Lexer : public AbstractLexer<reflex::Pattern> {
       std::memcpy(bms_, lexer.bms_, sizeof(bms_));
     return *this;
   }
-  /// Polymorphic cloning.
-  virtual Lexer *clone() override
-  {
-    return new Lexer(*this);
-  }
   /// Reset this lexer's state to the initial state.
   void reset(AbstractLexer<reflex::Pattern>::Option opt)
   {

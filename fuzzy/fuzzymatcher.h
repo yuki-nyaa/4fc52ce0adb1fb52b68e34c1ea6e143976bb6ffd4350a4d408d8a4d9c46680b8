@@ -152,11 +152,6 @@ class FuzzyMatcher : public Matcher {
     sub_ = matcher.sub_;
     return *this;
   }
-  /// Polymorphic cloning.
-  virtual FuzzyMatcher *clone()
-  {
-    return new FuzzyMatcher(*this);
-  }
   /// Returns the number of edits made for the match, edits() <= max, not guaranteed to be the minimum edit distance.
   uint_least8_t edits()
     /// @returns 0 to max edit distance

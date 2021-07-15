@@ -141,11 +141,6 @@ class PCRE2Matcher : public PatternMatcher<std::string> {
     pattern(matcher);
     return *this;
   }
-  /// Polymorphic cloning.
-  virtual PCRE2Matcher *clone()
-  {
-    return new PCRE2Matcher(*this);
-  }
   /// Reset this matcher's state to the initial state and when assigned new input.
   virtual void reset(const char *opt = nullptr)
   {
