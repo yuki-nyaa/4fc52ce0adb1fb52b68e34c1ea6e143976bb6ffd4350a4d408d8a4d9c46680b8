@@ -101,7 +101,8 @@ class AbstractLexer {
     static constexpr int UNK      = 256;        ///< unknown/undefined character meta-char marker
     static constexpr int BOB      = 257;        ///< begin of buffer meta-char marker
     static constexpr int EOB      = EOF;        ///< end of buffer meta-char marker
-    static constexpr size_t BLOCK = (256*1024);       ///< buffer growth factor, buffer is initially 2*BLOCK size, at least 256
+    static constexpr size_t BLOCK = (256*1024); ///< buffer growth factor, buffer is initially 2*BLOCK size, at least 256
+    static constexpr size_t BUFFER_ALIGN = 4096;
     static constexpr size_t REDO  = 0x7FFFFFFF; ///< reflex::Matcher::accept() returns "redo" with reflex::Matcher option "A"
     static constexpr size_t EMPTY = 0xFFFFFFFF; ///< accept() returns "empty" last split at end of input
   };
@@ -113,7 +114,6 @@ class AbstractLexer {
   };
   /// Event handler functor base class to invoke when the buffer contents are shifted out, e.g. for logging the data searched.
   struct Handler { virtual void operator()(AbstractLexer&, const char*, size_t, size_t) = 0; };
- protected:
   /// AbstractLexer::Options for matcher engines.
   struct Option {
     Option() = default;
@@ -144,6 +144,7 @@ class AbstractLexer {
     bool W = false; ///< half-check for "whole words", check only left of \< and right of \> for non-word character
     char T = 8; ///< tab size, must be a power of 2, default is 8, for column count and indent \i, \j, and \k
   };
+ protected:
   /// AbstractLexer::Iterator class for scanning, searching, and splitting input character sequences.
   template<typename T> /// @tparam <T> AbstractLexer or const AbstractLexer
   class Iterator{
@@ -225,15 +226,40 @@ class AbstractLexer {
    private:
     AbstractLexer *lexer_; ///< the matcher used by this iterator
     Method           method_;  ///< the method for pattern matching by this iterator's matcher
-  };
+  }; // class Iterator
+ protected:
+  void alloc_buffer(size_t size) noexcept(false) {
+    #if defined(REFLEX_WITH_REALLOC)
+    #if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__)
+          buf_ = static_cast<char*>(_aligned_malloc(size, Const::BUFFER_ALIGN));
+          if (buf_ == nullptr)
+            throw std::bad_alloc();
+    #else
+          buf_ = nullptr;
+          if (::posix_memalign(reinterpret_cast<void**>(&buf_), Const::BUFFER_ALIGN, size) != NULL)
+            throw std::bad_alloc();
+    #endif
+    #else
+          buf_ = new char[size];
+    #endif
+  }
+  void free_buffer(){
+    #if defined(REFLEX_WITH_REALLOC)
+    #if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__)
+          _aligned_free(buf_);
+    #else
+          std::free(buf_);
+    #endif
+    #else
+          delete[] buf_;
+    #endif
+  }
  public:
   typedef AbstractLexer::Iterator<AbstractLexer>       iterator;       ///< std::input_iterator for scanning, searching, and splitting input character sequences
   typedef AbstractLexer::Iterator<const AbstractLexer> const_iterator; ///< std::input_iterator for scanning, searching, and splitting input character sequences
 
   /// Construct a base abstract lexer.
   AbstractLexer()
-    :
-      own_(false)
   {
     reset();
   }
@@ -243,27 +269,148 @@ class AbstractLexer {
       Option opt)   ///< options
     :
       in(input),
-      opt_(opt),
-      own_(false)
+      opt_(opt)
   {
     reset();
+  }
+  AbstractLexer(const AbstractLexer& other)
+    :
+      opt_(other.opt_),
+      len_(other.len_),
+      cap_(other.cap_),
+      cur_(other.cur_),
+      pos_(other.pos_),
+      end_(other.end_),
+      ind_(other.ind_),
+      blk_(other.blk_),
+      got_(other.got_),
+      chr_(other.chr_),
+      lno_(other.lno_),
+      num_(other.num_),
+      eof_(other.eof_),
+      mat_(other.mat_),
+      in(other.in),
+      patterns(other.patterns),
+      pattern_current(other.pattern_current)
+  {
+    ptrdiff_t txt_offset = other.txt_-other.buf_;
+    ptrdiff_t lpb_offset = other.lpb_-other.buf_;
+    alloc_buffer(other.max_);
+    max_ = other.max_;
+    std::memcpy(buf_,other.buf_,max_);
+    txt_ = buf_ + txt_offset;
+    lpb_ = buf_ + lpb_offset;
+    #if defined(REFLEX_WITH_SPAN)
+    ptrdiff_t bol_offset = other.bol_-other.buf_;
+    bol_ = buf_ + bol_offset;
+    evh_ = other.evh_;
+    #else
+    cno_ = other.cno_;
+    #endif
+  }
+  AbstractLexer(AbstractLexer&& other)
+    :
+      opt_(other.opt_),
+      buf_(other.buf_),
+      txt_(other.txt_),
+      len_(other.len_),
+      cap_(other.cap_),
+      cur_(other.cur_),
+      pos_(other.pos_),
+      end_(other.end_),
+      ind_(other.ind_),
+      blk_(other.blk_),
+      got_(other.got_),
+      chr_(other.chr_),
+      lpb_(other.lpb_),
+      lno_(other.lno_),
+      num_(other.num_),
+      eof_(other.eof_),
+      mat_(other.mat_),
+      in(other.in),
+      patterns(std::move(other.patterns)),
+      pattern_current(other.pattern_current)
+  {
+    #if defined(REFLEX_WITH_SPAN)
+    bol_ = other.bol_;
+    evh_ = other.evh_;
+    #else
+    cno_ = other.cno_;
+    #endif
+    other.reset();
+  }
+  AbstractLexer& operator=(const AbstractLexer& other){
+    if(&other!=this){
+      opt_ = other.opt_;
+      len_ = other.len_;
+      cap_ = other.cap_;
+      cur_ = other.cur_;
+      pos_ = other.pos_;
+      end_ = other.end_;
+      ind_ = other.ind_;
+      blk_ = other.blk_;
+      got_ = other.got_;
+      chr_ = other.chr_;
+      lno_ = other.lno_;
+      num_ = other.num_;
+      eof_ = other.eof_;
+      mat_ = other.mat_;
+      in = other.in;
+      patterns = other.patterns;
+      pattern_current = other.pattern_current;
+
+      ptrdiff_t txt_offset = other.txt_-other.buf_;
+      ptrdiff_t lpb_offset = other.lpb_-other.buf_;
+      alloc_buffer(other.max_);
+      max_ = other.max_;
+      std::memcpy(buf_,other.buf_,max_);
+      txt_ = buf_ + txt_offset;
+      lpb_ = buf_ + lpb_offset;
+      #if defined(REFLEX_WITH_SPAN)
+      ptrdiff_t bol_offset = other.bol_-other.buf_;
+      bol_ = buf_ + bol_offset;
+      evh_ = other.evh_;
+      #else
+      cno_ = other.cno_;
+      #endif
+    }
+    return *this;
+  }
+  AbstractLexer& operator=(AbstractLexer&& other){
+    if(&other!=this){
+      opt_ = other.opt_;
+      len_ = other.len_;
+      cap_ = other.cap_;
+      cur_ = other.cur_;
+      pos_ = other.pos_;
+      end_ = other.end_;
+      ind_ = other.ind_;
+      blk_ = other.blk_;
+      got_ = other.got_;
+      chr_ = other.chr_;
+      lno_ = other.lno_;
+      num_ = other.num_;
+      eof_ = other.eof_;
+      mat_ = other.mat_;
+      in = other.in;
+      patterns = std::move(other.patterns);
+      pattern_current = other.pattern_current;
+
+      #if defined(REFLEX_WITH_SPAN)
+      bol_ = other.bol_;
+      evh_ = other.evh_;
+      #else
+      cno_ = other.cno_;
+      #endif
+      other.reset();
+    }
+    return *this;
   }
   /// Delete abstract lexer, deletes this matcher's internal buffer.
   virtual ~AbstractLexer()
   {
     REFLEX_DBGLOG("AbstractLexer::~AbstractLexer()");
-    if (own_)
-    {
-#if defined(REFLEX_WITH_REALLOC)
-#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__)
-      _aligned_free(static_cast<void*>(buf_));
-#else
-      std::free(static_cast<void*>(buf_));
-#endif
-#else
-      delete[] buf_;
-#endif
-    }
+    free_buffer();
   }
   /// Reset this matcher's state to the initial state and set options.
   void reset(Option opt){
@@ -274,23 +421,9 @@ class AbstractLexer {
   void reset()
   {
     REFLEX_DBGLOG("AbstractLexer::reset()");
-    if (own_==false)
-    {
-      max_ = 2 * Const::BLOCK;
-#if defined(REFLEX_WITH_REALLOC)
-#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__)
-      buf_ = static_cast<char*>(_aligned_malloc(max_, 4096));
-      if (buf_ == nullptr)
-        throw std::bad_alloc();
-#else
-      buf_ = nullptr;
-      if (::posix_memalign(reinterpret_cast<void**>(&buf_), 4096, max_) != 0)
-        throw std::bad_alloc();
-#endif
-#else
-      buf_ = new char[max_];
-#endif
-    }
+    free_buffer();
+    alloc_buffer(2 * Const::BLOCK);
+    max_ = 2 * Const::BLOCK;
     buf_[0] = '\0';
     txt_ = buf_;
     len_ = 0;
@@ -312,7 +445,6 @@ class AbstractLexer {
     cno_ = 0;
 #endif
     num_ = 0;
-    own_ = true;
     eof_ = false;
     mat_ = false;
   }
@@ -403,55 +535,6 @@ class AbstractLexer {
     reset();
     return *this;
   }
-  /// Set the buffer base containing 0-terminated character data to scan in place (data may be modified), reset/restart the matcher.
-  AbstractLexer& buffer(
-      char *base,  ///< base of the buffer containing 0-terminated character data
-      size_t size) ///< nonzero size of the buffer
-    /// @returns this matcher
-  {
-    if (size > 0)
-    {
-      if (own_)
-      {
-#if defined(REFLEX_WITH_REALLOC)
-#if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__)
-        _aligned_free(static_cast<void*>(buf_));
-#else
-        std::free(static_cast<void*>(buf_));
-#endif
-#else
-        delete[] buf_;
-#endif
-      }
-      buf_ = base;
-      txt_ = buf_;
-      len_ = 0;
-      cap_ = 0;
-      cur_ = 0;
-      pos_ = 0;
-      end_ = size - 1;
-      max_ = size;
-      ind_ = 0;
-      blk_ = 0;
-      got_ = Const::BOB;
-      chr_ = '\0';
-#if defined(REFLEX_WITH_SPAN)
-      bol_ = buf_;
-      evh_ = nullptr;
-#endif
-      lpb_ = buf_;
-      lno_ = 1;
-#if !defined(REFLEX_WITH_SPAN)
-      cno_ = 0;
-#endif
-      num_ = 0;
-      own_ = false;
-      eof_ = true;
-      mat_ = false;
-    }
-    return *this;
-  }
-
   /// Returns nonzero capture index (i.e. true) if the entire input matches this matcher's pattern (and internally caches the true/false result to permit repeat invocations).
   size_t matches()
     /// @returns nonzero capture index (i.e. true) if the entire input matched this matcher's pattern, zero (i.e. false) otherwise
@@ -879,8 +962,7 @@ class AbstractLexer {
   {
     if (eof)
       flush();
-    if (own_)
-      eof_ = eof;
+    eof_ = eof;
   }
   /// Returns true if this matcher reached the begin of a new line.
   bool at_bol() const
@@ -958,7 +1040,7 @@ class AbstractLexer {
     {
       --pos_;
     }
-    else if (own_)
+    else
     {
       txt_ = buf_;
       len_ = 0;
@@ -985,7 +1067,7 @@ class AbstractLexer {
     {
       pos_ -= n;
     }
-    else if (own_)
+    else
     {
       txt_ = buf_;
       len_ = 0;
@@ -1012,7 +1094,7 @@ class AbstractLexer {
     {
       pos_ -= n;
     }
-    else if (own_)
+    else
     {
       txt_ = buf_;
       len_ = 0;
@@ -1410,6 +1492,7 @@ class AbstractLexer {
       while (max_ < newmax)
         max_ *= 2;
       REFLEX_DBGLOG("Expand buffer to %zu bytes", max_);
+    // TODO
 #if defined(REFLEX_WITH_REALLOC)
 #if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__)
       char *newbuf = static_cast<char*>(_aligned_realloc(static_cast<void*>(buf_), max_, 4096));
@@ -1601,13 +1684,12 @@ class AbstractLexer {
   char     *lpb_; ///< line pointer in buffer, updated when counting line numbers with lineno()
   size_t    lno_; ///< line number count (cached)
   size_t    num_; ///< character count of the input till bol_
-  bool      own_; ///< true if AbstractLexer::buf_ was allocated and should be deleted
   bool      eof_; ///< input has reached EOF
   bool      mat_; ///< true if AbstractLexer::matches() was successful
+  Input     in;   ///< input character sequence being matched by this matcher
  public:
-  Input in;        ///< input character sequence being matched by this matcher
-  std::vector<P>         patterns;
-  size_t                 pattern_current = 0;;
+  std::vector<P> patterns;
+  size_t    pattern_current = 0;
 };
 
 } // namespace reflex
