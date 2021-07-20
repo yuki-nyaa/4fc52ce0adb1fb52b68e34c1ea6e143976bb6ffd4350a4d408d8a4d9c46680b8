@@ -9131,7 +9131,7 @@ RE/flex C++ source files located in the `reflex/lib` and `reflex/include`
 directories:
 
     c++ -I. -Iinclude lex.yy.cpp lib/debug.cpp lib/error.cpp \
-        lib/input.cpp lib/matcher.cpp lib/pattern.cpp lib/utf8.cpp
+        lib/input.cpp lib/matcher.cpp lib/pattern.cpp
 
 
 🔝 [Back to table of contents](#)

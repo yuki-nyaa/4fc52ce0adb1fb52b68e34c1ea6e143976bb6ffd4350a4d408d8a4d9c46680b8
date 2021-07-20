@@ -6,16 +6,16 @@ reflexinclude_HEADERS   = $(top_srcdir)/include/reflex/lexer.h $(top_srcdir)/inc
 lib_LIBRARIES           = libreflex.a libreflexmin.a
 
 libreflex_a_CPPFLAGS    = -I$(top_srcdir)/include $(SIMD_FLAGS)
-libreflex_a_SOURCES     = convert.cpp debug.cpp error.cpp input.cpp lexer.cpp pattern.cpp posix.cpp unicode.cpp utf8.cpp $(top_srcdir)/unicode/block_scripts.cpp $(top_srcdir)/unicode/language_scripts.cpp $(top_srcdir)/unicode/letter_scripts.cpp
+libreflex_a_SOURCES     = convert.cpp debug.cpp error.cpp input.cpp lexer.cpp pattern.cpp posix.cpp unicode.cpp $(top_srcdir)/unicode/block_scripts.cpp $(top_srcdir)/unicode/language_scripts.cpp $(top_srcdir)/unicode/letter_scripts.cpp
 
 libreflexmin_a_CPPFLAGS = -I$(top_srcdir)/include $(SIMD_FLAGS)
-libreflexmin_a_SOURCES  = debug.cpp error.cpp input.cpp lexer.cpp pattern.cpp utf8.cpp
+libreflexmin_a_SOURCES  = debug.cpp error.cpp input.cpp lexer.cpp pattern.cpp
 
 # removed to avoid Max OS X libtool issues, alas...
 # lib_LTLIBRARIES       = libreflex.la libreflexmin.a
 #
 # libreflex_la_CPPFLAGS = -I$(top_srcdir)/include
-# libreflex_la_SOURCES  = convert.cpp debug.cpp error.cpp input.cpp lexer.cpp pattern.cpp posix.cpp unicode.cpp utf8.cpp $(top_srcdir)/unicode/block_scripts.cpp $(top_srcdir)/unicode/language_scripts.cpp $(top_srcdir)/unicode/letter_scripts.cpp
+# libreflex_la_SOURCES  = convert.cpp debug.cpp error.cpp input.cpp lexer.cpp pattern.cpp posix.cpp unicode.cpp $(top_srcdir)/unicode/block_scripts.cpp $(top_srcdir)/unicode/language_scripts.cpp $(top_srcdir)/unicode/letter_scripts.cpp
 #
 # libreflexmin_la_CPPFLAGS = -I$(top_srcdir)/include
-# libreflexmin_la_SOURCES  = debug.cpp error.cpp input.cpp lexer.cpp pattern.cpp utf8.cpp
+# libreflexmin_la_SOURCES  = debug.cpp error.cpp input.cpp lexer.cpp pattern.cpp

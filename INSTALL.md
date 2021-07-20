@@ -214,7 +214,6 @@ following files:
     |   |__ pattern.cpp
     |   |__ posix.cpp
     |   |__ unicode.cpp
-    |   |__ utf8.cpp
     |
     |__ src/                      reflex command-line tool
     |   |__ Make                  quick-build Make(file)

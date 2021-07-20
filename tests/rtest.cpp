@@ -261,7 +261,7 @@ int main()
   {
     Pattern pattern(test->pattern, test->popts);
     Lexer lexer(test->cstring, test->mopts);
-    lexer.patterns.push_back(std::move(pattern));
+    lexer.patterns.push_back(pattern);
 #ifdef REFLEX_RTEST_INTERACTIVE
     lexer.interactive();
 #endif
