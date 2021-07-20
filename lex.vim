@@ -144,8 +144,8 @@ syn region lexFinalCodeBlock	matchgroup=Todo	start="^%%"	end="\%$"	contained	con
 " Lex macros which may appear in C/C++ code blocks
 syn keyword lexCFunctions	BEGIN	ECHO	REJECT	yytext	YYText	yyleng	YYLeng	yymore	yyless	yywrap	yylook
 syn keyword lexCFunctions	yyrestart	yyterminate	yylineno	yycolumno	yyin	yyout
-syn keyword lexCFunctions	input	unput	output		winput		wunput		woutput
-syn keyword lexCFunctions	yyinput	yyunput	yyoutput	yywinput	yywunput	yywoutput
+syn keyword lexCFunctions	input	unput	output		u32input		u32unput		u32output
+syn keyword lexCFunctions	yyinput	yyunput	yyoutput	yyu32input	yyu32unput	yyu32output
 
 " <c.vim> includes several ALLBUTs; these have to be treated so as to exclude lex* groups
 syn cluster cParenGroup		add=lex.*

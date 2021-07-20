@@ -530,7 +530,7 @@ int main()
   //
   matcher.pattern(pattern9);
   matcher.input("ab c  d");
-  matcher.wunput(L'ä');
+  matcher.u32unput(U'ä');
   test = "";
   while (true)
   {
@@ -539,11 +539,11 @@ int main()
       std::cout << matcher.text() << "/";
       test.append(matcher.text()).append("/");
       if (*matcher.text() == 'b')
-        matcher.wunput(L'ç');
+        matcher.u32unput(U'ç');
     }
     else if (!matcher.at_end())
     {
-      std::cout << (char)matcher.winput() << "?/";
+      std::cout << (char)matcher.u32input() << "?/";
     }
     else
     {
@@ -554,7 +554,7 @@ int main()
   if (test != "ä/a/b/ç/c/d/")
   {
     std::cout << test << '\n';
-    error("wunput");
+    error("u32unput");
   }
   //
   banner("TEST WRAP");
@@ -609,13 +609,13 @@ int main()
   {
     std::cout << matcher.text() << "/";
     test.append(matcher.text()).append("/");
-    matcher.skip(L'¶');
+    matcher.skip(U'¶');
   }
   if (matcher.scan())
   {
     std::cout << matcher.text() << "/";
     test.append(matcher.text()).append("/");
-    matcher.skip(L'¶');
+    matcher.skip(U'¶');
   }
   //
   matcher.input("abc  xxydef xx");

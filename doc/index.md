@@ -47,9 +47,9 @@ RE/flex offers lots of other practical improvements over Flex++, such as:
 - no input buffer length limit (Flex has a 16KB limit);
 - `yypush_buffer_state` saves the scanner state (line, column, and indentation
   positions), not just the input buffer;
-- new methods to analyze ASCII and Unicode input, such as `str()` and `wstr()`
-  to obtain the (wide) string match, `line()` and `wline()` to obtain the
-  current (wide) line for error reporting.
+- new methods to analyze ASCII and Unicode input, such as `str()` and `u32str()`
+  to obtain the u32 string match, `line()` and `u32line()` to obtain the
+  current u32 line for error reporting.
 
 Rule patterns in a lexer specification are converted by the <b>`reflex`</b>
 tool to efficient deterministic finite state machines in direct code (option
@@ -83,7 +83,7 @@ In summary, RE/flex is really several things combined into one package:
 
 - a C++ regex API enhancement of the [Boost.Regex](www.boost.org/libs/regex)
   and [PCRE2](www.pcre.org) libraries for matching, seaching, splitting and
-  scanning of input, with input from (wide) strings, files, and streams of
+  scanning of input, with input from u32 strings, files, and streams of
   potentially unlimited length.
 
 The typographical conventions used by this document are:
@@ -517,9 +517,8 @@ in this mode.  Therefore, no PCRE2 POSIX mode class is included as a choice.
 JIT optimizations speed up matching.  However, this comes at a cost of extra
 processing when the PCRE2 matcher class is instantiated.
 
-A matcher may be applied to strings and wide strings, such as `std::string` and
-`std::wstring`, `char*` and `wchar_t*`.  Wide strings are converted to UTF-8 to
-enable matching with regular expressions that contain Unicode patterns.
+A matcher may be applied to strings and u32strings, such as `std::(u32)string`
+and `char(char32_t)*`.
 
 To match Unicode patterns with regex library engines that are 8-bit based or do
 not support Unicode, we want to convert your regex string first before we use
@@ -620,8 +619,8 @@ As a result, the `words` vector contains "How", "now", "brown", "cow".
 
 Casting a matcher object to `std::string` is the same as converting `text()` to
 a string with `std::string(text(), size())`, which in the example above is done
-to construct the `words` vector.  Casting a matcher object to `std::wstring` is
-similar, but also converts the UTF-8 `text()` match to a wide string.
+to construct the `words` vector.  Casting a matcher object to `std::u32string` is
+similar, but also converts the UTF-8 `text()` match to a u32 string.
 
 RE/flex iterators are useful in C++11 range-based loops.  For example:
 
@@ -682,13 +681,13 @@ This method and other methods may be used to obtain the details of a match:
   `accept()`      | returns group capture index (or zero if not captured/matched)
   `text()`        | returns `const char*` to 0-terminated match (ends in `\0`)
   `str()`         | returns `std::string` text match (preserves `\0`s)
-  `wstr()`        | returns `std::wstring` wide text match (converted from UTF-8)
+  `u32str()`      | returns `std::u32string` u32 text match (converted from UTF-8)
   `chr()`         | returns first 8-bit character of the text match (`str()[0]`)
-  `wchr()`        | returns first wide character of the text match (`wstr()[0]`)
+  `u32chr()`      | returns first u32 character of the text match (`u32str()[0]`)
   `pair()`        | returns `std::pair<size_t,std::string>(accept(),str())`
-  `wpair()`       | returns `std::pair<size_t,std::wstring>(accept(),wstr())`
+  `u32pair()`     | returns `std::pair<size_t,std::u32string>(accept(),u32str())`
   `size()`        | returns the length of the text match in bytes
-  `wsize()`       | returns the length of the match in number of wide characters
+  `u32size()`     | returns the length of the match in number of u32 characters
   `lines()`       | returns the number of lines in the text match (>=1)
   `columns()`     | returns the number of columns of the text match (>=0)
   `begin()`       | returns `const char*` to non-0-terminated text match begin
@@ -696,7 +695,7 @@ This method and other methods may be used to obtain the details of a match:
   `rest()`        | returns `const char*` to 0-terminated rest of input
   `span()`        | returns `const char*` to 0-terminated match enlarged to span the line
   `line()`        | returns `std::string` line with the matched text as a substring
-  `wline()`       | returns `std::wstring` line with the matched text as a substring
+  `u32line()`     | returns `std::u32string` line with the matched text as a substring
   `more()`        | tells the matcher to append the next match (when using `scan()`)
   `less(n)`       | cuts `text()` to `n` bytes and repositions the matcher
   `lineno()`      | returns line number of the match, starting at line 1
@@ -763,15 +762,15 @@ The following methods may be used to manipulate the input stream directly:
   Method     | Result
   ---------- | ----------------------------------------------------------------
   `input()`  | returns next 8-bit char from the input, matcher then skips it
-  `winput()` | returns next wide character from the input, matcher skips it
+  `u32input()` | returns next u32 character from the input, matcher skips it
   `unput(c)` | put 8-bit char `c` back unto the stream, matcher then takes it
-  `wunput(c)`| put (wide) char `c` back unto the stream, matcher then takes it
+  `u32unput(c)`| put u32 char `c` back unto the stream, matcher then takes it
   `peek()`   | returns next 8-bit char from the input without consuming it
-  `skip(c)`  | skip input until character `c` (`char` or `wchar_t`) is consumed
+  `skip(c)`  | skip input until character `c` (`char` or `char32_t`) is consumed
   `skip(s)`  | skip input until UTF-8 string `s` is consumed
   `rest()`   | returns the remaining input as a 0-terminated `char*` string
 
-The `input()`, `winput()`, and `peek()` methods return a non-negative character
+The `input()`, `u32input()`, and `peek()` methods return a non-negative character
 code and EOF (-1) when the end of input is reached.
 
 To initialize a matcher for interactive use, to assign a new input source or to
@@ -855,7 +854,7 @@ should include the final zero byte at the end of the string.
 
 @note In fact, the specified string may have any final byte value.  The final
 byte of the string will be set to zero when `text()` or `rest()` are used.
-Only `unput(c)`, `wunput()`, `text()`, `rest()`, and `span()` modify the buffer
+Only `unput(c)`, `u32unput()`, `text()`, `rest()`, and `span()` modify the buffer
 contents, because these functions require an extra byte at the end of the
 buffer to make the strings returned by these methods 0-terminated.  This means
 that we can specify read-only memory of `n` bytes located at address `b` by
@@ -1024,7 +1023,7 @@ In summary:
 
 - RE/flex defines an extensible abstract class interface that offers a standard
   API to use regex matcher engines.  The API is used by the generated scanners.
-  The API supports UTF-8/16/32-encoded FILE content, wide strings and streaming
+  The API supports UTF-8/16/32-encoded FILE content, u32 strings and streaming
   data.
 
 - RE/flex includes a regex matcher class and a regex pattern class to implement
@@ -1090,7 +1089,7 @@ The `libboost_regex` library or the `libpcre2-8` library should only be linked
 when the Boost.Regex or PCRE2 engines are used for matching, respectively.
 
 The input class `reflex::Input` of the `libreflex` library manages input from
-strings, wide strings, streams, and data from `FILE` descriptors.  File data
+strings, u32 strings, streams, and data from `FILE` descriptors.  File data
 may be encoded in ASCII, binary or in UTF-8/16/32.  UTF-16/32 is automatically
 decoded and converted to UTF-8 for UTF-8-based regex matching:
 
@@ -1099,13 +1098,13 @@ digraph execute {
   ranksep=.25;
   node     [ shape=box, fontname=Helvetica, fontsize=11 ];
   string   [ label="string/buffer input\n(ASCII, binary, UTF-8)", peripheries=0 ];
-  wstring  [ label="wide string input\n(UCS-4)", peripheries=0 ];
+  u32string [ label="u32 string input\n(UCS-4)", peripheries=0 ];
   file     [ label="FILE input\n(ASCII, binary, UTF-8/16/32)", peripheries=0 ];
   istream  [ label="istream input\n(cin, fstream, etc.)", peripheries=0 ];
   aout     [ label="scanner\n(a.out)" ];
   actions  [ label="actions & tokens", peripheries=0 ];
   string  -> aout -> actions;
-  wstring -> aout;
+  u32string -> aout;
   file    -> aout;
   istream -> aout;
 }
@@ -1348,7 +1347,7 @@ at runtime with `matcher().tabs(N)` with `N` 1, 2, 4, or 8.
 
 This option makes `.`, `\s`, `\w`, `\l`, `\u`, `\S`, `\W`, `\L`, `\U` match
 Unicode.  Also groups UTF-8 sequences in the regex, such that each UTF-8
-encoded character in a regex is properly matched as one wide character.
+encoded character in a regex is properly matched as one u32 character.
 
 #### `-x`, `−−freespace`
 
@@ -1605,7 +1604,7 @@ rule with action `throw VALUE` and replaces the standard default rule that
 echoes all unmatched input text when no rule matches.  This option has no
 effect when option `-S` (or `−−find`) is specified.  See also option `-s` (or
 `−−nodefault`).  Care should be taken to advance the input explicitly in the
-exception handler, for example by calling `lexer.matcher().winput()` when
+exception handler, for example by calling `lexer.matcher().u32input()` when
 `lexer.size()` is zero.
 
 #### `−−token-type=NAME`
@@ -2009,11 +2008,11 @@ are the classic Flex actions shown in the second column of this table:
   ------------------------ | -------------------- | -------------------------------
   `text()`                 | `YYText()`, `yytext` | 0-terminated text match
   `str()`                  | *n/a*                | `std::string` text match
-  `wstr()`                 | *n/a*                | `std::wstring` wide text match
+  `u32str()`               | *n/a*                | `std::u32string` u32 text match
   `chr()`                  | `yytext[0]`          | first 8-bit char of text match
-  `wchr()`                 | *n/a*                | first wide char of text match
+  `u32chr()`               | *n/a*              | first u32 char of text match
   `size()`                 | `YYLeng()`, `yyleng` | size of the match in bytes
-  `wsize()`                | *n/a*                | number of wide chars matched
+  `u32size()`              | *n/a*                | number of u32 chars matched
   `lines()`                | *n/a*                | number of lines matched (>=1)
   `columns()`              | *n/a*                | number of columns matched (>=0)
   `lineno(n)`              | `yylineno = n`       | set line number of the match to `n`
@@ -2038,11 +2037,11 @@ are the classic Flex actions shown in the second column of this table:
   `matcher().accept()`     | `yy_act`             | number of the matched rule
   `matcher().text()`       | `YYText()`, `yytext` | same as `text()`
   `matcher().str()`        | *n/a*                | same as `str()`
-  `matcher().wstr()`       | *n/a*                | same as `wstr()`
+  `matcher().u32str()`     | *n/a*                | same as `u32str()`
   `matcher().chr()`        | `yytext[0]`          | same as `chr()`
-  `matcher().wchr()`       | *n/a*                | same as `wchr()`
+  `matcher().u32chr()`     | *n/a*                | same as `u32chr()`
   `matcher().size()`       | `YYLeng()`, `yyleng` | same as `size()`
-  `matcher().wsize()`      | *n/a*                | same as `wsize()`
+  `matcher().u32size()`    | *n/a*                | same as `u32size()`
   `matcher().lines()`      | *n/a*                | same as `lines()`
   `matcher().columns()`    | *n/a*                | same as `columns()`
   `matcher().lineno(n)`    | `yylineno = n`       | same as `lineno(n)`
@@ -2054,9 +2053,9 @@ are the classic Flex actions shown in the second column of this table:
   `matcher().begin()`      | *n/a*                | non-0-terminated text match begin
   `matcher().end()`        | *n/a*                | non-0-terminated text match end
   `matcher().input()`      | `yyinput()`          | get next 8-bit char from input
-  `matcher().winput()`     | *n/a*                | get wide character from input
+  `matcher().u32input()`   | *n/a*                | get u32 character from input
   `matcher().unput(c)`     | `unput(c)`           | put back 8-bit char `c`
-  `matcher().wunput(c)`    | `unput(c)`           | put back (wide) char `c`
+  `matcher().u32unput(c)`  | `unput(c)`           | put back u32 char `c`
   `matcher().peek()`       | *n/a*                | peek at next 8-bit char on input
   `matcher().skip(c)`      | *n/a*                | skip input to char `c`
   `matcher().skip(s)`      | *n/a*                | skip input to UTF-8 string `s`
@@ -2067,7 +2066,7 @@ are the classic Flex actions shown in the second column of this table:
   `matcher().rest()`       | *n/a*                | get rest of input until end
   `matcher().span()`       | *n/a*                | enlarge match to span line
   `matcher().line()`       | *n/a*                | get line with the match
-  `matcher().wline()`      | *n/a*                | get line with the match
+  `matcher().u32line()`    | *n/a*                | get line with the match
   `matcher().at_bob()`     | *n/a*                | true if at the begin of input
   `matcher().at_end()`     | *n/a*                | true if at the end of input
   `matcher().at_bol()`     | `YY_AT_BOL()`        | true if at begin of a newline
@@ -2076,8 +2075,8 @@ are the classic Flex actions shown in the second column of this table:
 
 A `reflex::Input` input source is denoted `i` in the table, which can be
 `FILE*` descriptor, `std::istream`, a string `std::string` or `const char*`, or
-a wide string `std::wstring` or `const wchar_t*`.  Output `o` is a
-`std::ostream` object.
+a u32string `std::u32string` or `const char32_t*`.  Output `o` is a `std::ostream`
+object.
 
 Note that Flex `switch_streams(i, o)` is the same as invoking the `in(i)` and
 `out(o)` methods.  Flex `yyrestart(i)` is the same as invoking `in(i)` to set
@@ -2095,7 +2094,7 @@ Resetting the matcher state also flushes the remaining input from the buffer,
 which would otherwise still be consumed.  Using `in(i)` (or `yyrestart(i)` with
 option `−−flex`) is therefore preferable.
 
-The `matcher().input()`, `matcher().winput()`, and `matcher().peek()` methods
+The `matcher().input()`, `matcher().u32input()`, and `matcher().peek()` methods
 return a non-negative character code and EOF (-1) when the end of input is
 reached.  These methods preserve the current `text()` match (and `yytext` with
 option `−−flex`), but the pointer returned by `text()` (and `yytext`) may
@@ -2112,11 +2111,11 @@ reached.
 `−−flex`) is invoked!  A matcher is not initially assigned to a lexer when the
 lexer is constructed, leaving `matcher()` undefined.
 
-The `matcher().skip(c)` method skips input until `char` or wide `wchar_t`
-character `c` is consumed and returns `true` when found.  This method changes
-`text()` (and `yytext` with option `−−flex`).  This method is more efficient
-than repeatedly calling `matcher().input()`.  Likewise, `matcher().skip(s)`
-skips input until UTF-8 string `s` is consumed and returns `true` when found.
+The `matcher().skip(c)` method skips input until `char` or `char32_t` character
+`c` is consumed and returns `true` when found.  This method changes `text()`
+(and `yytext` with option `−−flex`).  This method is more efficient than
+repeatedly calling `matcher().input()`.  Likewise, `matcher().skip(s)` skips
+input until UTF-8 string `s` is consumed and returns `true` when found.
 
 Use <b>`reflex`</b> options `−−flex` and `−−bison` (or option `−−yy`) to enable
 global Flex actions and variables.  This makes Flex actions and variables
@@ -2138,10 +2137,10 @@ Flex functions take a `yyscan_t` scanner as an extra last argument.  See
 From the first couple of entries in the table shown above you may have guessed
 correctly that `text()` is just a shorthand for `matcher().text()`, since
 `matcher()` is the matcher object associated with the generated Lexer class.
-The same shorthand apply to `str()`, `wstr()`, `size()`, `wsize()`,
+The same shorthand apply to `str()`, `u32str()`, `size()`, `u32size()`,
 `lineno()`, `columno()`, and `border()`.  Use `text()` for fast access to the
 matched text.  The `str()` method returns a string copy of the match and is
-less efficient.  Likewise, `wstr()` returns a wide string copy of the match,
+less efficient.  Likewise, `u32str()` returns a u32 string copy of the match,
 converted from UTF-8.
 
 The `lineno()` method returns the line number of the match, starting at line 1.
@@ -2149,21 +2148,21 @@ The ending line number is `lineno_end()`, which is identical to the value of
 `lineno()` + `lines()` - 1.
 
 The `columno()` method returns the column offset of a match from the start of
-the line, beginning at column 0.  This method takes tab spacing and wide
+the line, beginning at column 0.  This method takes tab spacing and u32
 characters into account.  The inclusive ending column number is given by
 `columno_end()`, which is equal or larger than `columno()` if the match does
 not span multiple lines.  Otherwise, if the match spans multiple lines,
 `columno_end()` is the ending column of the match on the last matching line.
 
 The `lines()` and `columns()` methods return the number of lines and columns
-matched, where `columns()` takes tab spacing and wide characters into account.
+matched, where `columns()` takes tab spacing and u32 characters into account.
 If the match spans multiple lines, `columns()` counts columns over all lines,
 without counting the newline characters.
 
 The starting byte offset of the match on a line is `border()` and the inclusive
 ending byte offset of the match is `border() + size() - 1`.
 
-@note A wide character is counted as one, thus `columno()`, `columno_end()`,
+@note A u32 character is counted as one, thus `columno()`, `columno_end()`,
 and `columns()` do not take the character width of full-width and combining
 Unicode characters into account.  It is recommended to use the `wcwidth`
 function or
@@ -2186,8 +2185,8 @@ into the input stream and as a means to perform sophisticated lookaheads.
 
 The `matcher().first()` and `matcher().last()` methods return the position in
 the input stream of the match, counting in bytes from the start of the input at
-position 0.  If the input stream is a wide character sequence, the UTF-8
-positions are returned as a result of the internally-converted UTF-8 wide
+position 0.  If the input stream is a u32 character sequence, the UTF-8
+positions are returned as a result of the internally-converted UTF-8 u32
 character input.
 
 The `matcher().rest()` method returns the rest of the input character sequence
@@ -2197,15 +2196,15 @@ return the string.
 The `matcher().span()` method enlarges the text matched to span the entire line
 and returns the matching line as a 0-terminated `char*` string without the `\n`.
 
-The `matcher().line()` and `matcher().wline()` methods return the entire line
-as a (wide) string with the matched text as a substring.  These methods can be
-used to obtain the context of a match, for example to display the line where a
-lexical error or syntax error occurred.
+The `matcher().line()` and `matcher().u32line()` methods return the entire line
+as a u32 string with the matched text as a substring. These methods can be used
+to obtain the context of a match, for example to display the line where a lexical
+error or syntax error occurred.
 
 @warning The methods `matcher().span()`, `matcher().line()`, and
-`matcher().wline()` invalidate the previous `text()`, `yytext`, `begin()`, and
+`matcher().u32line()` invalidate the previous `text()`, `yytext`, `begin()`, and
 `end()` string pointers.  Call these methods again to retrieve the updated
-pointer or call `str()` or `wstr()` to obtain a string copy of the match:
+pointer or call `str()` or `u32str()` to obtain a string copy of the match:
 ~~~{.cpp}
     // INCORRECT, because t is invalid after line():
     const char *t = matcher().text();
@@ -2273,7 +2272,7 @@ The following Flex actions are also supported with <b>`reflex`</b> option
   RE/flex action   | Flex action              | Result
   ---------------- | ------------------------ | -------------------------
   `in(s)`          | `yy_scan_string(s)`      | reset and scan string `s` (`std::string` or `char*`)
-  `in(s)`          | `yy_scan_wstring(s)`     | reset and scan wide string `s` (`std::wstring` or `wchar_t*`)
+  `in(s)`          |                          | reset and scan u32string `s` (`std::u32string` or `char32_t*`)
   `in(b, n)`       | `yy_scan_bytes(b, n)`    | reset and scan `n` bytes at address `b` (buffered)
   `buffer(b, n+1)` | `yy_scan_buffer(b, n+2)` | reset and scan `n` bytes at address `b` (zero copy)
 
@@ -2286,7 +2285,7 @@ buffer with `yy_delete_buffer(YY_CURRENT_BUFFER)` before creating a new buffer
 with one of these functions.  See \ref reflex-input for more details.
 
 The generated scanner reads from the standard input by default or from an input
-source specified as a `reflex::Input` object, such as a string, wide string,
+source specified as a `reflex::Input` object, such as a string, u32 string,
 file, or a stream.  See \ref reflex-input for more details on managing the
 input to a scanner.
 
@@ -2355,7 +2354,7 @@ argument.  To set an alternative output stream than standard output, pass a
 
 The above uses a `FILE` descriptor to read input from, which has the advantage
 of automatically decoding UTF-8/16/32 input.  Other permissible input sources
-are `std::istream`, `std::string`, `std::wstring`, `char*`, and `wchar_t*`.
+are `std::istream`, `std::string`, `std::u32string`, `char*`, and `char32_t*`.
 
 🔝 [Back to table of contents](#)
 
@@ -2522,7 +2521,7 @@ intersection, for example `[a&&[b]]` is invalid.
 Bracket lists may contain ASCII and Unicode \ref reflex-pattern-cat, for
 example `[a-z\d]` contains the letters `a` to `z` and digits `0` to `9` (or
 Unicode digits when Unicode is enabled).  To add Unicode character categories
-and wide characters (encoded in UTF-8) to bracket lists
+and u32 characters (encoded in UTF-8) to bracket lists
 \ref reflex-pattern-unicode should be enabled.
 
 An negated Unicode character class is constructed by subtracting the character
@@ -3316,8 +3315,8 @@ the following patterns to be used:
   Pattern            | Matches
   ------------------ | --------------------------------------------------------
   `.`                | matches any Unicode character (beware of \ref invalid-utf)
-  `€` (UTF-8)        | matches wide character `€`, encoded in UTF-8
-  `[€¥£]` (UTF-8)    | matches wide character `€`, `¥` or `£`, encoded in UTF-8
+  `€` (UTF-8)        | matches u32 character `€`, encoded in UTF-8
+  `[€¥£]` (UTF-8)    | matches u32 character `€`, `¥` or `£`, encoded in UTF-8
   `\X`               | matches any ISO-8859-1 or Unicode character
   `\R`               | matches a Unicode line break `\r\n` or `[\u{000A}-\u{000D}u{U+0085}\u{2028}\u{2029}]`
   `\s`               | matches a white space character `[ \t\n\v\f\r\p{Z}]`
@@ -3703,7 +3702,7 @@ likewise, with option `−−flex`:
 
 where `input` is a `reflex::Input` object.  The `reflex::Input` constructor
 takes a `FILE*` descriptor, `std::istream`, a string `std::string` or
-`const char*`, or a wide string `std::wstring` or `const wchar_t*`.
+`const char*`, or a u32string `std::u32string` or `const char32_t*`.
 
 The following methods are available to specify an input source:
 
@@ -3713,7 +3712,7 @@ The following methods are available to specify an input source:
   `in() = i`          | `yyin = &i`              | set input `reflex::Input i`
   `in(i)`             | `yyrestart(i)`           | reset and scan input from `reflex::Input i`
   `in(s)`             | `yy_scan_string(s)`      | reset and scan string `s` (`std::string` or `char*`)
-  `in(s)`             | `yy_scan_wstring(s)`     | reset and scan wide string `s` (`std::wstring` or `wchar_t*`)
+  `in(s)`             |                          | reset and scan u32string `s` (`std::u32string` or `char32_t*`)
   `in(b, n)`          | `yy_scan_bytes(b, n)`    | reset and scan `n` bytes at `b` address (buffered)
   `buffer(b, n+1)`    | `yy_scan_buffer(b, n+2)` | reset and scan `n` bytes at `b` address (zero copy)
 
@@ -3743,8 +3742,8 @@ For example, to switch input to another source while using the scanner, use
     lexer.in(ptr, len);
     lexer.lex();
 
-    // read from a wide string, 0-terminated, encoding it to UTF-8 for matching
-    lexer.in(L"How now brown cow.");
+    // read from a u32 string, 0-terminated, encoding it to UTF-8 for matching
+    lexer.in(U"How now brown cow.");
     lexer.lex();
 ~~~
 
@@ -3805,14 +3804,14 @@ With options `−−flex` and `−−bison` you can also use classic Flex functi
     yy_scan_bytes(ptr, len); // new buffer to scan memory
     yylex();
 
-    // read from a wide string, 0-terminated, encoding it to UTF-8 for matching
+    // read from a u32 string, 0-terminated, encoding it to UTF-8 for matching
     yy_delete_buffer(YY_CURRENT_BUFFER);
-    yy_scan_wstring(L"How now brown cow."); // new buffer to scan a wide string
-    // yyin = L"How now brown cow.";        // alternative, does not create a new buffer
+    yy_scan_u32string(U"How now brown cow."); // new buffer to scan a u32 string
+    // yyin = U"How now brown cow.";        // alternative, does not create a new buffer
     yylex();
 ~~~
 
-The `yy_scan_string`, `yy_scan_bytes`, and `yy_scan_wstring` functions create
+The `yy_scan_string`, `yy_scan_bytes`, and `yy_scan_u32string` functions create
 a new buffer (i.e. a new matcher in RE/flex) and replace the old buffer
 without deleting it.  A pointer to the new buffer is returned, which becomes
 the new `YY_CURRENT_BUFFER`.  You should delete the old buffer with
@@ -3839,15 +3838,15 @@ In fact, the specified string may have any final byte value.  The final byte of
 the string will be set to zero when `text()` (or `yytext`) or `rest()` are
 used.  But otherwise the final byte remains completely untouched by the other
 lexer functions, including `echo()` (and Flex-compatible `ECHO`).  Only
-`unput(c)`, `wunput()`, `text()` (or `yytext`), `rest()`, and `span()` modify
+`unput(c)`, `u32unput()`, `text()` (or `yytext`), `rest()`, and `span()` modify
 the buffer contents, where `text()` and `rest()` require an extra byte at the
 end of the buffer to make the strings returned by these functions 0-terminated.
 This means that you can scan read-only memory of `n` bytes located at address
 `b` by using `buffer(b, n+1)` safely, for example to read read-only mmap(2)
-`PROT_READ` memory, as long as `unput(c)`,`wunput()`, `text()` (or `yytext`),
+`PROT_READ` memory, as long as `unput(c)`,`u32unput()`, `text()` (or `yytext`),
 `rest()`, and `span()` are not used.
 
-The Flex `yy_scan_string`, `yy_scan_bytes`, `yy_scan_wstring`, and
+The Flex `yy_scan_string`, `yy_scan_bytes`, `yy_scan_u32string`, and
 `yy_scan_buffer` functions take an extra last `yyscan_t` argument for reentrant
 scanners generated with option `−−reentrant`, for example:
 
@@ -3878,7 +3877,7 @@ scanners generated with option `−−reentrant`, for example:
 
     // read from a wide string, 0-terminated, encoding it to UTF-8 for matching
     yy_delete_buffer(YY_CURRENT_BUFFER, yyscanner);
-    yy_scan_wstring(L"How now brown cow.", yyscanner); // new buffer to scan a wide string
+    yy_scan_u32string(U"How now brown cow.", yyscanner); // new buffer to scan a u32 string
     yylex();
 
     // read a 0-terminated buffer in place, buffer content is changed!!
@@ -4013,9 +4012,9 @@ and `input()` functions return 0 instead of an `EOF` (-1)!
 
 To put back one character unto the input stream, use `matcher().unput(c)` (or
 `unput(c)` with option `−−flex`) to put byte `c` back in the input or
-`matcher().wunput(c)` to put a (wide) character `c` back in the input.
+`matcher().u32unput(c)` to put a u32 character `c` back in the input.
 
-@warning Functions `unput()` and `wunput()` invalidate the previous `text()`
+@warning Functions `unput()` and `u32unput()` invalidate the previous `text()`
 and `yytext` pointers.  Basically, `text()` and `yytext` cannot be used after
 `unput()`.
 
@@ -4932,7 +4931,7 @@ symbols grammar file:
     {
       std::cerr << msg << std::endl;
       if (lexer.size() == 0)      // if token is unknown (no match)
-        lexer.matcher().winput(); // skip character
+        lexer.matcher().u32input(); // skip character
     }
 ~~~
 </div>
@@ -5084,7 +5083,7 @@ symbols grammar file with Bison <i>`%%locations`</i> enabled:
     {
       std::cerr << loc << ": " << msg << std::endl;
       if (lexer.size() == 0)      // if token is unknown (no match)
-        lexer.matcher().winput(); // skip character
+        lexer.matcher().u32input(); // skip character
     }
 ~~~
 </div>
@@ -5454,7 +5453,7 @@ when the function is used outside the scope of a lexer method:
   `yypush_buffer_state(m, s)` | push current matcher, use `m`
   `yypop_buffer_state(s)`     | pop matcher and delete current
   `yy_scan_string(s)`         | scan string `s`
-  `yy_scan_wstring(s)`        | scan wide string `s`
+  `yy_scan_u32string(s)`      | scan u32 string `s`
   `yy_scan_bytes(b, n)`       | scan `n` bytes at `b` (buffered)
   `yy_scan_buffer(b, n)`      | scan `n`-1 bytes at `b` (zero copy)
   `yy_push_state(n, s)`       | push current state, go to state `n`
@@ -6120,7 +6119,7 @@ in <i>`%{ %}`</i> blocks instead of indented.
 When used with option `unicode`, the scanner automatically recognizes and scans
 Unicode identifier names.  Note that we can use `matcher().columno()` or
 `matcher().border()` in the error message to indicate the location on a line of
-the match.  The `matcher().columno()` method takes tab spacing and wide
+the match.  The `matcher().columno()` method takes tab spacing and u32
 characters into account.  To obtain the byte offset from the start of the line
 use `matcher().border()`.  The `matcher()` object associated with the Lexer
 offers several other methods that Flex does not support.
@@ -6219,7 +6218,7 @@ The RE/flex regex library                                              {#regex}
 
 The RE/flex regex library consists of a set of C++ templates and classes that
 encapsulate regex engines in a standard API for scanning, tokenizing,
-searching, and splitting of strings, wide strings, files, and streams.
+searching, and splitting of strings, u32 strings, files, and streams.
 
 The RE/flex regex library is a class hierarchy that has at the root an abstract
 class `reflex::AbstractLexer`.  Pattern types may differ between for matchers
@@ -6311,7 +6310,7 @@ object, or string regex, and some given input for POSIX mode matching:
     reflex::BoostPosixMatcher matcher( boost::regex or string, reflex::Input [, "options"] )
 ~~~
 
-For input you can specify a string, a wide string, a file, or a stream object.
+For input you can specify a string, a u32 string, a file, or a stream object.
 
 We use option `"N"` to permit empty matches when searching input with
 `reflex::BoostMatcher::find`.
@@ -6400,7 +6399,7 @@ This matcher uses PCRE2 native Unicode matching.  Non-UTF input is not
 supported, such as plain binary.  UTF encoding errors in the input will cause
 the matcher to terminate.
 
-For input you can specify a string, a wide string, a file, or a stream object.
+For input you can specify a string, a u32 string, a file, or a stream object.
 
 We use option `"N"` to permit empty matches when searching input with
 `reflex::PCRE2Matcher::find`.
@@ -6552,7 +6551,7 @@ We use option `"N"` to permit empty matches when searching input with
 `reflex::Matcher::find`.  Option `"T=8"` sets the tab size to 8 for
 \ref reflex-pattern-dents matching.
 
-For input you can specify a string, a wide string, a file, or a stream object.
+For input you can specify a string, a u32 string, a file, or a stream object.
 
 A regex string with Unicode patterns can be converted for Unicode matching as
 follows:
@@ -6797,13 +6796,13 @@ The following example enables dotall mode to count the number of characters
 ~~~{.cpp}
     #include <reflex/boostmatcher.h> // reflex::BoostMatcher, reflex::Input, boost::regex
 
-    // construct a Boost.Regex matcher to count wide characters:
+    // construct a Boost.Regex matcher to count u32 characters:
     std::string regex = reflex::BoostMatcher::convert("(?su).");
     reflex::BoostMatcher boostmatcher(regex, example);
     size_t n = std::distance(boostmatcher.scan.begin(), boostmatcher.scan.end());
 ~~~
 
-Note that we could have used `"\X"` instead to match any wide character without
+Note that we could have used `"\X"` instead to match any u32 character without
 using the `(?su)` modifiers.
 
 A converter throws a `reflex::regex_error` exception if conversion fails, for
@@ -7101,13 +7100,13 @@ To obtain properties of a match, use the following methods:
   `accept()`      | returns group capture index (or zero if not captured/matched)
   `text()`        | returns `const char*` to 0-terminated text match (ends in `\0`)
   `str()`         | returns `std::string` text match (preserves `\0`s)
-  `wstr()`        | returns `std::wstring` wide text match (converted from UTF-8)
+  `u32str()`      | returns `std::u32string` u32 text match (converted from UTF-8)
   `chr()`         | returns first 8-bit character of the text match (`str()[0]`)
-  `wchr()`        | returns first wide character of the text match (`wstr()[0]`)
+  `u32chr()`      | returns first u32 character of the text match (`u32str()[0]`)
   `pair()`        | returns `std::pair<size_t,std::string>(accept(),str())`
-  `wpair()`       | returns `std::pair<size_t,std::wstring>(accept(),wstr())`
+  `u32pair()`     | returns `std::pair<size_t,std::u32string>(accept(),u32str())`
   `size()`        | returns the length of the text match in bytes
-  `wsize()`       | returns the length of the match in number of wide characters
+  `u32size()`     | returns the length of the match in number of u32 characters
   `lines()`       | returns the number of lines in the text match (>=1)
   `columns()`     | returns the number of columns of the text match (>=0)
   `begin()`       | returns `const char*` to non-0-terminated text match begin
@@ -7115,7 +7114,7 @@ To obtain properties of a match, use the following methods:
   `rest()`        | returns `const char*` to 0-terminated rest of input
   `span()`        | returns `const char*` to 0-terminated match enlarged to span the line
   `line()`        | returns `std::string` line with the matched text as a substring
-  `wline()`       | returns `std::wstring` line with the matched text as a substring
+  `u32line()`     | returns `std::u32string` line with the matched text as a substring
   `more()`        | tells the matcher to append the next match (when using `scan()`)
   `less(n)`       | cuts `text()` to `n` bytes and repositions the matcher
   `lineno()`      | returns line number of the match, starting at line 1
@@ -7136,10 +7135,10 @@ group capture index.  The RE/flex matcher engine `reflex::Matcher` only
 recognizes group captures at the top level of the regex (i.e. among the
 top-level alternations), because it uses an efficient FSM for matching.
 
-The `text()`, `str()`, and `wstr()` methods return the matched text.  To get
-the first character of a match, use `chr()` or `wchr()`.  The `chr()` and
-`wchr()` methods are much more efficient than `str()[0]` (or `text()[0]`) and
-`wstr()[0]`, respectively.  Normally, a match cannot be empty unless option
+The `text()`, `str()`, and `u32str()` methods return the matched text. To get
+the first character of a match, use `chr()` or `u32chr()`.  The `chr()` and
+`u32chr()` methods are much more efficient than `str()[0]` (or `text()[0]`) and
+`u32str()[0]`, respectively.  Normally, a match cannot be empty unless option
 `"N"` is specified to explicitly initialize a matcher, see \ref regex-boost,
 \ref regex-pcre2, and \ref regex-matcher.
 
@@ -7155,7 +7154,7 @@ The ending line number is `lineno_end()`, which is identical to the value of
 `lineno()` + `lines()` - 1.
 
 The `columno()` method returns the column offset of a match from the start of
-the line, beginning at column 0.  This method takes tab spacing and wide
+the line, beginning at column 0.  This method takes tab spacing and u32
 characters into account.  The inclusive ending column number is given by
 `columno_end()`, which is equal or larger than `columno()` if the match does
 not span multiple lines.  Otherwise, if the match spans multiple lines,
@@ -7165,11 +7164,11 @@ The starting byte offset of the match on a line is `border()` and the ending
 byte offset of the match is `border() + size() - 1`.
 
 The `lines()` and `columns()` methods return the number of lines and columns
-matched, where `columns()` takes tab spacing and wide characters into account.
+matched, where `columns()` takes tab spacing and u32 characters into account.
 If the match spans multiple lines, `columns()` counts columns over all lines,
 without counting the newline characters.
 
-@note A wide character is counted as one, thus `columno()`, `columno_end()`,
+@note A u32 character is counted as one, thus `columno()`, `columno_end()`,
 and `columns()` do not take the character width of full-width and combining
 Unicode characters into account.  It is recommended to use the `wcwidth`
 function or
@@ -7183,13 +7182,13 @@ the string.
 The `span()` method enlarges the text matched to span the entire line and
 returns the matching line as a 0-terminated `char*` string without the `\n`.
 
-The `line()` and `wline()` methods return the entire line as a (wide) string
+The `line()` and `u32line()` methods return the entire line as a u32 string
 with the matched text as a substring.  These methods can be used to obtain the
 context of a match.
 
-@warning The methods `span()`, `line()`, and `wline()` invalidate the previous
+@warning The methods `span()`, `line()`, and `u32line()` invalidate the previous
 `text()`, `begin()`, and `end()` string pointers.  Call these methods again to
-retrieve the updated pointer or call `str()` or `wstr()` to obtain a string
+retrieve the updated pointer or call `str()` or `u32str()` to obtain a string
 copy of the match:
 ~~~{.cpp}
     // INCORRECT, because t is invalid after line():
@@ -7225,21 +7224,21 @@ introduced in Lex.
 
 The `first()` and `last()` methods return the position in the input stream
 of the match, counting in bytes from the start of the input at position 0.
-If the input stream is a wide character sequence, the UTF-8 positions are
-returned as a result of the internally-converted UTF-8 wide character input.
+If the input stream is a u32 character sequence, the UTF-8 positions are
+returned as a result of the internally-converted UTF-8 u32 character input.
 
-All methods take constant time to execute except for `str()`, `wstr()`,
-`pair()`, `wpair()`, `wsize()`, `lines()`, `columns()`, and `columno()` that
-require an extra pass over the matched text.
+All methods take constant time to execute except for `str()`, `u32str()`,
+`pair()`, `u32pair()`, `u32size()`, `lines()`, `columns()`, and `columno()`
+that require an extra pass over the matched text.
 
 In addition, the following type casts of matcher objects and iterators may be
 used for convenience:
 
 - Casting to `size_t` gives the matcher's `accept()` index.
 - Casting to `std::string` is the same as invoking `str()`
-- Casting to `std::wstring` is the same as invoking `wstr()`.
+- Casting to `std::u32string` is the same as invoking `u32str()`.
 - Casting to `std::pair<size_t,std::string>` is the same as `pair()`.
-- Casting to `std::pair<size_t,std::wstring>` is the same as `wpair()`.
+- Casting to `std::pair<size_t,std::u32string>` is the same as `u32pair()`.
 
 The following example prints some of the properties of each match:
 
@@ -7329,15 +7328,15 @@ matcher directly, even when you use the matcher's search and match methods:
   Method     | Result
   ---------- | ----------------------------------------------------------------
   `input()`  | returns next 8-bit char from the input, matcher then skips it
-  `winput()` | returns next wide character from the input, matcher skips it
+  `u32input()` | returns next u32 character from the input, matcher skips it
   `unput(c)` | put 8-bit char `c` back unto the stream, matcher then takes it
-  `wunput(c)`| put (wide) char `c` back unto the stream, matcher then takes it
+  `u32unput(c)`| put u32 char `c` back unto the stream, matcher then takes it
   `peek()`   | returns next 8-bit char from the input without consuming it
-  `skip(c)`  | skip input until character `c` (`char` or `wchar_t`) is consumed
+  `skip(c)`  | skip input until character `c` (`char` or `char32_t`) is consumed
   `skip(s)`  | skip input until UTF-8 string `s` is consumed
   `rest()`   | returns the remaining input as a non-nullptr `char*` string
 
-The `input()`, `winput()`, and `peek()` methods return a non-negative character
+The `input()`, `u32input()`, and `peek()` methods return a non-negative character
 code and EOF (-1) when the end of input is reached.
 
 A matcher reads from the specified input source using its virtual method
@@ -7409,8 +7408,8 @@ source at a time.  Input to a matcher is represented by a single
 An input object is constructed by specifying a string, a file, or a stream to
 read from.  You can also reassign input to read from new input.
 
-More specifically, you can pass a `std::string`, `char*`, `std::wstring`,
-`wchar_t*`, `FILE*`, or a `std::istream` to the constructor.
+More specifically, you can pass a `std::string`, `char*`, `std::u32string`,
+`char32_t*`, `FILE*`, or a `std::istream` to the constructor.
 
 A `FILE*` file descriptor is a special case.  The input object handles various
 file encodings.  If a UTF Byte Order Mark (BOM) is detected then the UTF input
@@ -7428,14 +7427,14 @@ An input object constructed from an 8-bit string `char*` or `std::string` just
 passes the string to the matcher engine.  The string should contain UTF-8 when
 Unicode patterns are used.
 
-An input object constructed from a wide string `wchar_t*` or `std::wstring`
-translates the wide string to UTF-8 for matching, which effectively normalizes
+An input object constructed from a u32string `char32_t*` or `std::u32string`
+translates the u32 string to UTF-8 for matching, which effectively normalizes
 the input for matching with Unicode patterns.  This conversion is illustrated
 below.  The copyright symbol `©` with Unicode U+00A9 is matched against its
 UTF-8 sequence `C2 A9` of `©`:
 
 ~~~{.cpp}
-    if (reflex::Matcher("©", L"©").matches())
+    if (reflex::Matcher("©", U"©").matches())
       std::cout << "copyright symbol matches\n";
 ~~~
 
@@ -7444,14 +7443,14 @@ To ensure that Unicode patterns in UTF-8 strings are grouped properly, use
 
 ~~~{.cpp}
     static reflex::Pattern CR(reflex::Matcher::convert("(?u:\u{00A9})"));
-    if (reflex::Matcher(CR, L"©").matches())
+    if (reflex::Matcher(CR, U"©").matches())
       std::cout << "copyright symbol matches\n";
 ~~~
 
 Here we made the converted pattern static to avoid repeated conversion and
 construction overheads.
 
-@note The `char*`, `wchar_t*`, and `std::wstring` strings cannot contain a `\0`
+@note The `char*`, `char32_t*`, and `std::u32string` strings cannot contain a `\0`
 (NUL) character and the first `\0` terminates matching.  To match strings
 and binary input that contain `\0`, use `std::string` or `std::istringstream`.
 
@@ -7586,7 +7585,7 @@ To obtain the properties of an input source use the following methods:
   `good()`    | input is available to read (no error and not EOF)
   `eof()`     | end of input (but use only `at_end()` with matchers!)
   `cstring()` | the current `const char*` (of a `std::string`) or nullptr
-  `wstring()` | the current `const wchar_t*` (of a `std::wstring`) or nullptr
+  `u32string()` | the current `const char32_t*` (of a `std::u32string`) or nullptr
   `file()`    | the current `FILE*` file descriptor or nullptr
   `istream()` | a `std::istream*` pointer to the current stream object or nullptr
 
@@ -7610,7 +7609,7 @@ automatically normalizes the input to UTF-8 using the underlying
     }
 ~~~
 
-The `reflex::Input` object may be created from strings, wide strings, streams,
+The `reflex::Input` object may be created from strings, u32 strings, streams,
 and `FILE*` values.  These are readable as a `std::istream` via
 `reflex::Input::streambuf` that returns normalized UTF-8 characters.  For
 `FILE*` values we can specify \ref regex-input-file to normalize the encoded
@@ -7851,7 +7850,7 @@ See also Example 8 below for a more powerful URL pattern matcher.
 ### Example 3
 
 This example shows how input can be reassigned in each iteration of a loop that
-matches wide strings against a word pattern `\w+`:
+matches u32 strings against a word pattern `\w+`:
 
 ~~~{.cpp}
     #include <reflex/pcre2matcher.h>
@@ -7859,7 +7858,7 @@ matches wide strings against a word pattern `\w+`:
     using namespace reflex;
 
     // four words
-    const wchar_t *words[] = { L"Monty", L"Python's", L"Flying", L"Circus" };
+    const char32_t *words[] = { U"Monty", U"Python's", U"Flying", U"Circus" };
 
     // construct a PCRE2 matcher for words, given empty input initially
     PCRE2Matcher wordmatcher("\\w+", Input());
@@ -8280,7 +8279,7 @@ restricted to `FILE*` types:
 
 <div class="alt">
 ~~~{.cpp}
-    yyin = "..."; // (wide) strings
+    yyin = "..."; // u32 strings
 ~~~
 </div>
 
@@ -8323,7 +8322,7 @@ catch anything including `\n` and invalid UTF-8/16/32 encodings.
 
 Furthermore, before matching any input, invalid UTF-16 input is detected
 automatically by the `reflex::Input` class and replaced with the
-`::REFLEX_NONCHAR` code point U+200000 that lies outside the valid Unicode
+`::ERR_CHAR` code point U+200000 that lies outside the valid Unicode
 range.  This code point is never matched by non-dot regex patterns and is easy
 to detect by a regex pattern with a dot and a corresponding error action as
 shown above.
@@ -8382,7 +8381,7 @@ recognized, for example:
 The error message indicates the offending line number with `lineno()` and
 prints the problematic line of input using `matcher().line()`.  The position on
 the line is indicated with an arrow placed below the line at offset `columno()`
-from the start of the line, where `columno()` takes tabs and wide characters
+from the start of the line, where `columno()` takes tabs and u32 characters
 into account.
 
 This error message does not take the window width into account, which may
@@ -8613,7 +8612,7 @@ scanner to recover:
     void yy::parser::error(const location& loc, const std::string& msg)
     {
       if (lexer.size() == 0) // if token is unknown (no match)
-          lexer.matcher().winput(); // skip character
+          lexer.matcher().u32input(); // skip character
       ...
     }
 ~~~
@@ -8638,20 +8637,20 @@ On using setlocale                                                 {#setlocale}
 ------------------
 
 The RE/flex scanners and regex matchers use an internal buffer with UTF-8
-encoded text content to scan wide strings and UTF-16/UTF-32 input.  This means
+encoded text content to scan u32 strings and UTF-16/UTF-32 input.  This means
 that Unicode input is normalized to UTF-8 prior to matching.  This internal
 conversion is independent of the current C locale and is performed
 automatically by the `reflex::Input` class that passes the UTF-8-normalized
 input to the matchers.
 
-Furthermore, RE/flex lexers may invoke the `wstr()`, `wchr()`, and `wpair()`
-methods to extract wide string and wide character matches.  These methods are
+Furthermore, RE/flex lexers may invoke the `u32str()`, `u32chr()`, and `u32pair()`
+methods to extract u32 string and u32 character matches.  These methods are
 also independent of the current C locale.
 
 This means that setting the C locale in an application will not affect the
 performance of RE/flex scanners and regex matchers.
 
-As a side note, to display wide strings properly and to save wide strings to
+As a side note, to display u32 strings properly and to save u32 strings to
 UTF-8 text files, it is generally recommended to set the UTF-8 locale.  For
 example:
 
@@ -8661,13 +8660,13 @@ example:
     reflex::BoostMatcher matcher("\\w+", ifs);    // not affected by setlocale
     while (matcher.find() != 0)
     {
-      std::wstring& match = matcher.wstr();       // not affected by setlocale
-      std::wcout << match << std::endl;           // affected by setlocale
+      std::u32string& match = matcher.u32str();    // not affected by setlocale
+      // std::cout << match << std::endl;         // affected by setlocale
     }
     ifs.close();
 ~~~
 
-This displays wide string matches in UTF-8 on most consoles and terminals, but
+This displays u32 string matches in UTF-8 on most consoles and terminals, but
 not on all systems (I'm looking at you, Mac OS X terminal!)  Instead of
 `std::wcout` we can use `std::cout` instead to display UTF-8 content directly:
 

@@ -117,10 +117,8 @@ std::string latin1(int a, int b, int esc, bool brackets)
 }
 
 /// Convert a UCS-4 range [a,b] to a UTF-8 regex pattern.
-std::string utf8(int a, int b, int esc, const char *par, bool strict)
+std::string utf8(char32_t a, char32_t b, int esc, const char *par, bool strict)
 {
-  if (a < 0)
-    return ""; // undefined
   if (a > b)
     b = a;
   static const char *min_utf8_strict[6] = { // strict: pattern is strict, matching only strictly valid UTF-8
@@ -152,8 +150,8 @@ std::string utf8(int a, int b, int esc, const char *par, bool strict)
   char buf[16];
   char at[6];
   char bt[6];
-  size_t n = utf8(a, at);
-  size_t m = utf8(b, bt);
+  size_t n = to_utf8(a, at);
+  size_t m = to_utf8(b, bt);
   const unsigned char *as = reinterpret_cast<const unsigned char*>(at);
   const unsigned char *bs = nullptr;
   std::string regex;

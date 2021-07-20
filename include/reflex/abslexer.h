@@ -43,7 +43,7 @@
 /// This compile-time option speeds up matching, but slows input().
 #define REFLEX_WITH_FAST_GET
 
-/// This compile-time option adds span(), line(), wline(), speeds up buffer shifting and lineno().
+/// This compile-time option adds span(), line(), u32line(), speeds up buffer shifting and lineno().
 #define REFLEX_WITH_SPAN
 
 #include<reflex/convert.h>
@@ -578,12 +578,6 @@ class AbstractLexer {
   {
     return std::string(txt_, len_);
   }
-  /// Returns the match as a wide string, converted from UTF-8 text(), may include matched \0s.
-  std::wstring wstr() const
-    /// @returns wide string with text matched
-  {
-    return wcs(txt_, len_);
-  }
   /// Returns the match as a u32string, converted from UTF-8 text(), may include matched \0s.
   std::u32string u32str() const
     /// @returns u32string with text matched
@@ -595,16 +589,6 @@ class AbstractLexer {
     /// @returns match size in bytes
   {
     return len_;
-  }
-  /// Returns the length of the matched text in number of wide characters.
-  size_t wsize() const
-    /// @returns the length of the match in number of wide (multibyte UTF-8) characters
-  {
-    size_t n = 0;
-    const char *e = txt_ + len_;
-    for (const char *s = txt_; s < e; ++s)
-      n += (*s & 0xC0) != 0x80;
-    return n;
   }
   /// Returns the length of the matched text in number of u32 characters. This is the same as `wsize()`.
   size_t u32size() const
@@ -622,17 +606,11 @@ class AbstractLexer {
   {
     return *txt_;
   }
-  /// Returns the first wide character of the text matched.
-  int wchr() const
-    /// @returns wide char (UTF-8 converted to Unicode)
-  {
-    return utf8(txt_);
-  }
   /// Returns the first u32 character of the text matched.
   char32_t u32chr() const
     /// @returns char32_t (UTF-8 converted to Unicode)
   {
-    return fromutf8(txt_);
+    return from_utf8(txt_);
   }
   /// Set or change the starting line number of the last match.
   void lineno(size_t n) ///< new line number
@@ -913,11 +891,11 @@ class AbstractLexer {
   {
     return std::pair<size_t,std::string>(accept(), str());
   }
-  /// Returns std::pair<size_t,std::wstring>(accept(), wstr()), useful for tokenizing input into containers of pairs.
-  std::pair<size_t,std::wstring> wpair() const
-    /// @returns std::pair<size_t,std::wstring>(accept(), wstr())
+  /// Returns std::pair<size_t,std::u32string>(accept(), u32str()), useful for tokenizing input into containers of pairs.
+  std::pair<size_t,std::u32string> u32pair() const
+    /// @returns std::pair<size_t,std::u32string>(accept(), u32str())
   {
-    return std::pair<size_t,std::wstring>(accept(), wstr());
+    return std::pair<size_t,std::u32string>(accept(), u32str());
   }
   /// Returns the position of the first character of the match in the input character sequence, a constant-time operation.
   size_t first() const
@@ -1014,23 +992,6 @@ class AbstractLexer {
     cur_ = pos_;
     return got_;
   }
-  /// Returns the next wide character (unsigned 0..U+10FFFF or EOF) from the input character sequence, while preserving the current text() match (but pointer returned by text() may change; warning: does not preserve the yytext string pointer when options --flex and --bison are used).
-  int winput()
-    /// @returns the next wide character (unsigned 0..U+10FFFF) or EOF (-1)
-  {
-    REFLEX_DBGLOG("AbstractLexer::winput()");
-    char tmp[8] = { 0 }, *s = tmp;
-    int c;
-    if ((c = input()) == EOF)
-      return EOF;
-    if (static_cast<unsigned char>(*s++ = c) >= 0x80)
-    {
-      while (((++*s = get()) & 0xC0) == 0x80)
-        continue;
-      got_ = static_cast<unsigned char>(buf_[cur_ = --pos_]);
-    }
-    return utf8(tmp);
-  }
   /// Put back one character (8-bit) on the input character sequence for matching, DANGER: invalidates the previous text() pointer and match info, unput is not honored when matching in-place using buffer(base, size) and nothing has been read yet.
   void unput(char c) ///< 8-bit character to put back
   {
@@ -1057,39 +1018,12 @@ class AbstractLexer {
   {
     unput(chr());
   }
-  /// Put back one (wide) character on the input character sequence for matching, DANGER: invalidates the previous text() pointer and match info, unput is not honored when matching in-place using buffer(base, size) and nothing has been read yet.
-  void wunput(int c) ///< character to put back
-  {
-    REFLEX_DBGLOG("AbstractLexer::wunput()");
-    char tmp[8];
-    size_t n = utf8(c, tmp);
-    if (pos_ >= n)
-    {
-      pos_ -= n;
-    }
-    else
-    {
-      txt_ = buf_;
-      len_ = 0;
-      if (end_ + n >= max_)
-        (void)grow();
-      std::memmove(buf_ + n, buf_, end_);
-      end_ += n;
-    }
-    std::memcpy(&buf_[pos_], tmp, n);
-    cur_ = pos_;
-  }
-  /// Put back one (wide) character on the input character sequence for matching, DANGER: invalidates the previous text() pointer and match info, unput is not honored when matching in-place using buffer(base, size) and nothing has been read yet.
-  void wunput() /// Overload with no paramaters to unput wchr().
-  {
-    wunput(wchr());
-  }
   /// Put back one (u32) character on the input character sequence for matching, DANGER: invalidates the previous text() pointer and match info, unput is not honored when matching in-place using buffer(base, size) and nothing has been read yet.
   void u32unput(char32_t c) ///< character to put back
   {
     REFLEX_DBGLOG("AbstractLexer::u32unput()");
     char tmp[8];
-    size_t n = toutf8(c, tmp);
+    size_t n = to_utf8(c, tmp);
     if (pos_ >= n)
     {
       pos_ -= n;
@@ -1214,18 +1148,6 @@ class AbstractLexer {
     const char *b = bol();
     return std::string(b, e - b);
   }
-  /// Returns the line of input (excluding \n) as a wide string containing the matched text as a substring.
-  std::wstring wline()
-    /// @returns matching line as a wide string
-  {
-    REFLEX_DBGLOG("AbstractLexer::wline()");
-    reset_text();
-    const char *e = eol(); // warning: must call eol() before bol()
-    const char *b = bol();
-    while (b < e && (*b & 0xC0) == 0x80) // make sure we advance forward to valid UTF-8
-      ++b;
-    return wcs(b, e - b);
-  }
 #endif
   /// Skip input until the specified ASCII character is consumed and return true, or EOF is reached and return false.
   bool skip(char c) ///< ASCII character to skip to
@@ -1259,20 +1181,11 @@ class AbstractLexer {
     return false;
   }
   /// Skip input until the specified Unicode character is consumed and return true, or EOF is reached and return false.
-  bool skip(wchar_t c) ///< Unicode character to skip to
-    /// @returns true if skipped to c, false if EOF is reached
-  {
-    char s[8];
-    size_t n = utf8(c, s);
-    s[n] = '\0';
-    return skip(s);
-  }
-  /// Skip input until the specified Unicode character is consumed and return true, or EOF is reached and return false.
   bool skip(char32_t c) ///< Unicode character to skip to
     /// @returns true if skipped to c, false if EOF is reached
   {
     char s[8];
-    size_t n = toutf8(c, s);
+    size_t n = to_utf8(c, s);
     s[n] = '\0';
     return skip(s);
   }
@@ -1356,17 +1269,23 @@ class AbstractLexer {
   {
     return str();
   }
-  /// Cast this matcher to a std::wstring of the text matched by this matcher.
-  operator std::wstring() const
-    /// @returns std::wstring converted to UCS from the 0-terminated matched UTF-8 text
+  /// Cast this matcher to a std::u32string of the text matched by this matcher.
+  operator std::u32string() const
+    /// @returns std::u32string converted to UCS from the 0-terminated matched UTF-8 text
   {
-    return wstr();
+    return u32str();
   }
-  /// Cast the match to std::pair<size_t,std::wstring>(accept(), wstr()), useful for tokenization into containers.
+  /// Cast the match to std::pair<size_t,std::string>(accept(), str()), useful for tokenization into containers.
   operator std::pair<size_t,std::string>() const
-    /// @returns std::pair<size_t,std::wstring>(accept(), wstr())
+    /// @returns std::pair<size_t,std::string>(accept(), str())
   {
     return pair();
+  }
+  /// Cast the match to std::pair<size_t,std::u32string>(accept(), u32str()), useful for tokenization into containers.
+  operator std::pair<size_t,std::u32string>() const
+    /// @returns std::pair<size_t,std::string>(accept(), u32str())
+  {
+    return u32pair();
   }
   /// Returns true if matched text is equal to a string, useful for std::algorithm.
   bool operator==(const char *rhs) ///< rhs string to compare to

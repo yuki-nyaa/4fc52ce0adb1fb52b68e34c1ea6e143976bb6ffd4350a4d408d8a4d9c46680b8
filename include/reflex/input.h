@@ -75,8 +75,8 @@ The Input class unifies access to a source of input text that constitutes a
 sequence of characters:
 
 - An Input object is instantiated and (re)assigned a (new) source input: either
-  a `char*` string, a `wchar_t*` wide string, a `std::string`, a
-  `std::wstring`, a `FILE*` descriptor, or a `std::istream` object.
+  a `char*` string, a `std::string`, a `std::u32string`, a `FILE*` descriptor,
+  or a `std::istream` object.
 
 - When assigned a wide string source as input, the wide character content is
   automatically converted to an UTF-8 character sequence when reading with
@@ -215,7 +215,7 @@ sequence in blocks from a wide character string, converting it to UTF-8 to copy
 to stdout:
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.cpp}
-    reflex::Input input(L"Copyright ©"); // © is unicode U+00A9 and UTF-8 C2 A9
+    reflex::Input input(U"Copyright ©"); // © is unicode U+00A9 and UTF-8 C2 A9
     char buf[8];
     size_t len;
     while ((len = input.get(buf, sizeof(buf))) > 0)
@@ -229,7 +229,7 @@ The following example shows how to use the Input class to convert a wide
 character string to UTF-8:
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.cpp}
-    reflex::Input input(L"Copyright ©"); // © is unicode U+00A9 and UTF-8 C2 A9
+    reflex::Input input(U"Copyright ©"); // © is unicode U+00A9 and UTF-8 C2 A9
     size_t len = input.size(); // size of UTF-8 string
     char *buf = new char[len + 1];
     input.get(buf, len);
@@ -248,7 +248,7 @@ byte by byte (use a buffer as shown in other examples to improve efficiency):
     char c;
     while (input.get(&c, 1))
       message.append(c);
-    input = L" world! To ∞ and beyond."; // switch input to a wide string
+    input = U" world! To ∞ and beyond."; // switch input to a wide string
     while (input.get(&c, 1))
       message.append(c);
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -290,7 +290,7 @@ With reflex::BufferedInput::streambuf to create a buffered std::istream:
 class Input {
  public:
   /// Input type
-  enum struct Source_Type : unsigned char {NIL,FILE_P,STD_ISTREAM_P,CCHAR_P,CWCHAR_P};
+  enum struct Source_Type : unsigned char {NIL,FILE_P,STD_ISTREAM_P,CCHAR_P};
   /// Common file_encoding constants.
   enum struct file_encoding : unsigned char  {
     plain, ///< plain octets: 7-bit ASCII, 8-bit binary or UTF-8 without BOM detected
@@ -379,31 +379,6 @@ class Input {
   {
     init();
   }
-  /// Construct input character sequence from a wchar_t* string
-  Input(
-      const wchar_t *wstring, ///< wchar_t string
-      size_t      size)    ///< length of the string
-    :
-      source_type_(Source_Type::CWCHAR_P),
-      source_(wstring),
-      size_(size)
-  {
-    init();
-  }
-  /// Construct input character sequence from a NUL-terminated wstring.
-  Input(const wchar_t *wstring) ///< NUL-terminated wchar_t* string
-    :
-      Input(wstring,wstring != nullptr ? std::wcslen(wstring) : 0)
-  {
-    init();
-  }
-  /// Construct input character sequence from a std::wstring.
-  Input(const std::wstring& wstring) ///< input wstring
-    :
-    Input(wstring.c_str(),wstring.size())
-  {
-    init();
-  }
   /// Construct input character sequence from an open FILE* file descriptor, supports UTF-8 conversion from UTF-16 and UTF-32.
   Input(FILE *file) ///< input file
     :
@@ -461,13 +436,6 @@ class Input {
     assert(source_type_==Source_Type::CCHAR_P);
     return source_.cstring_;
   }
-  /// Get the remaining wide character string of this Input object, returns nullptr when this Input is not a wide string.
-  const wchar_t *wstring() const
-    /// @returns remaining unbuffered part of the NUL-terminated wide character string or nullptr
-  {
-    assert(source_type_==Source_Type::CWCHAR_P);
-    return source_.wstring_;
-  }
   /// Get the FILE* of this Input object, returns nullptr when this Input is not a FILE*.
   FILE *file() const
     /// @returns pointer to current file descriptor or nullptr
@@ -488,10 +456,6 @@ class Input {
   {
     switch(source_type_){
       case Source_Type::CCHAR_P :
-        return size_;
-      case Source_Type::CWCHAR_P :
-        if (size_ == 0)
-          wstring_size();
         return size_;
       case Source_Type::FILE_P :
         if (size_ == 0)
@@ -525,8 +489,6 @@ class Input {
     switch(source_type_){
       case Source_Type::CCHAR_P :
         return size_ > 0;
-      case Source_Type::CWCHAR_P :
-        return *(source_.wstring_) != L'\0';
       case Source_Type::FILE_P :
         return !::feof(source_.file_) && !::ferror(source_.file_);
       case Source_Type::STD_ISTREAM_P :
@@ -542,8 +504,6 @@ class Input {
     switch(source_type_){
       case Source_Type::CCHAR_P :
         return size_ == 0;
-      case Source_Type::CWCHAR_P :
-        return *(source_.wstring_) == L'\0';
       case Source_Type::FILE_P :
         return ::feof(source_.file_) != 0;
       case Source_Type::STD_ISTREAM_P :
@@ -576,70 +536,6 @@ class Input {
         size_ -= k;
         return k;
       }
-      case Source_Type::CWCHAR_P : {
-        size_t k = n;
-        if (ulen_ > 0)
-        {
-          size_t l = ulen_;
-          if (l > k)
-            l = k;
-          std::memcpy(s, utf8_ + uidx_, l);
-          k -= l;
-          if (k == 0)
-          {
-            uidx_ += static_cast<unsigned short>(l);
-            ulen_ -= static_cast<unsigned short>(l);
-            if (size_ >= n)
-              size_ -= n;
-            return n;
-          }
-          s += l;
-          ulen_ = 0;
-        }
-        wchar_t c;
-        while ((c = *source_.wstring_) != L'\0' && k > 0)
-        {
-          if (c < 0x80)
-          {
-            *s++ = static_cast<char>(c);
-            --k;
-          }
-          else
-          {
-            size_t l;
-            if (c >= 0xD800 && c < 0xE000)
-            {
-              // UTF-16 surrogate pair
-              if (c < 0xDC00 && (source_.wstring_[1] & 0xFC00) == 0xDC00)
-                l = utf8(0x010000 - 0xDC00 + ((c - 0xD800) << 10) + *++source_.wstring_, utf8_);
-              else
-                l = utf8(REFLEX_NONCHAR, utf8_);
-            }
-            else
-            {
-              l = utf8(c, utf8_);
-            }
-            if (k < l)
-            {
-              uidx_ = static_cast<unsigned short>(k);
-              ulen_ = static_cast<unsigned short>(l);
-              std::memcpy(s, utf8_, k);
-              s += k;
-              k = 0;
-            }
-            else
-            {
-              std::memcpy(s, utf8_, l);
-              s += l;
-              k -= l;
-            }
-          }
-          ++source_.wstring_;
-        }
-        if (size_ >= n - k)
-          size_ -= n - k;
-        return n - k;
-      } // case Source_Type::CWCHAR_P
       case Source_Type::FILE_P : {
         while (true)
         {
@@ -682,8 +578,6 @@ class Input {
   }
   /// Called by init() for a FILE*.
   void file_init(file_encoding enc);
-  /// Called by size() for a wstring.
-  void wstring_size();
   /// Called by size() for a FILE*.
   void file_size();
   /// Called by size() for a std::istream.
@@ -698,12 +592,10 @@ class Input {
     FILE                 *file_=nullptr;    ///< FILE* input (when non-null)
     std::istream         *istream_; ///< stream input (when non-null)
     const char           *cstring_; ///< char string input (when non-null) of length reflex::Input::size_
-    const wchar_t        *wstring_; ///< NUL-terminated wide string input (when non-null)
     constexpr Source_Union_() noexcept = default;
     constexpr Source_Union_(FILE* file_other) noexcept : file_(file_other) {}
     constexpr Source_Union_(std::istream* istream_other) noexcept : istream_(istream_other) {}
     constexpr Source_Union_(const char* cstring_other) noexcept : cstring_(cstring_other) {}
-    constexpr Source_Union_(const wchar_t* wstring_other) noexcept : wstring_(wstring_other) {}
   } source_;
   size_t                size_=0;    ///< size of the remaining input in bytes (size_ == 0 may indicate size is not set)
   char                  utf8_[8]={}; ///< UTF-8 normalization buffer, >=8 bytes
@@ -723,7 +615,6 @@ class BufferedInput : private Input {
   using Input::Handler;
   // `explicit operator bool() const` is overriden
   using Input::cstring;
-  using Input::wstring;
   using Input::file;
   using Input::istream;
   // `size()` is overriden.

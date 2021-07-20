@@ -557,31 +557,31 @@ int main()
   if (test != "a/a/b/c/c/d/")
     error("unput");
   //
-  lexer.pattern_current=9;
-  lexer.input("ab c  d");
-  lexer.wunput(L'ä');
-  test = "";
-  while (true)
-  {
-    if (lexer.scan())
-    {
-      std::cout << lexer.text() << "/";
-      test.append(lexer.text()).append("/");
-      if (*lexer.text() == 'b')
-        lexer.wunput(L'ç');
-    }
-    else if (!lexer.at_end())
-    {
-      std::cout << (char)lexer.winput() << "?/";
-    }
-    else
-    {
-      break;
-    }
-  }
-  std::cout << std::endl;
-  if (test != "ä/a/b/ç/c/d/")
-    error("wunput");
+  //lexer.pattern_current=9;
+  //lexer.input("ab c  d");
+  //lexer.u32unput(U'ä');
+  //test = "";
+  //while (true)
+  //{
+  //  if (lexer.scan())
+  //  {
+  //    std::cout << lexer.text() << "/";
+  //    test.append(lexer.text()).append("/");
+  //    if (*lexer.text() == 'b')
+  //      lexer.u32unput(U'ç');
+  //  }
+  //  else if (!lexer.at_end())
+  //  {
+  //    std::cout << (char)lexer.u32input() << "?/";
+  //  }
+  //  else
+  //  {
+  //    break;
+  //  }
+  //}
+  //std::cout << std::endl;
+  //if (test != "ä/a/b/ç/c/d/")
+  //  error("u32unput");
   //
   banner("TEST WRAP");
   //
@@ -638,13 +638,13 @@ int main()
   {
     std::cout << lexer.text() << "/";
     test.append(lexer.text()).append("/");
-    lexer.skip(L'¶');
+    lexer.skip(U'¶');
   }
   if (lexer.scan())
   {
     std::cout << lexer.text() << "/";
     test.append(lexer.text()).append("/");
-    lexer.skip(L'¶');
+    lexer.skip(U'¶');
   }
   //
   lexer.input("abc  xxydef xx");

@@ -784,9 +784,9 @@ size_t Input::file_get(char *s, size_t n)
             if (c < 0xDC00 && ::fread(buf + 2, 2, 1, source_.file_) == 1 && (buf[2] & 0xFC) == 0xDC)
               c = 0x010000 - 0xDC00 + ((c - 0xD800) << 10) + (buf[2] << 8 | buf[3]);
             else
-              c = REFLEX_NONCHAR;
+              c = ERR_CHAR;
           }
-          size_t l = utf8(c, utf8_);
+          size_t l = to_utf8(c, utf8_);
           if (n < l)
           {
             std::memcpy(t, utf8_, n);
@@ -823,9 +823,9 @@ size_t Input::file_get(char *s, size_t n)
             if (c < 0xDC00 && ::fread(buf + 2, 2, 1, source_.file_) == 1 && (buf[3] & 0xFC) == 0xDC)
               c = 0x010000 - 0xDC00 + ((c - 0xD800) << 10) + (buf[2] | buf[3] << 8);
             else
-              c = REFLEX_NONCHAR;
+              c = ERR_CHAR;
           }
-          size_t l = utf8(c, utf8_);
+          size_t l = to_utf8(c, utf8_);
           if (n < l)
           {
             std::memcpy(t, utf8_, n);
@@ -856,7 +856,7 @@ size_t Input::file_get(char *s, size_t n)
         }
         else
         {
-          size_t l = utf8(c, utf8_);
+          size_t l = to_utf8(c, utf8_);
           if (n < l)
           {
             std::memcpy(t, utf8_, n);
@@ -887,7 +887,7 @@ size_t Input::file_get(char *s, size_t n)
         }
         else
         {
-          size_t l = utf8(c, utf8_);
+          size_t l = to_utf8(c, utf8_);
           if (n < l)
           {
             std::memcpy(t, utf8_, n);
@@ -918,7 +918,7 @@ size_t Input::file_get(char *s, size_t n)
         }
         else
         {
-          utf8(c, utf8_);
+          to_utf8(c, utf8_);
           *t++ = utf8_[0];
           --n;
           if (n > 0)
@@ -978,7 +978,7 @@ size_t Input::file_get(char *s, size_t n)
         }
         else
         {
-          size_t l = utf8(c, utf8_);
+          size_t l = to_utf8(c, utf8_);
           if (n < l)
           {
             std::memcpy(t, utf8_, n);
@@ -1003,34 +1003,6 @@ size_t Input::file_get(char *s, size_t n)
       if (size_ + s >= t)
         size_ -= t - s;
       return t - s;
-  }
-}
-
-void Input::wstring_size()
-{
-  unsigned int c;
-  for (const wchar_t *s = source_.wstring_; (c = *s) != L'\0'; ++s)
-  {
-    if (c >= 0xD800 && c < 0xE000)
-    {
-      if (c < 0xDC00 && (s[1] & 0xFC00) == 0xDC00)
-      {
-        ++s;
-        size_ += 4;
-      }
-      else
-      {
-        size_ += sizeof(REFLEX_NONCHAR_UTF8) - 1; // REFLEX_NONCHAR_UTF8 is a literal string, not a pointer
-      }
-    }
-    else
-    {
-#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
-      size_ += 1 + (c >= 0x80) + (c >= 0x0800) + (c >= 0x010000);
-#else
-      size_ += 1 + (c >= 0x80) + (c >= 0x0800) + (c >= 0x010000) + (c >= 0x200000) + (c >= 0x04000000);
-#endif
-    }
   }
 }
 
@@ -1094,12 +1066,12 @@ void Input::file_size()
             if (c < 0xDC00 && ::fread(buf + 2, 2, 1, source_.file_) == 1 && (buf[2] & 0xFC) == 0xDC)
               c = 0x010000 - 0xDC00 + ((c - 0xD800) << 10) + (buf[2] << 8 | buf[3]);
             else
-              c = REFLEX_NONCHAR;
+              c = ERR_CHAR;
           }
 #ifndef REFLEX_WITH_UTF8_UNRESTRICTED
           else if (c > 0x10FFFF)
           {
-            c = REFLEX_NONCHAR;
+            c = ERR_CHAR;
           }
 #endif
           size_ += 1 + (c >= 0x80) + (c >= 0x0800) + (c >= 0x010000) + (c >= 0x200000);
@@ -1115,12 +1087,12 @@ void Input::file_size()
             if (c < 0xDC00 && ::fread(buf + 2, 2, 1, source_.file_) == 1 && (buf[2] & 0xFC) == 0xDC)
               c = 0x010000 - 0xDC00 + ((c - 0xD800) << 10) + (buf[2] << 8 | buf[3]);
             else
-              c = REFLEX_NONCHAR;
+              c = ERR_CHAR;
           }
 #ifndef REFLEX_WITH_UTF8_UNRESTRICTED
           else if (c > 0x10FFFF)
           {
-            c = REFLEX_NONCHAR;
+            c = ERR_CHAR;
           }
 #endif
           size_ += 1 + (c >= 0x80) + (c >= 0x0800) + (c >= 0x010000) + (c >= 0x200000);
@@ -1132,7 +1104,7 @@ void Input::file_size()
           int c = buf[0] << 24 | buf[1] << 16 | buf[2] << 8 | buf[3];
 #ifndef REFLEX_WITH_UTF8_UNRESTRICTED
           if (c > 0x10FFFF)
-            c = REFLEX_NONCHAR;
+            c = ERR_CHAR;
 #endif
           size_ += 1 + (c >= 0x80) + (c >= 0x0800) + (c >= 0x010000) + (c >= 0x200000);
         }
@@ -1143,7 +1115,7 @@ void Input::file_size()
           int c = buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
 #ifndef REFLEX_WITH_UTF8_UNRESTRICTED
           if (c > 0x10FFFF)
-            c = REFLEX_NONCHAR;
+            c = ERR_CHAR;
 #endif
           size_ += 1 + (c >= 0x80) + (c >= 0x0800) + (c >= 0x010000) + (c >= 0x200000);
         }
@@ -1194,7 +1166,7 @@ void Input::set_file_encoding(file_encoding enc, const unsigned short *page)
             if (c1 < 0x80)
               *t++ = static_cast<char>(c1);
             else
-              t += utf8(c1, t);
+              t += to_utf8(c1, t);
           }
           uidx_ = 0;
           ulen_ = static_cast<unsigned short>(t - utf8_);
@@ -1237,7 +1209,7 @@ void Input::set_file_encoding(file_encoding enc, const unsigned short *page)
             if (c1 < 0x80)
               *t++ = static_cast<char>(c1);
             else
-              t += utf8(c1, t);
+              t += to_utf8(c1, t);
           }
           uidx_ = 0;
           ulen_ = static_cast<unsigned short>(t - utf8_);
@@ -1252,7 +1224,7 @@ void Input::set_file_encoding(file_encoding enc, const unsigned short *page)
               if (c1 < 0x80)
                 *t++ = static_cast<char>(c1);
               else
-                t += utf8(c1, t);
+                t += to_utf8(c1, t);
             }
             uidx_ = 0;
             ulen_ = static_cast<unsigned short>(t - utf8_);
@@ -1279,13 +1251,13 @@ void Input::set_file_encoding(file_encoding enc, const unsigned short *page)
                 if (c1 < 0xDC00 && (c2 & 0xFC00) == 0xDC00)
                   c1 = 0x010000 - 0xDC00 + ((c1 - 0xD800) << 10) + c2;
                 else
-                  c1 = REFLEX_NONCHAR;
-                t += utf8(c1, t);
+                  c1 = ERR_CHAR;
+                t += to_utf8(c1, t);
               }
               else
               {
-                t += utf8(c1, t);
-                t += utf8(c2, t);
+                t += to_utf8(c1, t);
+                t += to_utf8(c2, t);
               }
               uidx_ = 0;
               ulen_ = static_cast<unsigned short>(t - utf8_);
@@ -1309,13 +1281,13 @@ void Input::set_file_encoding(file_encoding enc, const unsigned short *page)
                 if (c1 < 0xDC00 && (c2 & 0xFC00) == 0xDC00)
                   c1 = 0x010000 - 0xDC00 + ((c1 - 0xD800) << 10) + c2;
                 else
-                  c1 = REFLEX_NONCHAR;
-                t += utf8(c1, t);
+                  c1 = ERR_CHAR;
+                t += to_utf8(c1, t);
               }
               else
               {
-                t += utf8(c1, t);
-                t += utf8(c2, t);
+                t += to_utf8(c1, t);
+                t += to_utf8(c2, t);
               }
               uidx_ = 0;
               ulen_ = static_cast<unsigned short>(t - utf8_);
@@ -1331,7 +1303,7 @@ void Input::set_file_encoding(file_encoding enc, const unsigned short *page)
              )
           {
             c1 = buf[0] << 24 | buf[1] << 16 | buf[2] << 8 | buf[3];
-            t += utf8(c1, t);
+            t += to_utf8(c1, t);
             uidx_ = 0;
             ulen_ = static_cast<unsigned short>(t - utf8_);
           }
@@ -1345,7 +1317,7 @@ void Input::set_file_encoding(file_encoding enc, const unsigned short *page)
              )
           {
             c1 = buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
-            t += utf8(c1, t);
+            t += to_utf8(c1, t);
             uidx_ = 0;
             ulen_ = static_cast<unsigned short>(t - utf8_);
           }

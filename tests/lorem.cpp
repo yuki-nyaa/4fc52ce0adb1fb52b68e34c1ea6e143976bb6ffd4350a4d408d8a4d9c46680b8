@@ -69,7 +69,7 @@ Etiam interdum porta libero, sed lobortis sapien porta sed. Curabitur ullamcorpe
 \
 Mauris dignissim mattis dui, feugiat lobortis diam mattis non. Curabitur neque mi, scelerisque in convallis quis, imperdiet consectetur lorem. Vestibulum non mi ac justo facilisis consequat in sit amet ligula. Quisque urna sem, tristique non ligula consectetur amet.\n");
 
-static const std::wstring wlorem(L"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque at accumsan turpis, non feugiat magna. Quisque sed fringilla felis. Ut at ullamcorper metus, eu ornare lorem. Etiam id leo in elit varius condimentum vel ut sapien. Morbi at rhoncus urna. Nunc hendrerit at metus sit amet aliquam. Donec lectus sapien, euismod ut urna id, eleifend mattis dolor. Nunc sit amet orci lacus. Proin mattis consectetur iaculis. Nam hendrerit nisi felis, vitae consectetur urna euismod nec. Cras ultricies lorem vel commodo tempus.\
+static const std::u32string u32lorem(U"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque at accumsan turpis, non feugiat magna. Quisque sed fringilla felis. Ut at ullamcorper metus, eu ornare lorem. Etiam id leo in elit varius condimentum vel ut sapien. Morbi at rhoncus urna. Nunc hendrerit at metus sit amet aliquam. Donec lectus sapien, euismod ut urna id, eleifend mattis dolor. Nunc sit amet orci lacus. Proin mattis consectetur iaculis. Nam hendrerit nisi felis, vitae consectetur urna euismod nec. Cras ultricies lorem vel commodo tempus.\
 \
 Vestibulum mollis magna et leo dictum, vitae dictum libero sagittis. Vestibulum eget est laoreet, consequat ex et, cursus justo. Duis quis est ut diam pellentesque tristique. Mauris condimentum erat id leo molestie, vitae dignissim nisl lacinia. Sed ultrices, velit id semper tristique, augue ante scelerisque nisi, a pretium ante ipsum at justo. Vivamus aliquam nulla vel tortor cursus, blandit egestas orci condimentum. Phasellus pellentesque lobortis neque non faucibus. Suspendisse ut laoreet ex. Fusce augue massa, ultricies eu orci sed, venenatis blandit sapien. Sed interdum nibh pulvinar, malesuada libero non, vulputate turpis.\
 \
@@ -116,13 +116,13 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   timer();
   for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
-    tokenizer.input(wlorem);
+    tokenizer.input(u32lorem);
     hits = 0;
     while (tokenizer.input() != EOF)
       ++hits;
   }
   timer("Reading lorem wide string with input() took");
-  if (hits != wlorem.size())
+  if (hits != u32lorem.size())
     printf("FAIL hits=%zu\n", hits);
 
   timer();
@@ -139,7 +139,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   timer();
   for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
-    tokenizer.input(wlorem);
+    tokenizer.input(u32lorem);
     hits = 0;
     while (tokenizer.scan())
       ++hits;
@@ -162,7 +162,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   timer();
   for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
-    filter.input(wlorem);
+    filter.input(u32lorem);
     hits = 0;
     while (filter.find())
       ++hits;
@@ -185,7 +185,7 @@ void test_lorem(const char *title, AbstractLexer &tokenizer, AbstractLexer &filt
   timer();
   for (size_t run = 0; run < REFLEX_LOREM_RUNS; ++run)
   {
-    splitter.input(wlorem);
+    splitter.input(u32lorem);
     hits = 0;
     while (splitter.split())
       ++hits;

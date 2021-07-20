@@ -40,18 +40,13 @@
 #include <cstring>
 #include <string>
 #include<cuchar>
-
-#if defined(REFLEX_WITH_STANDARD_REPLACEMENT_CHARACTER)
-/// Replace invalid UTF-8 with the standard replacement character U+FFFD.  This is not the default in RE/flex.
-# define REFLEX_NONCHAR      (0xFFFD)
-# define REFLEX_NONCHAR_UTF8 "\xef\xbf\xbd"
-#else
-/// Replace invalid UTF-8 with the non-character U+200000 code point for guaranteed error detection (the U+FFFD code point makes error detection harder and possible to miss).
-# define REFLEX_NONCHAR      (0x200000)
-# define REFLEX_NONCHAR_UTF8 "\xf8\x88\x80\x80\x80"
-#endif
+#include<cassert>
 
 namespace reflex {
+
+constexpr char32_t UNICODE_MAX = 0x10FFFF;
+constexpr char32_t ERR_CHAR = 0x1FFFFF; // In principle any number greater than `UNICODE_MAX` will work. The number here is the biggest number that can be represented in UTF-8 in 4 bytes.
+constexpr const char ERR_CHAR_UTF8[4] = {'\xF7','\xBF','\xBF','\xBF'};
 
 /// Convert an 8-bit ASCII + Latin-1 Supplement range [a,b] to a regex pattern.
 std::string latin1(
@@ -64,33 +59,26 @@ std::string latin1(
 
 /// Convert a UCS-4 range [a,b] to a UTF-8 regex pattern.
 std::string utf8(
-    int  a,                ///< lower bound of UCS range
-    int  b,                ///< upper bound of UCS range
+    char32_t  a,                ///< lower bound of UCS range
+    char32_t  b,                ///< upper bound of UCS range
     int  esc = 'x',        ///< escape char 'x' for hex \xXX, or '0' or '\0' for octal \0nnn and \nnn
     const char *par = "(", ///< capturing or non-capturing parenthesis "(?:"
     bool strict = true)    ///< returned regex is strict UTF-8 (true) or permissive and lean UTF-8 (false)
   /// @returns regex string to match the UCS range encoded in UTF-8
   ;
 
-/// Convert UCS-4 to UTF-8, fills with REFLEX_NONCHAR_UTF8 when out of range, or unrestricted UTF-8 with REFLEX_WITH_UTF8_UNRESTRICTED.
-inline size_t utf8(
-    int   c, ///< UCS-4 character U+0000 to U+10ffff (unless REFLEX_WITH_UTF8_UNRESTRICTED)
+/// Convert UCS-4 to UTF-8.
+inline size_t to_utf8(
+    char32_t   c, ///< UCS-4 character U+0000 to U+10ffff
     char *s) ///< points to the buffer to populate with UTF-8 (1 to 6 bytes) not NUL-terminated
   /// @returns length (in bytes) of UTF-8 character sequence stored in s
 {
+  assert(c<=UNICODE_MAX);
   if (c < 0x80)
   {
     *s++ = static_cast<char>(c);
     return 1;
   }
-#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
-  if (c > 0x10FFFF)
-  {
-    static const size_t n = sizeof(REFLEX_NONCHAR_UTF8) - 1;
-    std::memcpy(s, REFLEX_NONCHAR_UTF8, n);
-    return n;
-  }
-#endif
   char *t = s;
   if (c < 0x0800)
   {
@@ -105,27 +93,7 @@ inline size_t utf8(
     else
     {
       size_t w = c;
-#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
       *s++ = static_cast<char>(0xF0 | ((w >> 18) & 0x07));
-#else
-      if (c < 0x200000)
-      {
-        *s++ = static_cast<char>(0xF0 | ((w >> 18) & 0x07));
-      }
-      else
-      {
-        if (w < 0x04000000)
-        {
-          *s++ = static_cast<char>(0xF8 | ((w >> 24) & 0x03));
-        }
-        else
-        {
-          *s++ = static_cast<char>(0xFC | ((w >> 30) & 0x01));
-          *s++ = static_cast<char>(0x80 | ((w >> 24) & 0x3F));
-        }
-        *s++ = static_cast<char>(0x80 | ((w >> 18) & 0x3F));
-      }
-#endif
       *s++ = static_cast<char>(0x80 | ((c >> 12) & 0x3F));
     }
     *s++ = static_cast<char>(0x80 | ((c >> 6) & 0x3F));
@@ -134,25 +102,17 @@ inline size_t utf8(
   return s - t;
 }
 
-/// Convert UTF-8 to UCS, returns REFLEX_NONCHAR for invalid UTF-8 except for MUTF-8 U+0000 and 0xD800-0xDFFF surrogate halves (use REFLEX_WITH_UTF8_UNRESTRICTED to remove any limits on UTF-8 encodings up to 6 bytes).
-inline int utf8(
+/// Convert UTF-8 to UCS, returns ERR_CHAR for invalid UTF-8 except for MUTF-8 U+0000 and 0xD800-0xDFFF surrogate halves (use REFLEX_WITH_UTF8_UNRESTRICTED to remove any limits on UTF-8 encodings up to 6 bytes).
+inline char32_t from_utf8(
     const char *s,         ///< points to the buffer with UTF-8 (1 to 6 bytes)
     const char **r = nullptr) ///< points to pointer to set to the new position in s after the UTF-8 sequence, optional
   /// @returns UCS character
 {
-  int c;
-  c = static_cast<unsigned char>(*s++);
+  char32_t c = *s++;
   if (c >= 0x80)
   {
-    int c1 = static_cast<unsigned char>(*s);
-#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
-    // reject invalid UTF-8 but permit Modified UTF-8 (MUTF-8) U+0000
-    if (c < 0xC0 || (c == 0xC0 && c1 != 0x80) || c == 0xC1 || (c1 & 0xC0) != 0x80)
-    {
-      c = REFLEX_NONCHAR;
-    }
-    else
-#endif
+    char32_t c1 = *s;
+    assert(c < 0xC0 || (c == 0xC0 && c1 != 0x80) || c == 0xC1 || (c1 & 0xC0) != 0x80); // reject invalid UTF-8 but permit Modified UTF-8 (MUTF-8) U+0000
     {
       ++s;
       c1 &= 0x3F;
@@ -162,15 +122,8 @@ inline int utf8(
       }
       else
       {
-        int c2 = static_cast<unsigned char>(*s);
-#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
-        // reject invalid UTF-8
-        if ((c == 0xE0 && c1 < 0x20) || (c2 & 0xC0) != 0x80)
-        {
-          c = REFLEX_NONCHAR;
-        }
-        else
-#endif
+        char32_t c2 = *s;
+        assert((c == 0xE0 && c1 < 0x20) || (c2 & 0xC0) != 0x80); // reject invalid UTF-8
         {
           ++s;
           c2 &= 0x3F;
@@ -180,34 +133,10 @@ inline int utf8(
           }
           else
           {
-            int c3 = static_cast<unsigned char>(*s);
-#ifndef REFLEX_WITH_UTF8_UNRESTRICTED
-            // reject invalid UTF-8
-            if ((c == 0xF0 && c1 < 0x10) || (c == 0xF4 && c1 >= 0x10) || c >= 0xF5 || (c3 & 0xC0) != 0x80)
-            {
-              c = REFLEX_NONCHAR;
-            }
-            else
-            {
-              ++s;
-              c = (((c & 0x07) << 18) | (c1 << 12) | (c2 << 6) | (c3 & 0x3F));
-            }
-#else
+            char32_t c3 = *s;
+            assert((c == 0xF0 && c1 < 0x10) || (c == 0xF4 && c1 >= 0x10) || c >= 0xF5 || (c3 & 0xC0) != 0x80);
             ++s;
-            c3 &= 0x3F;
-            if (c < 0xF8)
-            {
-              c = (((c & 0x07) << 18) | (c1 << 12) | (c2 << 6) | c3);
-            }
-            else
-            {
-              int c4 = static_cast<unsigned char>(*s++) & 0x3F;
-              if (c < 0xFC)
-                c = (((c & 0x03) << 24) | (c1 << 18) | (c2 << 12) | (c3 << 6) | c4);
-              else
-                c = (((c & 0x01) << 30) | (c1 << 24) | (c2 << 18) | (c3 << 12) | (c4 << 6) | (static_cast<unsigned char>(*s++) & 0x3F));
-            }
-#endif
+            c = (((c & 0x07) << 18) | (c1 << 12) | (c2 << 6) | (c3 & 0x3F));
           }
         }
       }
@@ -218,90 +147,19 @@ inline int utf8(
   return c;
 }
 
-/// Convert UTF-8 string to wide string.
-inline std::wstring wcs(
-    const char *s, ///< string with UTF-8 to convert
-    size_t      n) ///< length of the string to convert
-  /// @returns wide string
-{
-  std::wstring ws;
-  const char *e = s + n;
-  if (sizeof(wchar_t) == 2)
-  {
-    // sizeof(wchar_t) == 2 bytes: store wide string in std::wstring encoded in UTF-16
-    while (s < e)
-    {
-      int wc = utf8(s, &s);
-      if (wc > 0xFFFF)
-      {
-        if (wc <= 0x10FFFF)
-        {
-          ws.push_back(0xD800 | (wc - 0x010000) >> 10); // first half of UTF-16 surrogate pair
-          ws.push_back(0xDC00 | (wc & 0x03FF));         // second half of UTF-16 surrogate pair
-        }
-        else
-        {
-          ws.push_back(0xFFFD);
-        }
-      }
-      else
-      {
-        ws.push_back(wc);
-      }
-    }
-  }
-  else
-  {
-    while (s < e)
-      ws.push_back(utf8(s, &s));
-  }
-  return ws;
-}
-
-/// Convert UTF-8 string to wide string.
-inline std::wstring wcs(const std::string& s) ///< string with UTF-8 to convert
-  /// @returns wide string
-{
-  return wcs(s.c_str(), s.size());
-}
-
-/// New API to convert to UTF-8 from UTF-32
-inline size_t toutf8(
-    char32_t c, ///< UCS-4 character U+0000 to U+10ffff
-    char *s) ///< points to the buffer to populate with UTF-8 (1 to 6 bytes) not NUL-terminated
-  /// @returns length (in bytes) of UTF-8 character sequence stored in s
-{
-  std::mbstate_t state{};
-  return c32rtomb(s, c, &state);
-}
-
-/// New API to convert from UTF-8 to UTF-32
-inline char32_t fromutf8(
-    const char *s,         ///< points to the buffer with UTF-8 (1 to 6 bytes)
-    const char **r = nullptr) ///< points to pointer to set to the new position in s after the UTF-8 sequence, optional
-  /// @returns UCS character
-{
-  char32_t c32;
-  std::mbstate_t state{};
-  std::size_t rc = std::mbrtoc32(&c32, s, 6, &state);
-  *r=s+rc;
-  return c32;
-}
-
 /// Convert UTF-8 string to u32string.
 inline std::u32string u32cs(
     const char *s, ///< string with UTF-8 to convert
-    size_t      n) ///< length of the string to convert
+    size_t      n) ///< length of string to convert in `s`. The user should make sure that the split does occur in the middle of a utf-8 sequence.
   /// @returns u32string
 {
   std::u32string u32s;
-  char32_t c32;
-  std::mbstate_t state{};
-  while(std::size_t rc = std::mbrtoc32(&c32, s, n, &state))
-  {
-      u32s.push_back(c32);
-      if(rc==(std::size_t)-1 || rc==(std::size_t)-2) break;
-      s += rc;
+  size_t length_counter = 0;
+  const char* s2 = s;
+  while(length_counter<=n){
+    u32s.push_back(from_utf8(s,&s2));
+    length_counter+=(s2-s);
+    s=s2;
   }
   return u32s;
 }

@@ -250,12 +250,12 @@ int yywrap(void);
 /// Flex-compatible macro: scan a string
 #if defined(REFLEX_OPTION_reentrant)
 #define yy_scan_string(i,s)     (static_cast<FlexLexer*>(s)->in(i), static_cast<YY_BUFFER_STATE>(nullptr))
-#define yy_scan_wstring(i,s)    yy_scan_string((i), (s))
+#define yy_scan_u32string(i,s)  yy_scan_string((i), (s))
 #define yy_scan_bytes(b,n,s)    yy_scan_string(reflex::Input((b), static_cast<size_t>(n)), (s))
 #define yy_scan_buffer(b,n,s)   (static_cast<FlexLexer*>(s)->buffer((b), (n)-1), static_cast<YY_BUFFER_STATE>(nullptr))
 #else
 #define yy_scan_string(i)       (YY_SCANNER_DOT_ in(i), static_cast<YY_BUFFER_STATE>(nullptr))
-#define yy_scan_wstring(i)      yy_scan_string(i)
+#define yy_scan_u32string(i)    yy_scan_string(i)
 #define yy_scan_bytes(b,n)      yy_scan_string(reflex::Input((b), static_cast<size_t>(n)))
 #define yy_scan_buffer(b,n)     (YY_SCANNER_DOT_ buffer((b), (n)-1), static_cast<YY_BUFFER_STATE>(nullptr))
 #endif
@@ -274,9 +274,9 @@ int yywrap(void);
 
 /// Flex-compatible macro: read one wide character, returns zero when EOF.
 #if defined(REFLEX_OPTION_reentrant)
-#define yywinput(s)             static_cast<FlexLexer*>(s)->winput()
+#define yyu32input(s)             static_cast<FlexLexer*>(s)->u32input()
 #else
-#define yywinput()              YY_SCANNER_DOT_ winput()
+#define yyu32input()              YY_SCANNER_DOT_ u32input()
 #endif
 
 /// Flex-compatible macro: put one 8-bit character back onto the input stream to be read again.
@@ -288,9 +288,9 @@ int yywrap(void);
 
 /// Flex-compatible macro: put one wide character back onto the input stream to be read again.
 #if defined(REFLEX_OPTION_reentrant)
-#define yywunput(c,s)           static_cast<FlexLexer*>(s)->wunput(c)
+#define yyu32unput(c,s)           static_cast<FlexLexer*>(s)->u32unput(c)
 #else
-#define yywunput(c)             YY_SCANNER_DOT_ wunput(c)
+#define yyu32unput(c)             YY_SCANNER_DOT_ u32unput(c)
 #endif
 
 /// Flex-compatible macro: output one 8-bit character.
@@ -475,34 +475,15 @@ class FlexLexer : public AbstractLexer_old<M> {
     int c = this->matcher().input();
     return c == EOF ? 0 : c;
   }
-  /// Read one wide character, returns zero when EOF.
-  inline int winput()
-    /// @returns the character read.
-  {
-    int c = this->matcher().winput();
-    return c == EOF ? 0 : c;
-  }
   /// Put back one character on the input character sequence for matching, invalidating the current match info and text.
   inline void unput(char c) ///< 8-bit character to put back
   {
     this->matcher().unput(c);
   }
-  /// Put back one wide character on the input character sequence for matching, invalidating the current match info and text.
-  inline void unput(int c) ///< wide character to put back
-  {
-    this->matcher().wunput(c);
-  }
   /// Output one character.
   inline void output(char c) ///< 8-bit char to output via LexerOutput
   {
     this->LexerOutput(&c, 1);
-  }
-  /// Output one wide character.
-  inline void woutput(int c) ///< wide char to output via LexerOutput
-  {
-    char buf[8];
-    size_t n = utf8(c, buf);
-    this->LexerOutput(buf, n);
   }
   /// Switch input and output streams.
   virtual void switch_streams(

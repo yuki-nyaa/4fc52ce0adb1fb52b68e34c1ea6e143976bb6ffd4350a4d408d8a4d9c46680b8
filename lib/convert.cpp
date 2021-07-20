@@ -970,7 +970,7 @@ static void insert_list(const char *pattern, size_t len, size_t& pos, convert_fl
       {
         // unicode: UTF-8 sequence
         const char *r;
-        c = utf8(&pattern[pos], &r);
+        c = from_utf8(&pattern[pos], &r);
         pos += r - &pattern[pos] - 1;
       }
       if (range)
