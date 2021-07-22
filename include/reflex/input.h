@@ -490,7 +490,7 @@ class Input {
       case Source_Type::CCHAR_P :
         return size_ > 0;
       case Source_Type::FILE_P :
-        return !::feof(source_.file_) && !::ferror(source_.file_);
+        return !feof(source_.file_) && !ferror(source_.file_);
       case Source_Type::STD_ISTREAM_P :
         return (source_.istream_)->good();
       default :
@@ -505,7 +505,7 @@ class Input {
       case Source_Type::CCHAR_P :
         return size_ == 0;
       case Source_Type::FILE_P :
-        return ::feof(source_.file_) != 0;
+        return feof(source_.file_) != 0;
       case Source_Type::STD_ISTREAM_P :
         return (source_.istream_)->eof();
       default :
