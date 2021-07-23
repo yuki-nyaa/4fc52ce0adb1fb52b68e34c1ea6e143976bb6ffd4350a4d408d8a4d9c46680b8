@@ -1,0 +1,11 @@
+#!/bin/bash
+CXX=g++
+CXX_STD="-std=c++17"
+CXX_WFLAGS="-Wextra"
+CXX_OFLAGS="-g -O0"
+CXX_INCLUDE="-I../include"
+CXX_FLAGS="$CXX_INCLUDE $CXX_STD $CXX_WFLAGS $CXX_OFLAGS"
+REFLEX_LIB_DIR="../lib"
+$CXX $CXX_FLAGS -c test_input.cpp -o test_input.o
+$CXX $CXX_FLAGS -c $REFLEX_LIB_DIR/input.cpp -o input.o
+$CXX test_input.o input.o -o test_input.exe

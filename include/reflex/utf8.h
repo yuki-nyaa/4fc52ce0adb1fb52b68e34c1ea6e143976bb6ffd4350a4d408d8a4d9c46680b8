@@ -44,9 +44,31 @@
 
 namespace reflex {
 
-constexpr char32_t UNICODE_MAX = 0x10FFFF;
-constexpr char32_t ERR_CHAR = 0x1FFFFF; // In principle any number greater than `UNICODE_MAX` will work. The number here is the biggest number that can be represented in UTF-8 in 4 bytes.
-constexpr const char ERR_CHAR_UTF8[4] = {'\xF7','\xBF','\xBF','\xBF'};
+inline constexpr char32_t UNICODE_MAX = 0x10FFFF;
+inline constexpr char32_t ERR_CHAR = 0x1FFFFF; // In principle any number greater than `UNICODE_MAX` will work. The number here is the biggest number that can be represented in UTF-8 in 4 bytes.
+inline constexpr const char ERR_CHAR_UTF8[4] = {'\xF7','\xBF','\xBF','\xBF'};
+
+template<typename T>
+struct is_char {static constexpr bool value = false;};
+template<>
+struct is_char<char> {static constexpr bool value = true;};
+template<>
+struct is_char<unsigned char> {static constexpr bool value = true;};
+template<>
+struct is_char<signed char> {static constexpr bool value = true;};
+template<typename T>
+inline constexpr bool is_char_v = is_char<T>::value;
+
+template<typename D,typename S>
+void char_copy(D* dst,const S* src,size_t count){
+  static_assert(is_char_v<std::remove_cv_t<D>> && is_char_v<std::remove_cv_t<S>>);
+  if constexpr(std::is_same_v<std::remove_cv_t<D>,std::remove_cv_t<S>>){
+    std::memcpy(dst,src,count*sizeof(D));
+  }else{
+    for(size_t i=0;i<count;++i)
+      *dst++ = static_cast<D>(*src++);
+  }
+}
 
 /// Convert `a` to a null-terminated regex str at `buf`. Non-printable chars as well as regex keychars are converted to octal escape "\0xxx".
 inline const char *regex_char(char *buf, char a, char esc, size_t *n = nullptr)
@@ -130,83 +152,84 @@ inline std::string latin1(
 }
 
 /// Convert UCS-4 to UTF-8.
-inline size_t to_utf8(
+template<typename C>
+size_t to_utf8(
     char32_t   c, ///< UCS-4 character U+0000 to U+10ffff
-    char *s) ///< points to the buffer to populate with UTF-8 (1 to 6 bytes) not NUL-terminated
+    C *s) ///< points to the buffer to populate with UTF-8 (1 to 6 bytes) not NUL-terminated
   /// @returns length (in bytes) of UTF-8 character sequence stored in s
 {
+  static_assert(is_char_v<std::remove_cv_t<C>> && !std::is_const_v<C>);
+
   assert(c<=UNICODE_MAX);
   if (c < 0x80)
   {
-    *s++ = static_cast<char>(c);
+    *s++ = static_cast<C>(c);
     return 1;
   }
-  char *t = s;
+  C *t = s;
   if (c < 0x0800)
   {
-    *s++ = static_cast<char>(0xC0 | ((c >> 6) & 0x1F));
+    *s++ = static_cast<C>(0xC0 | ((c >> 6) & 0x1F));
   }
   else
   {
     if (c < 0x010000)
     {
-      *s++ = static_cast<char>(0xE0 | ((c >> 12) & 0x0F));
+      *s++ = static_cast<C>(0xE0 | ((c >> 12) & 0x0F));
     }
     else
     {
-      size_t w = c;
-      *s++ = static_cast<char>(0xF0 | ((w >> 18) & 0x07));
-      *s++ = static_cast<char>(0x80 | ((c >> 12) & 0x3F));
+      char32_t w = c;
+      *s++ = static_cast<C>(0xF0 | ((w >> 18) & 0x07));
+      *s++ = static_cast<C>(0x80 | ((c >> 12) & 0x3F));
     }
-    *s++ = static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+    *s++ = static_cast<C>(0x80 | ((c >> 6) & 0x3F));
   }
-  *s++ = static_cast<char>(0x80 | (c & 0x3F));
+  *s++ = static_cast<C>(0x80 | (c & 0x3F));
   return s - t;
 }
 
 /// Convert UTF-8 to UCS, returns ERR_CHAR for invalid UTF-8 except for MUTF-8 U+0000 and 0xD800-0xDFFF surrogate halves (use REFLEX_WITH_UTF8_UNRESTRICTED to remove any limits on UTF-8 encodings up to 6 bytes).
-inline char32_t from_utf8(
-    const char *s,         ///< points to the buffer with UTF-8 (1 to 6 bytes)
-    const char **r = nullptr) ///< points to pointer to set to the new position in s after the UTF-8 sequence, optional
+template<typename C,typename C2>
+char32_t from_utf8(
+    const C *s,         ///< points to the buffer with UTF-8 (1 to 6 bytes)
+    C2 **r = nullptr) ///< points to pointer to set to the new position in s after the UTF-8 sequence, optional
   /// @returns UCS character
 {
-  char32_t c = *s++;
-  if (c >= 0x80)
-  {
-    char32_t c1 = *s;
-    assert(c < 0xC0 || (c == 0xC0 && c1 != 0x80) || c == 0xC1 || (c1 & 0xC0) != 0x80); // reject invalid UTF-8 but permit Modified UTF-8 (MUTF-8) U+0000
-    {
-      ++s;
-      c1 &= 0x3F;
-      if (c < 0xE0)
-      {
-        c = (((c & 0x1F) << 6) | c1);
-      }
-      else
-      {
-        char32_t c2 = *s;
-        assert((c == 0xE0 && c1 < 0x20) || (c2 & 0xC0) != 0x80); // reject invalid UTF-8
-        {
-          ++s;
-          c2 &= 0x3F;
-          if (c < 0xF0)
-          {
-            c = (((c & 0x0F) << 12) | (c1 << 6) | c2);
-          }
-          else
-          {
-            char32_t c3 = *s;
-            assert((c == 0xF0 && c1 < 0x10) || (c == 0xF4 && c1 >= 0x10) || c >= 0xF5 || (c3 & 0xC0) != 0x80);
-            ++s;
-            c = (((c & 0x07) << 18) | (c1 << 12) | (c2 << 6) | (c3 & 0x3F));
-          }
-        }
-      }
-    }
+  static_assert(is_char_v<C>);
+  static_assert(std::is_same_v<std::remove_cv_t<C>,std::remove_cv_t<C2>>);
+
+  char32_t c[4] = {static_cast<unsigned char>(*s),0,0,0};
+  if(c[0]<0x80)
+    ++s;
+  else if(c[0]>=0xF0){
+    c[1] = static_cast<unsigned char>(s[1]);
+    c[2] = static_cast<unsigned char>(s[2]);
+    c[3] = static_cast<unsigned char>(s[3]);
+    (c[0] &= 0b00000111) <<= 18;
+    (c[1] &= 0b00111111) <<= 12;
+    (c[2] &= 0b00111111) <<= 6;
+    c[3] &= 0b00111111;
+    c[0] = (c[0] | c[1] | c[2] | c[3]);
+    s+=4;
+  }else if(c[0]>=0xE0){
+    c[1] = static_cast<unsigned char>(s[1]);
+    c[2] = static_cast<unsigned char>(s[2]);
+    (c[0] &= 0b00001111) <<= 12;
+    (c[1] &= 0b00111111) <<= 6;
+    c[2] &= 0b00111111;
+    c[0] = (c[0] | c[1] | c[2]);
+    s+=3;
+  }else if(c[0]>=0xC0){
+    c[1] = static_cast<unsigned char>(s[1]);
+    (c[0] &= 0b00011111) <<= 6;
+    c[1] &= 0b00111111;
+    c[0] = (c[0] | c[1]);
+    s+=2;
   }
   if (r != nullptr)
-    *r = s;
-  return c;
+    *r = const_cast<C2*>(s);
+  return c[0];
 }
 
 /// Convert UTF-8 string to u32string.
