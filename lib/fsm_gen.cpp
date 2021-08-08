@@ -27,18 +27,19 @@
 \******************************************************************************/
 
 /**
-@file      pattern.cpp
-@brief     RE/flex regular expression pattern compiler
+@file      fsm_gen.cpp
+@brief     RE/flex FSM generator
 @author    Robert van Engelen - engelen@genivia.com
 @copyright (c) 2016-2020, Robert van Engelen, Genivia Inc. All rights reserved.
 @copyright (c) BSD-3 License - see LICENSE.txt
 */
 
-#include <reflex/pattern.h>
-#include <reflex/timer.h>
-#include <cstdlib>
-#include <cerrno>
-#include <cmath>
+#include<cstring>
+#include<reflex/debug.h>
+#include<reflex/error.h>
+#include<reflex/timer.h>
+#include<reflex/setop.h>
+#include<reflex/fsm_gen.h>
 
 /// DFA compaction: -1 == reverse order edge compression (best); 1 == edge compression; 0 == no edge compression.
 /** Edge compression reorders edges to produce fewer tests when executed in the compacted order.
@@ -48,7 +49,9 @@
     if ('a' <= c1 && c1 <= 'k') goto S3;
     return l.FSM_HALT(c1);
 */
+#ifndef REFLEX_WITH_COMPACT_DFA
 #define REFLEX_WITH_COMPACT_DFA -1
+#endif
 
 #ifdef REFLEX_DEBUG
 # define DBGLOGPOS(p) \
@@ -79,7 +82,7 @@
   }
 #endif
 
-namespace reflex {
+namespace reflex{
 
 #if (defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(_WIN64) || defined(__BORLANDC__)) && !defined(__CYGWIN__) && !defined(__MINGW32__) && !defined(__MINGW64__)
 inline int fopen_s(FILE **file, const char *name, const char *mode) { return ::fopen_s(file, name, mode); }
@@ -90,223 +93,20 @@ inline int fopen_s(FILE **file, const char *name, const char *mode) { return (*f
 static void print_char(FILE *file, int c, bool h = false)
 {
   if (c >= '\a' && c <= '\r')
-    ::fprintf(file, "'\\%c'", "abtnvfr"[c - '\a']);
+    fprintf(file, "'\\%c'", "abtnvfr"[c - '\a']);
   else if (c == '\\')
-    ::fprintf(file, "'\\\\'");
+    fprintf(file, "'\\\\'");
   else if (c == '\'')
-    ::fprintf(file, "'\\''");
+    fprintf(file, "'\\''");
   else if (std::isprint(c))
-    ::fprintf(file, "'%c'", c);
+    fprintf(file, "'%c'", c);
   else if (h)
-    ::fprintf(file, "%02x", c);
+    fprintf(file, "%02x", c);
   else
-    ::fprintf(file, "%u", c);
+    fprintf(file, "%u", c);
 }
 
-static const char *posix_class[] = {
-  "ASCII",
-  "Space",
-  "XDigit",
-  "Cntrl",
-  "Print",
-  "Alnum",
-  "Alpha",
-  "Blank",
-  "Digit",
-  "Graph",
-  "Lower",
-  "Punct",
-  "Upper",
-  "Word",
-};
-
-static const char *meta_label[] = {
-  nullptr,
-  "NWB",
-  "NWE",
-  "BWB",
-  "EWB",
-  "BWE",
-  "EWE",
-  "BOL",
-  "EOL",
-  "BOB",
-  "EOB",
-  "UND",
-  "IND",
-  "DED",
-};
-
-const std::string Pattern::operator[](Accept choice) const
-{
-  if (choice == 0)
-    return rex_;
-  if (choice <= size())
-  {
-    Location loc = end_.at(choice - 1);
-    Location prev = 0;
-    if (choice >= 2)
-      prev = end_.at(choice - 2) + 1;
-    return rex_.substr(prev, loc - prev);
-  }
-  return "";
-}
-
-void Pattern::error(regex_error_type code, size_t pos) const
-{
-  regex_error err(code, rex_, pos);
-  if (opt_.w)
-    std::cerr << err.what();
-  if (code == regex_error::exceeds_limits || opt_.r)
-    throw err;
-}
-
-void Pattern::init(const char *options, const uint_least8_t *pred)
-{
-  init_options(options);
-  nop_ = 0;
-  len_ = 0;
-  min_ = 0;
-  one_ = false;
-  if (opc_ || fsm_)
-  {
-    if (pred != nullptr)
-    {
-      len_ = pred[0];
-      min_ = pred[1] & 0x0f;
-      one_ = pred[1] & 0x10;
-      memcpy(pre_, pred + 2, len_);
-      if (min_ > 0)
-      {
-        size_t n = len_ + 2;
-        if (min_ > 1 && len_ == 0)
-        {
-          for (size_t i = 0; i < 256; ++i)
-            bit_[i] = ~pred[i + n];
-          n += 256;
-        }
-        if (min_ >= 4)
-        {
-          for (size_t i = 0; i < Const::HASH; ++i)
-            pmh_[i] = ~pred[i + n];
-        }
-        else
-        {
-          for (size_t i = 0; i < Const::HASH; ++i)
-            pma_[i] = ~pred[i + n];
-        }
-      }
-    }
-  }
-  else
-  {
-    Positions startpos;
-    Follow    followpos;
-    Map       modifiers;
-    Map       lookahead;
-    // parse the regex pattern to construct the followpos NFA without epsilon transitions
-    parse(startpos, followpos, modifiers, lookahead);
-    // start state = startpos = firstpost of the followpos NFA, also merge the tree DFA root when non-nullptr
-    DFA::State *start = dfa_.state(tfa_.tree, startpos);
-    // compile the NFA into a DFA
-    compile(start, followpos, modifiers, lookahead);
-    // assemble DFA opcode tables or direct code
-    assemble(start);
-    // delete the DFA
-    dfa_.clear();
-  }
-}
-
-void Pattern::init_options(const char *options)
-{
-  opt_.b = false;
-  opt_.i = false;
-  opt_.m = false;
-  opt_.o = false;
-  opt_.p = false;
-  opt_.q = false;
-  opt_.r = false;
-  opt_.s = false;
-  opt_.w = false;
-  opt_.x = false;
-  opt_.e = '\\';
-  if (options)
-  {
-    for (const char *s = options; *s != '\0'; ++s)
-    {
-      switch (*s)
-      {
-        case 'b':
-          opt_.b = true;
-          break;
-        case 'e':
-          opt_.e = (*(s += (s[1] == '=') + 1) == ';' || *s == '\0' ? 256 : *s++);
-          --s;
-          break;
-        case 'p':
-          opt_.p = true;
-          break;
-        case 'i':
-          opt_.i = true;
-          break;
-        case 'm':
-          opt_.m = true;
-          break;
-        case 'o':
-          opt_.o = true;
-          break;
-        case 'q':
-          opt_.q = true;
-          break;
-        case 'r':
-          opt_.r = true;
-          break;
-        case 's':
-          opt_.s = true;
-          break;
-        case 'w':
-          opt_.w = true;
-          break;
-        case 'x':
-          opt_.x = true;
-          break;
-        case 'z':
-            for (const char *t = s += (s[1] == '='); *s != ';' && *s != '\0'; ++t)
-            {
-              if (std::isspace(*t) || *t == ';' || *t == '\0')
-              {
-                if (t > s + 1)
-                  opt_.z = std::string(s + 1, t - s - 1);
-                s = t;
-              }
-            }
-            --s;
-            break;
-        case 'f':
-        case 'n':
-          for (const char *t = s += (s[1] == '='); *s != ';' && *s != '\0'; ++t)
-          {
-            if (*t == ',' || std::isspace(*t) || *t == ';' || *t == '\0')
-            {
-              if (t > s + 1)
-              {
-                std::string name(s + 1, t - s - 1);
-                if (name.find('.') == std::string::npos)
-                  opt_.n = name;
-                else
-                  opt_.f.push_back(name);
-              }
-              s = t;
-            }
-          }
-          --s;
-          break;
-      }
-    }
-  }
-}
-
-void Pattern::parse(
+void FSM_Generator::parse(
     Positions& startpos,
     Follow&    followpos,
     Map&       modifiers,
@@ -317,7 +117,7 @@ void Pattern::parse(
     throw regex_error(regex_error::exceeds_length, rex_, Position::MAXLOC);
   Location   len = static_cast<Location>(rex_.size());
   Location   loc = 0;
-  Accept     choice = 1;
+  Pattern::Accept choice = 1;
   Lazy       lazyidx = 0;
   Positions  firstpos;
   Positions  lastpos;
@@ -436,7 +236,7 @@ void Pattern::parse(
     }
     else
     {
-      Lazyset lazyset;
+      std::set<Lazy> lazyset;
       parse2(
           true,
           loc,
@@ -459,7 +259,7 @@ void Pattern::parse(
         }
         else
         {
-          for (Lazyset::const_iterator l = lazyset.begin(); l != lazyset.end(); ++l)
+          for (std::set<Lazy>::const_iterator l = lazyset.begin(); l != lazyset.end(); ++l)
             startpos.insert(Position(choice).accept(true).lazy(*l));
         }
       }
@@ -471,7 +271,7 @@ void Pattern::parse(
         }
         else
         {
-          for (Lazyset::const_iterator l = lazyset.begin(); l != lazyset.end(); ++l)
+          for (std::set<Lazy>::const_iterator l = lazyset.begin(); l != lazyset.end(); ++l)
             followpos[p->pos()].insert(Position(choice).accept(true).lazy(*l));
         }
       }
@@ -509,9 +309,9 @@ void Pattern::parse(
   }
 #endif
   REFLEX_DBGLOG("END parse()");
-}
+} // parse
 
-void Pattern::parse1(
+void FSM_Generator::parse1(
     bool       begin,
     Location&  loc,
     Positions& firstpos,
@@ -519,7 +319,7 @@ void Pattern::parse1(
     bool&      nullable,
     Follow&    followpos,
     Lazy&      lazyidx,
-    Lazyset&   lazyset,
+    std::set<Lazy>& lazyset,
     Map&       modifiers,
     Locations& lookahead,
     Iter&      iter)
@@ -540,7 +340,7 @@ void Pattern::parse1(
   Positions firstpos1;
   Positions lastpos1;
   bool      nullable1;
-  Lazyset   lazyset1;
+  std::set<Lazy>   lazyset1;
   Iter      iter1;
   while (at(loc) == '|')
   {
@@ -566,9 +366,9 @@ void Pattern::parse1(
       iter = iter1;
   }
   REFLEX_DBGLOG("END parse1()");
-}
+} // parse1
 
-void Pattern::parse2(
+void FSM_Generator::parse2(
     bool       begin,
     Location&  loc,
     Positions& firstpos,
@@ -576,7 +376,7 @@ void Pattern::parse2(
     bool&      nullable,
     Follow&    followpos,
     Lazy&      lazyidx,
-    Lazyset&   lazyset,
+    std::set<Lazy>& lazyset,
     Map&       modifiers,
     Locations& lookahead,
     Iter&      iter)
@@ -627,7 +427,7 @@ void Pattern::parse2(
     Positions firstpos1;
     Positions lastpos1;
     bool      nullable1;
-    Lazyset   lazyset1;
+    std::set<Lazy>   lazyset1;
     Iter      iter1;
     while ((c = at(loc)) != '\0' && c != '|' && c != ')')
     {
@@ -688,9 +488,9 @@ void Pattern::parse2(
     }
   }
   REFLEX_DBGLOG("END parse2()");
-}
+} // parse2
 
-void Pattern::parse3(
+void FSM_Generator::parse3(
     bool       begin,
     Location&  loc,
     Positions& firstpos,
@@ -698,7 +498,7 @@ void Pattern::parse3(
     bool&      nullable,
     Follow&    followpos,
     Lazy&      lazyidx,
-    Lazyset&   lazyset,
+    std::set<Lazy>&   lazyset,
     Map&       modifiers,
     Locations& lookahead,
     Iter&      iter)
@@ -878,9 +678,9 @@ void Pattern::parse3(
     c = at(loc);
   }
   REFLEX_DBGLOG("END parse3()");
-}
+} // parse3
 
-void Pattern::parse4(
+void FSM_Generator::parse4(
     bool       begin,
     Location&  loc,
     Positions& firstpos,
@@ -888,7 +688,7 @@ void Pattern::parse4(
     bool&      nullable,
     Follow&    followpos,
     Lazy&      lazyidx,
-    Lazyset&   lazyset,
+    std::set<Lazy>& lazyset,
     Map&       modifiers,
     Locations& lookahead,
     Iter&      iter)
@@ -1147,9 +947,9 @@ void Pattern::parse4(
     error(regex_error::empty_expression, loc);
   }
   REFLEX_DBGLOG("END parse4()");
-}
+} // parse4
 
-Pattern::Char Pattern::parse_esc(Location& loc, Chars *chars) const
+FSM_Generator::Char FSM_Generator::parse_esc(Location& loc, Chars *chars) const
 {
   Char c = at(++loc);
   if (c == '0')
@@ -1221,7 +1021,7 @@ Pattern::Char Pattern::parse_esc(Location& loc, Chars *chars) const
       chars->insert(11, 255);
     }
     ++loc;
-    c = META_EOL;
+    c = Pattern::Meta::EOL;
   }
   else if ((c == 'p' || c == 'P') && at(loc + 1) == '{')
   {
@@ -1253,7 +1053,7 @@ Pattern::Char Pattern::parse_esc(Location& loc, Chars *chars) const
       else
         error(regex_error::invalid_escape, loc);
     }
-    c = META_EOL;
+    c = Pattern::Meta::EOL;
   }
   else if (c != '_')
   {
@@ -1275,7 +1075,7 @@ Pattern::Char Pattern::parse_esc(Location& loc, Chars *chars) const
           if ((s - escapes) % 2)
             flip(*chars);
         }
-        c = META_EOL;
+        c = Pattern::Meta::EOL;
       }
     }
     ++loc;
@@ -1283,9 +1083,9 @@ Pattern::Char Pattern::parse_esc(Location& loc, Chars *chars) const
   if (c <= 0xFF && chars != nullptr)
     chars->insert(c);
   return c;
-}
+} // parse-esc
 
-void Pattern::compile(
+void FSM_Generator::compile(
     DFA::State *start,
     Follow&     followpos,
     const Map&  modifiers,
@@ -1437,16 +1237,14 @@ void Pattern::compile(
         }
       }
     }
-    #ifdef REFLEX_PATTERN_TIMER
     ems_ += timer_elapsed(et);
-    #endif
     Moves::iterator end = moves.end();
     for (Moves::iterator i = moves.begin(); i != end; ++i)
     {
       Positions& pos = i->second;
       if (!pos.empty())
       {
-        uint_least16_t h = hash_pos(&pos);
+        unsigned short h = hash_pos(&pos);
         DFA::State **branch_ptr = &table[h];
         DFA::State *target_state = *branch_ptr;
         // binary search the target state for a possible matching state in the hash table overflow tree
@@ -1501,14 +1299,12 @@ void Pattern::compile(
   }
   delete[] table;
   tfa_.clear();
-  #ifdef REFLEX_PATTERN_TIMER
   vms_ = timer_elapsed(vt) - ems_;
-  #endif
   REFLEX_DBGLOG("END compile()");
-}
+} // compile
 
-void Pattern::lazy(
-    const Lazyset& lazyset,
+void FSM_Generator::lazy(
+    const std::set<Lazy>& lazyset,
     Positions&     pos) const
 {
   if (!lazyset.empty())
@@ -1519,18 +1315,18 @@ void Pattern::lazy(
   }
 }
 
-void Pattern::lazy(
-    const Lazyset&   lazyset,
+void FSM_Generator::lazy(
+    const std::set<Lazy>&   lazyset,
     const Positions& pos,
     Positions&       pos1) const
 {
   for (Positions::const_iterator p = pos.begin(); p != pos.end(); ++p)
-    for (Lazyset::const_iterator l = lazyset.begin(); l != lazyset.end(); ++l)
+    for (std::set<Lazy>::const_iterator l = lazyset.begin(); l != lazyset.end(); ++l)
       // pos1.insert(p->lazy() ? *p : p->lazy(*l)); // CHECKED algorithmic options: only if p is not already lazy??
       pos1.insert(p->lazy(*l)); // overrides lazyness even when p is already lazy
 }
 
-void Pattern::greedy(Positions& pos) const
+void FSM_Generator::greedy(Positions& pos) const
 {
   Positions pos1;
   for (Positions::const_iterator p = pos.begin(); p != pos.end(); ++p)
@@ -1539,9 +1335,9 @@ void Pattern::greedy(Positions& pos) const
   pos.swap(pos1);
 }
 
-void Pattern::trim_anchors(Positions& follow, const Position p) const
+void FSM_Generator::trim_anchors(Positions& follow, const Position p) const
 {
-#ifdef DEBUG
+#ifdef REFLEX_DEBUG
   REFLEX_DBGLOG("trim_anchors({");
   for (Positions::const_iterator q = follow.begin(); q != follow.end(); ++q)
     DBGLOGPOS(*q);
@@ -1579,15 +1375,15 @@ void Pattern::trim_anchors(Positions& follow, const Position p) const
       }
     }
   }
-#ifdef DEBUG
+#ifdef REFLEX_DEBUG
   REFLEX_DBGLOGA(" = {");
   for (Positions::const_iterator q = follow.begin(); q != follow.end(); ++q)
     DBGLOGPOS(*q);
   REFLEX_DBGLOG(" }");
 #endif
-}
+} // trim_anchors
 
-void Pattern::trim_lazy(Positions *pos) const
+void FSM_Generator::trim_lazy(Positions *pos) const
 {
 #ifdef REFLEX_DEBUG
   REFLEX_DBGLOG("BEGIN trim_lazy({");
@@ -1661,9 +1457,9 @@ void Pattern::trim_lazy(Positions *pos) const
     DBGLOGPOS(*q);
   REFLEX_DBGLOGA(" })");
 #endif
-}
+} // trim_lazy
 
-void Pattern::compile_transition(
+void FSM_Generator::compile_transition(
     DFA::State *state,
     Follow&     followpos,
     const Map&  modifiers,
@@ -1676,7 +1472,7 @@ void Pattern::compile_transition(
   {
     if (k->accept())
     {
-      Accept accept = k->accepts();
+      Pattern::Accept accept = k->accepts();
       if (state->accept == 0 || accept < state->accept)
         state->accept = accept;
       if (k->negate())
@@ -1690,7 +1486,7 @@ void Pattern::compile_transition(
       bool literal = is_modified('q', modifiers, loc);
       if (c == '(' && !literal)
       {
-        Lookahead n = 0;
+        Pattern::Lookahead n = 0;
         REFLEX_DBGLOG("LOOKAHEAD HEAD");
         for (Map::const_iterator i = lookahead.begin(); i != lookahead.end(); ++i)
         {
@@ -1698,13 +1494,13 @@ void Pattern::compile_transition(
           REFLEX_DBGLOGN("%d %d (%d) %u", state->accept, i->first, j != i->second.end(), n);
           if (j != i->second.end())
           {
-            Lookahead l = n + static_cast<Lookahead>(std::distance(i->second.begin(), j));
+            Pattern::Lookahead l = n + static_cast<Pattern::Lookahead>(std::distance(i->second.begin(), j));
             if (l < n)
               error(regex_error::exceeds_limits, loc);
             state->heads.insert(l);
           }
-          Lookahead k = n;
-          n += static_cast<Lookahead>(i->second.size());
+          Pattern::Lookahead k = n;
+          n += static_cast<Pattern::Lookahead>(i->second.size());
           if (n < k)
             error(regex_error::exceeds_limits, loc);
         }
@@ -1715,7 +1511,7 @@ void Pattern::compile_transition(
         if (state->accept > 0)
         */
         {
-          Lookahead n = 0;
+          Pattern::Lookahead n = 0;
           REFLEX_DBGLOG("LOOKAHEAD TAIL");
           for (Map::const_iterator i = lookahead.begin(); i != lookahead.end(); ++i)
           {
@@ -1723,13 +1519,13 @@ void Pattern::compile_transition(
             REFLEX_DBGLOGN("%d %d (%d) %u", state->accept, i->first, j != i->second.end(), n);
             if (j != i->second.end() /* CHECKED algorithmic options: 7/18 && state->accept == i->first */ ) // only add lookstop when part of the proper accept state
             {
-              Lookahead l = n + static_cast<Lookahead>(std::distance(i->second.begin(), j));
+              Pattern::Lookahead l = n + static_cast<Pattern::Lookahead>(std::distance(i->second.begin(), j));
               if (l < n)
                 error(regex_error::exceeds_limits, loc);
               state->tails.insert(l);
             }
-            Lookahead k = n;
-            n += static_cast<Lookahead>(i->second.size());
+            Pattern::Lookahead k = n;
+            n += static_cast<Pattern::Lookahead>(i->second.size());
             if (n < k)
               error(regex_error::exceeds_limits, loc);
           }
@@ -1806,11 +1602,11 @@ void Pattern::compile_transition(
                 }
                 break;
               case '^':
-                chars.insert(is_modified('m', modifiers, loc) ? META_BOL : META_BOB);
+                chars.insert(is_modified('m', modifiers, loc) ? Pattern::Meta::BOL : Pattern::Meta::BOB);
                 trim_anchors(follow, *k);
                 break;
               case '$':
-                chars.insert(is_modified('m', modifiers, loc) ? META_EOL : META_EOB);
+                chars.insert(is_modified('m', modifiers, loc) ? Pattern::Meta::EOL : Pattern::Meta::EOB);
                 trim_anchors(follow, *k);
                 break;
               default:
@@ -1834,39 +1630,39 @@ void Pattern::compile_transition(
                       }
                       break;
                     case 'i':
-                      chars.insert(META_IND);
+                      chars.insert(Pattern::Meta::IND);
                       break;
                     case 'j':
-                      chars.insert(META_DED);
+                      chars.insert(Pattern::Meta::DED);
                       break;
                     case 'k':
-                      chars.insert(META_UND);
+                      chars.insert(Pattern::Meta::UND);
                       break;
                     case 'A':
-                      chars.insert(META_BOB);
+                      chars.insert(Pattern::Meta::BOB);
                       trim_anchors(follow, *k);
                       break;
                     case 'z':
-                      chars.insert(META_EOB);
+                      chars.insert(Pattern::Meta::EOB);
                       trim_anchors(follow, *k);
                       break;
                     case 'B':
-                      chars.insert(k->anchor() ? META_NWB : META_NWE);
+                      chars.insert(k->anchor() ? Pattern::Meta::NWB : Pattern::Meta::NWE);
                       trim_anchors(follow, *k);
                       break;
                     case 'b':
                       if (k->anchor())
-                        chars.insert(META_BWB, META_EWB);
+                        chars.insert(Pattern::Meta::BWB, Pattern::Meta::EWB);
                       else
-                        chars.insert(META_BWE, META_EWE);
+                        chars.insert(Pattern::Meta::BWE, Pattern::Meta::EWE);
                       trim_anchors(follow, *k);
                       break;
                     case '<':
-                      chars.insert(k->anchor() ? META_BWB : META_BWE);
+                      chars.insert(k->anchor() ? Pattern::Meta::BWB : Pattern::Meta::BWE);
                       trim_anchors(follow, *k);
                       break;
                     case '>':
-                      chars.insert(k->anchor() ? META_EWB : META_EWE);
+                      chars.insert(k->anchor() ? Pattern::Meta::EWB : Pattern::Meta::EWE);
                       trim_anchors(follow, *k);
                       break;
                     default:
@@ -1896,9 +1692,9 @@ void Pattern::compile_transition(
       ++i;
   }
   REFLEX_DBGLOG("END compile_transition()");
-}
+} // compile_transition
 
-void Pattern::transition(
+void FSM_Generator::transition(
     Moves&           moves,
     Chars&           chars,
     const Positions& follow) const
@@ -1934,7 +1730,7 @@ void Pattern::transition(
         }
         else
         {
-          Move back(chars & i->first, i->second);
+          Move back{chars & i->first, i->second};
           set_insert(back.second, follow);
           chars -= back.first;
           i->first -= back.first;
@@ -1946,17 +1742,17 @@ void Pattern::transition(
     }
   }
   if (chars.any())
-    moves.push_back(Move(chars, follow));
-}
+    moves.push_back(Move{chars, follow});
+} // transition
 
-void Pattern::compile_list(Location loc, Chars& chars, const Map& modifiers) const
+void FSM_Generator::compile_list(Location loc, Chars& chars, const Map& modifiers) const
 {
   bool complement = (at(loc) == '^');
   if (complement)
     ++loc;
-  Char prev = META_BOL;
-  Char lo = META_EOL;
-  for (Char c = at(loc); c != '\0' && (c != ']' || prev == META_BOL); c = at(++loc))
+  Char prev = Pattern::Meta::BOL;
+  Char lo = Pattern::Meta::EOL;
+  for (Char c = at(loc); c != '\0' && (c != ']' || prev == Pattern::Meta::BOL); c = at(++loc))
   {
     if (c == '-' && !is_meta(prev) && is_meta(lo))
     {
@@ -1982,7 +1778,7 @@ void Pattern::compile_list(Location loc, Chars& chars, const Map& modifiers) con
             posix(i, chars);
           else
             error(regex_error::invalid_class, loc);
-          c = META_EOL;
+          c = Pattern::Meta::EOL;
         }
         loc = static_cast<Location>(c_loc + 1);
       }
@@ -2009,7 +1805,7 @@ void Pattern::compile_list(Location loc, Chars& chars, const Map& modifiers) con
                 chars.insert(uppercase(a));
             }
           }
-          c = META_EOL;
+          c = Pattern::Meta::EOL;
         }
         else
         {
@@ -2025,19 +1821,19 @@ void Pattern::compile_list(Location loc, Chars& chars, const Map& modifiers) con
         }
       }
       prev = c;
-      lo = META_EOL;
+      lo = Pattern::Meta::EOL;
     }
   }
   if (!is_meta(lo))
     chars.insert('-');
   if (complement)
     flip(chars);
-}
+} // compile_list
 
-void Pattern::posix(size_t index, Chars& chars) const
+void FSM_Generator::posix(size_t index, Chars& chars) const
 {
   REFLEX_DBGLOG("posix(%lu)", index);
-  static const uint_least64_t posix_chars[14][5] = {
+  static constexpr unsigned long long posix_chars[14][5] = {
     { 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 0ULL, 0ULL, 0ULL }, // ASCII
     { 0x0000000100003E00ULL, 0x0000000000000000ULL, 0ULL, 0ULL, 0ULL }, // Space: \t-\r, ' '
     { 0x03FF000000000000ULL, 0x0000007E0000007EULL, 0ULL, 0ULL, 0ULL }, // XDigit: 0-9, A-F, a-f
@@ -2056,12 +1852,12 @@ void Pattern::posix(size_t index, Chars& chars) const
   chars |= Chars(posix_chars[index]);
 }
 
-void Pattern::flip(Chars& chars) const
+void FSM_Generator::flip(Chars& chars) const
 {
   chars.flip256();
 }
 
-void Pattern::assemble(DFA::State *start)
+void FSM_Generator::assemble(DFA::State *start)
 {
   REFLEX_DBGLOG("BEGIN assemble()");
   timer_type t;
@@ -2070,966 +1866,13 @@ void Pattern::assemble(DFA::State *start)
   export_dfa(start);
   compact_dfa(start);
   encode_dfa(start);
-  #ifdef REFLEX_PATTERN_TIMER
   wms_ = timer_elapsed(t);
-  #endif
   gencode_dfa(start);
   export_code();
   REFLEX_DBGLOG("END assemble()");
 }
 
-void Pattern::compact_dfa(DFA::State *start)
-{
-#if REFLEX_WITH_COMPACT_DFA == -1
-  // edge compaction in reverse order
-  for (DFA::State *state = start; state; state = state->next)
-  {
-    for (DFA::State::Edges::iterator i = state->edges.begin(); i != state->edges.end(); ++i)
-    {
-      Char hi = i->second.first;
-      if (hi >= 0xFF)
-        break;
-      DFA::State::Edges::iterator j = i;
-      ++j;
-      while (j != state->edges.end() && j->first <= hi + 1)
-      {
-        hi = j->second.first;
-        if (j->second.second == i->second.second)
-        {
-          i->second.first = hi;
-          state->edges.erase(j++);
-        }
-        else
-        {
-          ++j;
-        }
-      }
-    }
-  }
-#elif REFLEX_WITH_COMPACT_DFA == 1
-  // edge compaction
-  for (DFA::State *state = start; state; state = state->next)
-  {
-    for (DFA::State::Edges::reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
-    {
-      Char lo = i->second.first;
-      if (lo <= 0x00)
-        break;
-      DFA::State::Edges::reverse_iterator j = i;
-      ++j;
-      while (j != state->edges.rend() && j->first >= lo - 1)
-      {
-        lo = j->second.first;
-        if (j->second.second == i->second.second)
-        {
-          i->second.first = lo;
-          state->edges.erase(--j.base());
-        }
-        else
-        {
-          ++j;
-        }
-      }
-    }
-  }
-#else
-  (void)start;
-#endif
-}
-
-void Pattern::encode_dfa(DFA::State *start)
-{
-  nop_ = 0;
-  for (DFA::State *state = start; state; state = state->next)
-  {
-    if (state->accept > Const::AMAX)
-      state->accept = Const::AMAX;
-    state->first = state->index = nop_;
-#if REFLEX_WITH_COMPACT_DFA == -1
-    Char hi = 0x00;
-    for (DFA::State::Edges::const_iterator i = state->edges.begin(); i != state->edges.end(); ++i)
-    {
-      Char lo = i->first;
-      if (lo == hi)
-        hi = i->second.first + 1;
-      ++nop_;
-      if (is_meta(lo))
-        nop_ += i->second.first - lo;
-    }
-    // add final dead state (HALT opcode) only when needed, i.e. skip dead state if all chars 0-255 are already covered
-    if (hi <= 0xFF)
-    {
-      state->edges[hi] = std::pair<Char,DFA::State*>(0xFF, nullptr);
-      ++nop_;
-    }
-#else
-    Char lo = 0xFF;
-    bool covered = false;
-    for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
-    {
-      Char hi = i->first;
-      if (lo == hi)
-      {
-        if (i->second.first == 0x00)
-          covered = true;
-        else
-          lo = i->second.first - 1;
-      }
-      ++nop_;
-      if (is_meta(lo))
-        nop_ += hi - i->second.first;
-    }
-    // add final dead state (HALT opcode) only when needed, i.e. skip dead state if all chars 0-255 are already covered
-    if (!covered)
-    {
-      state->edges[lo] = std::pair<Char,DFA::State*>(0x00, nullptr);
-      ++nop_;
-    }
-#endif
-    nop_ += static_cast<Index>(state->heads.size() + state->tails.size() + (state->accept > 0 || state->redo));
-    if (!valid_goto_index(nop_))
-      throw regex_error(regex_error::exceeds_limits, rex_, rex_.size());
-  }
-  if (nop_ > Const::LONG)
-  {
-    // over 64K opcodes: use 64-bit GOTO LONG opcodes
-    nop_ = 0;
-    for (DFA::State *state = start; state; state = state->next)
-    {
-      state->index = nop_;
-#if REFLEX_WITH_COMPACT_DFA == -1
-      Char hi = 0x00;
-      for (DFA::State::Edges::const_iterator i = state->edges.begin(); i != state->edges.end(); ++i)
-      {
-        Char lo = i->first;
-        if (lo == hi)
-          hi = i->second.first + 1;
-        // use 64-bit jump opcode if forward jump determined by previous loop is beyond 32K or backward jump is beyond 64K
-        if (i->second.second != nullptr &&
-            ((i->second.second->first > state->first && i->second.second->first >= Const::LONG / 2) ||
-             i->second.second->index >= Const::LONG))
-          nop_ += 2;
-        else
-          ++nop_;
-        if (is_meta(lo))
-        {
-          // use 64-bit jump opcode if forward jump determined by previous loop is beyond 32K or backward jump is beyond 64K
-          if (i->second.second != nullptr &&
-            ((i->second.second->first > state->first && i->second.second->first >= Const::LONG / 2) ||
-             i->second.second->index >= Const::LONG))
-            nop_ += 2 * (i->second.first - lo);
-          else
-            nop_ += i->second.first - lo;
-        }
-      }
-#else
-      Char lo = 0xFF;
-      for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
-      {
-        Char hi = i->first;
-        if (lo == hi)
-          lo = i->second.first - 1;
-        // use 64-bit jump opcode if forward jump determined by previous loop is beyond 32K or backward jump is beyond 64K
-        if (i->second.second != nullptr &&
-            ((i->second.second->first > state->first && i->second.second->first >= Const::LONG / 2) ||
-             i->second.second->index >= Const::LONG))
-          nop_ += 2;
-        else
-          ++nop_;
-        if (is_meta(lo))
-        {
-          // use 64-bit jump opcode if forward jump determined by previous loop is beyond 32K or backward jump is beyond 64K
-          if (i->second.second != nullptr &&
-            ((i->second.second->first > state->first && i->second.second->first >= Const::LONG / 2) ||
-             i->second.second->index >= Const::LONG))
-            nop_ += 2 * (hi - i->second.first);
-          else
-            nop_ += hi - i->second.first;
-        }
-      }
-#endif
-      nop_ += static_cast<Index>(state->heads.size() + state->tails.size() + (state->accept > 0 || state->redo));
-      if (!valid_goto_index(nop_))
-        throw regex_error(regex_error::exceeds_limits, rex_, rex_.size());
-    }
-  }
-  Opcode *opcode = new Opcode[nop_];
-  opc_ = opcode;
-  Index pc = 0;
-  for (const DFA::State *state = start; state; state = state->next)
-  {
-    if (state->redo)
-    {
-      opcode[pc++] = opcode_redo();
-    }
-    else if (state->accept > 0)
-    {
-      opcode[pc++] = opcode_take(state->accept);
-    }
-    for (Lookaheads::const_iterator i = state->tails.begin(); i != state->tails.end(); ++i)
-    {
-      if (!valid_lookahead_index(static_cast<Index>(*i)))
-        throw regex_error(regex_error::exceeds_limits, rex_, rex_.size());
-      opcode[pc++] = opcode_tail(static_cast<Index>(*i));
-    }
-    for (Lookaheads::const_iterator i = state->heads.begin(); i != state->heads.end(); ++i)
-    {
-      if (!valid_lookahead_index(static_cast<Index>(*i)))
-        throw regex_error(regex_error::exceeds_limits, rex_, rex_.size());
-      opcode[pc++] = opcode_head(static_cast<Index>(*i));
-    }
-#if REFLEX_WITH_COMPACT_DFA == -1
-    for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
-    {
-      Char lo = i->first;
-      Char hi = i->second.first;
-      Index target_first = i->second.second != nullptr ? i->second.second->first : Const::IMAX;
-      Index target_index = i->second.second != nullptr ? i->second.second->index : Const::IMAX;
-      if (!is_meta(lo))
-      {
-        if (target_index == Const::IMAX)
-        {
-          opcode[pc++] = opcode_goto(lo, hi, Const::HALT);
-        }
-        else if (nop_ > Const::LONG && ((target_first > state->first && target_first >= Const::LONG / 2) || target_index >= Const::LONG))
-        {
-          opcode[pc++] = opcode_goto(lo, hi, Const::LONG);
-          opcode[pc++] = opcode_long(target_index);
-        }
-        else
-        {
-          opcode[pc++] = opcode_goto(lo, hi, target_index);
-        }
-      }
-      else
-      {
-        do
-        {
-          if (target_index == Const::IMAX)
-          {
-            opcode[pc++] = opcode_goto(lo, lo, Const::HALT);
-          }
-          else if (nop_ > Const::LONG && ((target_first > state->first && target_first >= Const::LONG / 2) || target_index >= Const::LONG))
-          {
-            opcode[pc++] = opcode_goto(lo, lo, Const::LONG);
-            opcode[pc++] = opcode_long(target_index);
-          }
-          else
-          {
-            opcode[pc++] = opcode_goto(lo, lo, target_index);
-          }
-        } while (++lo <= hi);
-      }
-    }
-#else
-    for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
-    {
-      Char hi = i->first;
-      Char lo = i->second.first;
-      if (is_meta(lo))
-      {
-        Index target_first = i->second.second != nullptr ? i->second.second->first : Const::IMAX;
-        Index target_index = i->second.second != nullptr ? i->second.second->index : Const::IMAX;
-        do
-        {
-          if (target_index == Const::IMAX)
-          {
-            opcode[pc++] = opcode_goto(lo, lo, Const::HALT);
-          }
-          else if (nop_ > Const::LONG && ((target_first > state->first && target_first >= Const::LONG / 2) || target_index >= Const::LONG))
-          {
-            opcode[pc++] = opcode_goto(lo, lo, Const::LONG);
-            opcode[pc++] = opcode_long(target_index);
-          }
-          else
-          {
-            opcode[pc++] = opcode_goto(lo, lo, target_index);
-          }
-        } while (++lo <= hi);
-      }
-    }
-    for (DFA::State::Edges::const_iterator i = state->edges.begin(); i != state->edges.end(); ++i)
-    {
-      Char lo = i->second.first;
-      if (!is_meta(lo))
-      {
-        Char hi = i->first;
-        if (i->second.second != nullptr)
-        {
-          Index target_first = i->second.second->first;
-          Index target_index = i->second.second->index;
-          if (nop_ > Const::LONG && ((target_first > state->first && target_first >= Const::LONG / 2) || target_index >= Const::LONG))
-          {
-            opcode[pc++] = opcode_goto(lo, hi, Const::LONG);
-            opcode[pc++] = opcode_long(target_index);
-          }
-          else
-          {
-            opcode[pc++] = opcode_goto(lo, hi, target_index);
-          }
-        }
-        else
-        {
-          opcode[pc++] = opcode_goto(lo, hi, Const::HALT);
-        }
-      }
-    }
-#endif
-  }
-}
-
-void Pattern::gencode_dfa(const DFA::State *start) const
-{
-  if (!opt_.o)
-    return;
-  for (std::vector<std::string>::const_iterator i = opt_.f.begin(); i != opt_.f.end(); ++i)
-  {
-    const std::string& filename = *i;
-    size_t len = filename.length();
-    if ((len > 2 && filename.compare(len - 2, 2, ".h"  ) == 0)
-     || (len > 4 && filename.compare(len - 4, 4, ".hpp") == 0)
-     || (len > 4 && filename.compare(len - 4, 4, ".cpp") == 0)
-     || (len > 3 && filename.compare(len - 3, 3, ".cc" ) == 0))
-    {
-      FILE *file = nullptr;
-      int err = 0;
-      if (filename.compare(0, 7, "stdout.") == 0)
-        file = stdout;
-      else if (filename.at(0) == '+')
-        err = reflex::fopen_s(&file, filename.c_str() + 1, "a");
-      else
-        err = reflex::fopen_s(&file, filename.c_str(), "w");
-      if (!err && file)
-      {
-        ::fprintf(file,
-            "#include <reflex/lexer.h>\n\n"
-            "#if defined(OS_WIN)\n"
-            "#pragma warning(disable:4101 4102)\n"
-            "#elif defined(__GNUC__)\n"
-            "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n"
-            "#pragma GCC diagnostic ignored \"-Wunused-label\"\n"
-            "#elif defined(__clang__)\n"
-            "#pragma clang diagnostic ignored \"-Wunused-variable\"\n"
-            "#pragma clang diagnostic ignored \"-Wunused-label\"\n"
-            "#endif\n\n");
-        write_namespace_open(file);
-        ::fprintf(file,
-            "void reflex_code_%s(reflex::Lexer& l)\n"
-            "{\n"
-            "  int c0 = 0, c1 = 0;\n"
-            "  l.FSM_INIT(c1);\n", opt_.n.empty() ? "FSM" : opt_.n.c_str());
-        for (const DFA::State *state = start; state; state = state->next)
-        {
-          ::fprintf(file, "\nS%u:\n", state->index);
-          if (state == start)
-            ::fprintf(file, "  l.FSM_FIND();\n");
-          if (state->redo)
-            ::fprintf(file, "  l.FSM_REDO();\n");
-          else if (state->accept > 0)
-            ::fprintf(file, "  l.FSM_TAKE(%u);\n", state->accept);
-          for (Lookaheads::const_iterator i = state->tails.begin(); i != state->tails.end(); ++i)
-            ::fprintf(file, "  l.FSM_TAIL(%u);\n", *i);
-          for (Lookaheads::const_iterator i = state->heads.begin(); i != state->heads.end(); ++i)
-            ::fprintf(file, "  l.FSM_HEAD(%u);\n", *i);
-          if (state->edges.rbegin() != state->edges.rend() && state->edges.rbegin()->first == META_DED)
-            ::fprintf(file, "  if (l.FSM_DENT()) goto S%u;\n", state->edges.rbegin()->second.second->index);
-          bool peek = false; // if we need to read a character into c1
-          bool prev = false; // if we need to keep the previous character in c0
-          for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
-          {
-#if REFLEX_WITH_COMPACT_DFA == -1
-            Char lo = i->first;
-            Char hi = i->second.first;
-#else
-            Char hi = i->first;
-            Char lo = i->second.first;
-#endif
-            if (!is_meta(lo))
-            {
-              Index target_index = Const::IMAX;
-              if (i->second.second != nullptr)
-                target_index = i->second.second->index;
-              DFA::State::Edges::const_reverse_iterator j = i;
-              if (target_index == Const::IMAX && (++j == state->edges.rend() || is_meta(j->second.first)))
-                break;
-              peek = true;
-            }
-            else
-            {
-              do
-              {
-                if (lo == META_EOB || lo == META_EOL)
-                  peek = true;
-                else if (lo == META_EWE || lo == META_BWE || lo == META_NWE)
-                  prev = peek = true;
-                if (prev && peek)
-                  break;
-                check_dfa_closure(i->second.second, 1, peek, prev);
-              } while (++lo <= hi);
-            }
-          }
-          bool read = peek;
-          bool elif = false;
-#if REFLEX_WITH_COMPACT_DFA == -1
-          for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
-          {
-            Char lo = i->first;
-            Char hi = i->second.first;
-            Index target_index = Const::IMAX;
-            if (i->second.second != nullptr)
-              target_index = i->second.second->index;
-            if (read)
-            {
-              if (prev)
-                ::fprintf(file, "  c0 = c1, c1 = l.FSM_CHAR();\n");
-              else
-                ::fprintf(file, "  c1 = l.FSM_CHAR();\n");
-              read = false;
-            }
-            if (!is_meta(lo))
-            {
-              DFA::State::Edges::const_reverse_iterator j = i;
-              if (target_index == Const::IMAX && (++j == state->edges.rend() || is_meta(j->second.first)))
-                break;
-              if (lo == hi)
-              {
-                ::fprintf(file, "  if (c1 == ");
-                print_char(file, lo);
-                ::fprintf(file, ")");
-              }
-              else if (hi == 0xFF)
-              {
-                ::fprintf(file, "  if (");
-                print_char(file, lo);
-                ::fprintf(file, " <= c1)");
-              }
-              else
-              {
-                ::fprintf(file, "  if (");
-                print_char(file, lo);
-                ::fprintf(file, " <= c1 && c1 <= ");
-                print_char(file, hi);
-                ::fprintf(file, ")");
-              }
-              if (target_index == Const::IMAX)
-              {
-                if (peek)
-                  ::fprintf(file, " return l.FSM_HALT(c1);\n");
-                else
-                  ::fprintf(file, " return l.FSM_HALT();\n");
-              }
-              else
-              {
-                ::fprintf(file, " goto S%u;\n", target_index);
-              }
-            }
-            else
-            {
-              do
-              {
-                switch (lo)
-                {
-                  case META_EOB:
-                  case META_EOL:
-                    ::fprintf(file, "  ");
-                    if (elif)
-                      ::fprintf(file, "else ");
-                    ::fprintf(file, "if (l.FSM_META_%s(c1)) {\n", meta_label[lo - META_MIN]);
-                    gencode_dfa_closure(file, i->second.second, 2, peek);
-                    ::fprintf(file, "  }\n");
-                    elif = true;
-                    break;
-                  case META_EWE:
-                  case META_BWE:
-                  case META_NWE:
-                    ::fprintf(file, "  ");
-                    if (elif)
-                      ::fprintf(file, "else ");
-                    ::fprintf(file, "if (l.FSM_META_%s(c0, c1)) {\n", meta_label[lo - META_MIN]);
-                    gencode_dfa_closure(file, i->second.second, 2, peek);
-                    ::fprintf(file, "  }\n");
-                    elif = true;
-                    break;
-                  default:
-                    ::fprintf(file, "  ");
-                    if (elif)
-                      ::fprintf(file, "else ");
-                    ::fprintf(file, "if (l.FSM_META_%s()) {\n", meta_label[lo - META_MIN]);
-                    gencode_dfa_closure(file, i->second.second, 2, peek);
-                    ::fprintf(file, "  }\n");
-                    elif = true;
-                }
-              } while (++lo <= hi);
-            }
-          }
-#else
-          for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
-          {
-            Char hi = i->first;
-            Char lo = i->second.first;
-            if (is_meta(lo))
-            {
-              if (read)
-              {
-                if (prev)
-                  ::fprintf(file, "  c0 = c1, c1 = l.FSM_CHAR();\n");
-                else
-                  ::fprintf(file, "  c1 = l.FSM_CHAR();\n");
-                read = false;
-              }
-              do
-              {
-                switch (lo)
-                {
-                  case META_EOB:
-                  case META_EOL:
-                    ::fprintf(file, "  ");
-                    if (elif)
-                      ::fprintf(file, "else ");
-                    ::fprintf(file, "if (l.FSM_META_%s(c1)) {\n", meta_label[lo - META_MIN]);
-                    gencode_dfa_closure(file, i->second.second, 2, peek);
-                    ::fprintf(file, "  }\n");
-                    elif = true;
-                    break;
-                  case META_EWE:
-                  case META_BWE:
-                  case META_NWE:
-                    ::fprintf(file, "  ");
-                    if (elif)
-                      ::fprintf(file, "else ");
-                    ::fprintf(file, "if (l.FSM_META_%s(c0, c1)) {\n", meta_label[lo - META_MIN]);
-                    gencode_dfa_closure(file, i->second.second, 2, peek);
-                    ::fprintf(file, "  }\n");
-                    elif = true;
-                    break;
-                  default:
-                    ::fprintf(file, "  ");
-                    if (elif)
-                      ::fprintf(file, "else ");
-                    ::fprintf(file, "if (l.FSM_META_%s()) {\n", meta_label[lo - META_MIN]);
-                    gencode_dfa_closure(file, i->second.second, 2, peek);
-                    ::fprintf(file, "  }\n");
-                    elif = true;
-                }
-              } while (++lo <= hi);
-            }
-          }
-          for (DFA::State::Edges::const_iterator i = state->edges.begin(); i != state->edges.end(); ++i)
-          {
-            Char hi = i->first;
-            Char lo = i->second.first;
-            Index target_index = Const::IMAX;
-            if (i->second.second != nullptr)
-              target_index = i->second.second->index;
-            if (read)
-            {
-              if (prev)
-                ::fprintf(file, "  c0 = c1, c1 = l.FSM_CHAR();\n");
-              else
-                ::fprintf(file, "  c1 = l.FSM_CHAR();\n");
-              read = false;
-            }
-            if (!is_meta(lo))
-            {
-              DFA::State::Edges::const_iterator j = i;
-              if (target_index == Const::IMAX && (++j == state->edges.end() || is_meta(j->second.first)))
-                break;
-              if (lo == hi)
-              {
-                ::fprintf(file, "  if (c1 == ");
-                print_char(file, lo);
-                ::fprintf(file, ")");
-              }
-              else if (hi == 0xFF)
-              {
-                ::fprintf(file, "  if (");
-                print_char(file, lo);
-                ::fprintf(file, " <= c1)");
-              }
-              else
-              {
-                ::fprintf(file, "  if (");
-                print_char(file, lo);
-                ::fprintf(file, " <= c1 && c1 <= ");
-                print_char(file, hi);
-                ::fprintf(file, ")");
-              }
-              if (target_index == Const::IMAX)
-              {
-                if (peek)
-                  ::fprintf(file, " return l.FSM_HALT(c1);\n");
-                else
-                  ::fprintf(file, " return l.FSM_HALT();\n");
-              }
-              else
-              {
-                ::fprintf(file, " goto S%u;\n", target_index);
-              }
-            }
-          }
-#endif
-          if (peek)
-            ::fprintf(file, "  return l.FSM_HALT(c1);\n");
-          else
-            ::fprintf(file, "  return l.FSM_HALT();\n");
-        }
-        ::fprintf(file, "}\n\n");
-        if (opt_.p)
-          write_predictor(file);
-        write_namespace_close(file);
-        if (file != stdout)
-          ::fclose(file);
-      }
-    }
-  }
-}
-
-void Pattern::check_dfa_closure(const DFA::State *state, int nest, bool& peek, bool& prev) const
-{
-  if (nest > 4)
-    return;
-  for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
-  {
-#if REFLEX_WITH_COMPACT_DFA == -1
-    Char lo = i->first;
-    Char hi = i->second.first;
-#else
-    Char hi = i->first;
-    Char lo = i->second.first;
-#endif
-    if (is_meta(lo))
-    {
-      do
-      {
-        if (lo == META_EOB || lo == META_EOL)
-          peek = true;
-        else if (lo == META_EWE || lo == META_BWE || lo == META_NWE)
-          prev = peek = true;
-        if (prev && peek)
-          break;
-        check_dfa_closure(i->second.second, nest + 1, peek, prev);
-      } while (++lo <= hi);
-    }
-  }
-}
-
-void Pattern::gencode_dfa_closure(FILE *file, const DFA::State *state, int nest, bool peek) const
-{
-  bool elif = false;
-  if (state->redo)
-  {
-    if (peek)
-      ::fprintf(file, "%*sm.FSM_REDO(c1);\n", 2*nest, "");
-    else
-      ::fprintf(file, "%*sm.FSM_REDO();\n", 2*nest, "");
-  }
-  else if (state->accept > 0)
-  {
-    if (peek)
-      ::fprintf(file, "%*sm.FSM_TAKE(%u, c1);\n", 2*nest, "", state->accept);
-    else
-      ::fprintf(file, "%*sm.FSM_TAKE(%u);\n", 2*nest, "", state->accept);
-  }
-  for (Lookaheads::const_iterator i = state->tails.begin(); i != state->tails.end(); ++i)
-    ::fprintf(file, "%*sm.FSM_TAIL(%u);\n", 2*nest, "", *i);
-  if (nest > 5)
-    return;
-  for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
-  {
-#if REFLEX_WITH_COMPACT_DFA == -1
-    Char lo = i->first;
-    Char hi = i->second.first;
-#else
-    Char hi = i->first;
-    Char lo = i->second.first;
-#endif
-    if (is_meta(lo))
-    {
-      do
-      {
-        switch (lo)
-        {
-          case META_EOB:
-          case META_EOL:
-            ::fprintf(file, "%*s", 2*nest, "");
-            if (elif)
-              ::fprintf(file, "else ");
-            ::fprintf(file, "if (l.FSM_META_%s(c1)) {\n", meta_label[lo - META_MIN]);
-            gencode_dfa_closure(file, i->second.second, nest + 1, peek);
-            ::fprintf(file, "%*s}\n", 2*nest, "");
-            elif = true;
-            break;
-          case META_EWE:
-          case META_BWE:
-          case META_NWE:
-            ::fprintf(file, "%*s", 2*nest, "");
-            if (elif)
-              ::fprintf(file, "else ");
-            ::fprintf(file, "if (l.FSM_META_%s(c0, c1)) {\n", meta_label[lo - META_MIN]);
-            gencode_dfa_closure(file, i->second.second, nest + 1, peek);
-            ::fprintf(file, "%*s}\n", 2*nest, "");
-            elif = true;
-            break;
-          default:
-            ::fprintf(file, "%*s", 2*nest, "");
-            if (elif)
-              ::fprintf(file, "else ");
-            ::fprintf(file, "if (l.FSM_META_%s()) {\n", meta_label[lo - META_MIN]);
-            gencode_dfa_closure(file, i->second.second, nest + 1, peek);
-            ::fprintf(file, "%*s}\n", 2*nest, "");
-            elif = true;
-        }
-      } while (++lo <= hi);
-    }
-  }
-}
-
-void Pattern::export_dfa(const DFA::State *start) const
-{
-  for (std::vector<std::string>::const_iterator i = opt_.f.begin(); i != opt_.f.end(); ++i)
-  {
-    const std::string& filename = *i;
-    size_t len = filename.length();
-    if (len > 3 && filename.compare(len - 3, 3, ".gv") == 0)
-    {
-      FILE *file = nullptr;
-      int err = 0;
-      if (filename.compare(0, 7, "stdout.") == 0)
-        file = stdout;
-      else if (filename.at(0) == '+')
-        err = reflex::fopen_s(&file, filename.c_str() + 1, "a");
-      else
-        err = reflex::fopen_s(&file, filename.c_str(), "w");
-      if (!err && file)
-      {
-        ::fprintf(file, "digraph %s {\n\t\trankdir=LR;\n\t\tconcentrate=true;\n\t\tnode [fontname=\"ArialNarrow\"];\n\t\tedge [fontname=\"Courier\"];\n\n\t\tinit [root=true,peripheries=0,label=\"%s\",fontname=\"Courier\"];\n\t\tinit -> N%p;\n", opt_.n.empty() ? "FSM" : opt_.n.c_str(), opt_.n.c_str(), (void*)start);
-        for (const DFA::State *state = start; state; state = state->next)
-        {
-          if (state == start)
-            ::fprintf(file, "\n/*START*/\t");
-          if (state->redo)
-            ::fprintf(file, "\n/*REDO*/\t");
-          else if (state->accept)
-            ::fprintf(file, "\n/*ACCEPT %u*/\t", state->accept);
-          for (Lookaheads::const_iterator i = state->heads.begin(); i != state->heads.end(); ++i)
-            ::fprintf(file, "\n/*HEAD %u*/\t", *i);
-          for (Lookaheads::const_iterator i = state->tails.begin(); i != state->tails.end(); ++i)
-            ::fprintf(file, "\n/*TAIL %u*/\t", *i);
-          if (state != start && !state->accept && state->heads.empty() && state->tails.empty())
-            ::fprintf(file, "\n/*STATE*/\t");
-          ::fprintf(file, "N%p [label=\"", (void*)state);
-#ifdef REFLEX_DEBUG
-          size_t k = 1;
-          size_t n = std::sqrt(state->size()) + 0.5;
-          const char *sep = "";
-          for (Positions::const_iterator i = state->begin(); i != state->end(); ++i)
-          {
-            ::fprintf(file, "%s", sep);
-            if (i->accept())
-            {
-              ::fprintf(file, "(%u)", i->accepts());
-            }
-            else
-            {
-              if (i->iter())
-                ::fprintf(file, "%u.", i->iter());
-              ::fprintf(file, "%u", i->loc());
-            }
-            if (i->lazy())
-              ::fprintf(file, "?%u", i->lazy());
-            if (i->anchor())
-              ::fprintf(file, "^");
-            if (i->greedy())
-              ::fprintf(file, "!");
-            if (i->ticked())
-              ::fprintf(file, "'");
-            if (i->negate())
-              ::fprintf(file, "-");
-            if (k++ % n)
-              sep = " ";
-            else
-              sep = "\\n";
-          }
-          if ((state->accept && !state->redo) || !state->heads.empty() || !state->tails.empty())
-            ::fprintf(file, "\\n");
-#endif
-          if (state->accept > 0 && !state->redo)
-            ::fprintf(file, "[%u]", state->accept);
-          for (Lookaheads::const_iterator i = state->tails.begin(); i != state->tails.end(); ++i)
-            ::fprintf(file, "%u>", *i);
-          for (Lookaheads::const_iterator i = state->heads.begin(); i != state->heads.end(); ++i)
-            ::fprintf(file, "<%u", *i);
-          if (state->redo)
-            ::fprintf(file, "\",style=dashed,peripheries=1];\n");
-          else if (state->accept > 0)
-            ::fprintf(file, "\",peripheries=2];\n");
-          else if (!state->heads.empty())
-            ::fprintf(file, "\",style=dashed,peripheries=2];\n");
-          else
-            ::fprintf(file, "\"];\n");
-          for (DFA::State::Edges::const_iterator i = state->edges.begin(); i != state->edges.end(); ++i)
-          {
-#if REFLEX_WITH_COMPACT_DFA == -1
-            Char lo = i->first;
-            Char hi = i->second.first;
-#else
-            Char hi = i->first;
-            Char lo = i->second.first;
-#endif
-            if (!is_meta(lo))
-            {
-              ::fprintf(file, "\t\tN%p -> N%p [label=\"", (void*)state, (void*)i->second.second);
-              if (lo >= '\a' && lo <= '\r')
-                ::fprintf(file, "\\\\%c", "abtnvfr"[lo - '\a']);
-              else if (lo == '"')
-                ::fprintf(file, "\\\"");
-              else if (lo == '\\')
-                ::fprintf(file, "\\\\");
-              else if (std::isgraph(lo))
-                ::fprintf(file, "%c", lo);
-              else if (lo < 8)
-                ::fprintf(file, "\\\\%u", lo);
-              else
-                ::fprintf(file, "\\\\x%02x", lo);
-              if (lo != hi)
-              {
-                ::fprintf(file, "-");
-                if (hi >= '\a' && hi <= '\r')
-                  ::fprintf(file, "\\\\%c", "abtnvfr"[hi - '\a']);
-                else if (hi == '"')
-                  ::fprintf(file, "\\\"");
-                else if (hi == '\\')
-                  ::fprintf(file, "\\\\");
-                else if (std::isgraph(hi))
-                  ::fprintf(file, "%c", hi);
-                else if (hi < 8)
-                  ::fprintf(file, "\\\\%u", hi);
-                else
-                  ::fprintf(file, "\\\\x%02x", hi);
-              }
-              ::fprintf(file, "\"];\n");
-            }
-            else
-            {
-              do
-              {
-                ::fprintf(file, "\t\tN%p -> N%p [label=\"%s\",style=\"dashed\"];\n", (void*)state, (void*)i->second.second, meta_label[lo - META_MIN]);
-              } while (++lo <= hi);
-            }
-          }
-          if (state->redo)
-            ::fprintf(file, "\t\tN%p -> R%p;\n\t\tR%p [peripheries=0,label=\"redo\"];\n", (void*)state, (void*)state, (void*)state);
-        }
-        ::fprintf(file, "}\n");
-        if (file != stdout)
-          ::fclose(file);
-      }
-    }
-  }
-}
-
-void Pattern::export_code() const
-{
-  if (nop_ == 0)
-    return;
-  if (opt_.o)
-    return;
-  for (std::vector<std::string>::const_iterator i = opt_.f.begin(); i != opt_.f.end(); ++i)
-  {
-    const std::string& filename = *i;
-    size_t len = filename.length();
-    if ((len > 2 && filename.compare(len - 2, 2, ".h"  ) == 0)
-     || (len > 4 && filename.compare(len - 4, 4, ".hpp") == 0)
-     || (len > 4 && filename.compare(len - 4, 4, ".cpp") == 0)
-     || (len > 3 && filename.compare(len - 3, 3, ".cc" ) == 0))
-    {
-      FILE *file = nullptr;
-      int err = 0;
-      if (filename.compare(0, 7, "stdout.") == 0)
-        file = stdout;
-      else if (filename.at(0) == '+')
-        err = reflex::fopen_s(&file, filename.c_str() + 1, "a");
-      else
-        err = reflex::fopen_s(&file, filename.c_str(), "w");
-      if (!err && file)
-      {
-        ::fprintf(file, "#ifndef REFLEX_CODE_DECL\n#include <reflex/pattern.h>\n#define REFLEX_CODE_DECL const reflex::Pattern::Opcode\n#endif\n\n");
-        write_namespace_open(file);
-        ::fprintf(file, "extern REFLEX_CODE_DECL reflex_code_%s[%u] =\n{\n", opt_.n.empty() ? "FSM" : opt_.n.c_str(), nop_);
-        for (Index i = 0; i < nop_; ++i)
-        {
-          Opcode opcode = opc_[i];
-          Char lo = lo_of(opcode);
-          Char hi = hi_of(opcode);
-          ::fprintf(file, "  0x%08X, // %u: ", opcode, i);
-          if (is_opcode_redo(opcode))
-          {
-            ::fprintf(file, "REDO\n");
-          }
-          else if (is_opcode_take(opcode))
-          {
-            ::fprintf(file, "TAKE %u\n", long_index_of(opcode));
-          }
-          else if (is_opcode_tail(opcode))
-          {
-            ::fprintf(file, "TAIL %u\n", long_index_of(opcode));
-          }
-          else if (is_opcode_head(opcode))
-          {
-            ::fprintf(file, "HEAD %u\n", long_index_of(opcode));
-          }
-          else if (is_opcode_halt(opcode))
-          {
-            ::fprintf(file, "HALT\n");
-          }
-          else
-          {
-            Index index = index_of(opcode);
-            if (index == Const::HALT)
-            {
-              ::fprintf(file, "HALT ON ");
-            }
-            else
-            {
-              if (index == Const::LONG)
-              {
-                opcode = opc_[++i];
-                index = long_index_of(opcode);
-                ::fprintf(file, "GOTO\n  0x%08X, // %u:  FAR %u ON ", opcode, i, index);
-              }
-              else
-              {
-                ::fprintf(file, "GOTO %u ON ", index);
-              }
-            }
-            if (!is_meta(lo))
-            {
-              print_char(file, lo, true);
-              if (lo != hi)
-              {
-                ::fprintf(file, "-");
-                print_char(file, hi, true);
-              }
-            }
-            else
-            {
-              ::fprintf(file, "%s", meta_label[lo - META_MIN]);
-            }
-            ::fprintf(file, "\n");
-          }
-        }
-        ::fprintf(file, "};\n\n");
-        if (opt_.p)
-          write_predictor(file);
-        write_namespace_close(file);
-        if (file != stdout)
-          ::fclose(file);
-      }
-    }
-  }
-}
-
-void Pattern::predict_match_dfa(DFA::State *start)
+void FSM_Generator::predict_match_dfa(DFA::State *start)
 {
   REFLEX_DBGLOG("BEGIN Pattern::predict_match_dfa()");
   DFA::State *state = start;
@@ -3086,7 +1929,7 @@ void Pattern::predict_match_dfa(DFA::State *start)
           REFLEX_DBGLOGN("bit[%3d] = %02x", i, bit_[i]);
       }
     }
-    for (Hash i = 0; i < Const::HASH; ++i)
+    for (Pattern::Hash i = 0; i < Pattern::Const::HASH; ++i)
     {
       if (pmh_[i] != 0xFF)
       {
@@ -3096,7 +1939,7 @@ void Pattern::predict_match_dfa(DFA::State *start)
           REFLEX_DBGLOGN("pmh[%3d] = %02x", i, pmh_[i]);
       }
     }
-    for (Hash i = 0; i < Const::HASH; ++i)
+    for (Pattern::Hash i = 0; i < Pattern::Const::HASH; ++i)
     {
       if (pma_[i] != 0xFF)
       {
@@ -3110,21 +1953,21 @@ void Pattern::predict_match_dfa(DFA::State *start)
   }
   REFLEX_DBGLOGN("min = %zu", min_);
   REFLEX_DBGLOG("END Pattern::predict_match_dfa()");
-}
+} // predict_match_dfa
 
-void Pattern::gen_predict_match(DFA::State *state)
+void FSM_Generator::gen_predict_match(DFA::State *state)
 {
   min_ = 8;
-  std::map<DFA::State*,ORanges<Hash> > states[8];
+  std::map<DFA::State*,ORanges<Pattern::Hash>> states[8];
   gen_predict_match_transitions(state, states[0]);
   for (int level = 1; level < 8; ++level)
-    for (std::map<DFA::State*,ORanges<Hash> >::iterator from = states[level - 1].begin(); from != states[level - 1].end(); ++from)
+    for (std::map<DFA::State*,ORanges<Pattern::Hash>>::iterator from = states[level - 1].begin(); from != states[level - 1].end(); ++from)
       gen_predict_match_transitions(level, from->first, from->second, states[level]);
   for (Char i = 0; i < 256; ++i)
     bit_[i] &= (1 << min_) - 1;
 }
 
-void Pattern::gen_predict_match_transitions(DFA::State *state, std::map<DFA::State*,ORanges<Hash> >& states)
+void FSM_Generator::gen_predict_match_transitions(DFA::State *state, std::map<DFA::State*,ORanges<Pattern::Hash>>& states)
 {
   for (DFA::State::Edges::const_iterator edge = state->edges.begin(); edge != state->edges.end(); ++edge)
   {
@@ -3168,9 +2011,9 @@ void Pattern::gen_predict_match_transitions(DFA::State *state, std::map<DFA::Sta
       ++lo;
     }
   }
-}
+} // gen_predict_match_transitions(DFA::State *state, std::map<DFA::State*,ORanges<Pattern::Hash>>& states)
 
-void Pattern::gen_predict_match_transitions(size_t level, DFA::State *state, ORanges<Hash>& labels, std::map<DFA::State*,ORanges<Hash> >& states)
+void FSM_Generator::gen_predict_match_transitions(size_t level, DFA::State *state, ORanges<Pattern::Hash>& labels, std::map<DFA::State*,ORanges<Pattern::Hash>>& states)
 {
   for (DFA::State::Edges::const_iterator edge = state->edges.begin(); edge != state->edges.end(); ++edge)
   {
@@ -3204,14 +2047,14 @@ void Pattern::gen_predict_match_transitions(size_t level, DFA::State *state, ORa
       if (level <= min_)
         while (lo <= hi)
           bit_[lo++] &= ~(1 << level);
-      for (ORanges<Hash>::const_iterator label = labels.begin(); label != labels.end(); ++label)
+      for (ORanges<Pattern::Hash>::const_iterator label = labels.begin(); label != labels.end(); ++label)
       {
-        Hash label_hi = label->second - 1;
-        for (Hash label_lo = label->first; label_lo <= label_hi; ++label_lo)
+        Pattern::Hash label_hi = label->second - 1;
+        for (Pattern::Hash label_lo = label->first; label_lo <= label_hi; ++label_lo)
         {
           for (lo = edge->first; lo <= hi; ++lo)
           {
-            Hash h = hash(label_lo, static_cast<uint_least8_t>(lo));
+            Pattern::Hash h = Pattern::hash(label_lo, lo);
             pmh_[h] &= ~(1 << level);
             if (level < 4)
             {
@@ -3226,36 +2069,987 @@ void Pattern::gen_predict_match_transitions(size_t level, DFA::State *state, ORa
       }
     }
   }
-}
+} // gen_predict_match_transitions(size_t level, DFA::State *state, ORanges<Pattern::Hash>& labels, std::map<DFA::State*,ORanges<Pattern::Hash>>& states)
 
-void Pattern::write_predictor(FILE *file) const
+void FSM_Generator::export_dfa(const DFA::State *start) const
 {
-  ::fprintf(file, "extern const reflex::Pattern::Pred reflex_pred_%s[%zu] = {", opt_.n.empty() ? "FSM" : opt_.n.c_str(), 2 + len_ + (min_ > 1 && len_ == 0) * 256 + (min_ > 0) * Const::HASH);
-  ::fprintf(file, "\n  %3hhu,%3hhu,", static_cast<uint_least8_t>(len_), (static_cast<uint_least8_t>(min_ | (one_ << 4))));
+  for (std::vector<std::string>::const_iterator i = opt_.f.begin(); i != opt_.f.end(); ++i)
+  {
+    const std::string& filename = *i;
+    size_t len = filename.length();
+    if (len > 3 && filename.compare(len - 3, 3, ".gv") == 0)
+    {
+      FILE *file = nullptr;
+      int err = 0;
+      if (filename.compare(0, 7, "stdout.") == 0)
+        file = stdout;
+      else if (filename.at(0) == '+')
+        err = reflex::fopen_s(&file, filename.c_str() + 1, "a");
+      else
+        err = reflex::fopen_s(&file, filename.c_str(), "w");
+      if (!err && file)
+      {
+        fprintf(file, "digraph %s {\n\t\trankdir=LR;\n\t\tconcentrate=true;\n\t\tnode [fontname=\"ArialNarrow\"];\n\t\tedge [fontname=\"Courier\"];\n\n\t\tinit [root=true,peripheries=0,label=\"%s\",fontname=\"Courier\"];\n\t\tinit -> N%p;\n", opt_.n.empty() ? "FSM" : opt_.n.c_str(), opt_.n.c_str(), (void*)start);
+        for (const DFA::State *state = start; state; state = state->next)
+        {
+          if (state == start)
+            fprintf(file, "\n/*START*/\t");
+          if (state->redo)
+            fprintf(file, "\n/*REDO*/\t");
+          else if (state->accept)
+            fprintf(file, "\n/*ACCEPT %u*/\t", state->accept);
+          for (Lookaheads::const_iterator i = state->heads.begin(); i != state->heads.end(); ++i)
+            fprintf(file, "\n/*HEAD %u*/\t", *i);
+          for (Lookaheads::const_iterator i = state->tails.begin(); i != state->tails.end(); ++i)
+            fprintf(file, "\n/*TAIL %u*/\t", *i);
+          if (state != start && !state->accept && state->heads.empty() && state->tails.empty())
+            fprintf(file, "\n/*STATE*/\t");
+          fprintf(file, "N%p [label=\"", (void*)state);
+#ifdef REFLEX_DEBUG
+          size_t k = 1;
+          size_t n = std::sqrt(state->size()) + 0.5;
+          const char *sep = "";
+          for (Positions::const_iterator i = state->begin(); i != state->end(); ++i)
+          {
+            fprintf(file, "%s", sep);
+            if (i->accept())
+            {
+              fprintf(file, "(%u)", i->accepts());
+            }
+            else
+            {
+              if (i->iter())
+                fprintf(file, "%u.", i->iter());
+              fprintf(file, "%u", i->loc());
+            }
+            if (i->lazy())
+              fprintf(file, "?%u", i->lazy());
+            if (i->anchor())
+              fprintf(file, "^");
+            if (i->greedy())
+              fprintf(file, "!");
+            if (i->ticked())
+              fprintf(file, "'");
+            if (i->negate())
+              fprintf(file, "-");
+            if (k++ % n)
+              sep = " ";
+            else
+              sep = "\\n";
+          }
+          if ((state->accept && !state->redo) || !state->heads.empty() || !state->tails.empty())
+            fprintf(file, "\\n");
+#endif
+          if (state->accept > 0 && !state->redo)
+            fprintf(file, "[%u]", state->accept);
+          for (Lookaheads::const_iterator i = state->tails.begin(); i != state->tails.end(); ++i)
+            fprintf(file, "%u>", *i);
+          for (Lookaheads::const_iterator i = state->heads.begin(); i != state->heads.end(); ++i)
+            fprintf(file, "<%u", *i);
+          if (state->redo)
+            fprintf(file, "\",style=dashed,peripheries=1];\n");
+          else if (state->accept > 0)
+            fprintf(file, "\",peripheries=2];\n");
+          else if (!state->heads.empty())
+            fprintf(file, "\",style=dashed,peripheries=2];\n");
+          else
+            fprintf(file, "\"];\n");
+          for (DFA::State::Edges::const_iterator i = state->edges.begin(); i != state->edges.end(); ++i)
+          {
+#if REFLEX_WITH_COMPACT_DFA == -1
+            Char lo = i->first;
+            Char hi = i->second.first;
+#else
+            Char hi = i->first;
+            Char lo = i->second.first;
+#endif
+            if (!is_meta(lo))
+            {
+              fprintf(file, "\t\tN%p -> N%p [label=\"", (void*)state, (void*)i->second.second);
+              if (lo >= '\a' && lo <= '\r')
+                fprintf(file, "\\\\%c", "abtnvfr"[lo - '\a']);
+              else if (lo == '"')
+                fprintf(file, "\\\"");
+              else if (lo == '\\')
+                fprintf(file, "\\\\");
+              else if (std::isgraph(lo))
+                fprintf(file, "%c", lo);
+              else if (lo < 8)
+                fprintf(file, "\\\\%u", lo);
+              else
+                fprintf(file, "\\\\x%02x", lo);
+              if (lo != hi)
+              {
+                fprintf(file, "-");
+                if (hi >= '\a' && hi <= '\r')
+                  fprintf(file, "\\\\%c", "abtnvfr"[hi - '\a']);
+                else if (hi == '"')
+                  fprintf(file, "\\\"");
+                else if (hi == '\\')
+                  fprintf(file, "\\\\");
+                else if (std::isgraph(hi))
+                  fprintf(file, "%c", hi);
+                else if (hi < 8)
+                  fprintf(file, "\\\\%u", hi);
+                else
+                  fprintf(file, "\\\\x%02x", hi);
+              }
+              fprintf(file, "\"];\n");
+            }
+            else
+            {
+              do
+              {
+                fprintf(file, "\t\tN%p -> N%p [label=\"%s\",style=\"dashed\"];\n", (void*)state, (void*)i->second.second, meta_label[lo - Pattern::Meta::MIN]);
+              } while (++lo <= hi);
+            }
+          }
+          if (state->redo)
+            fprintf(file, "\t\tN%p -> R%p;\n\t\tR%p [peripheries=0,label=\"redo\"];\n", (void*)state, (void*)state, (void*)state);
+        }
+        fprintf(file, "}\n");
+        if (file != stdout)
+          fclose(file);
+      }
+    }
+  }
+} // export_dfa
+
+void FSM_Generator::compact_dfa(DFA::State *start)
+{
+#if REFLEX_WITH_COMPACT_DFA == -1
+  // edge compaction in reverse order
+  for (DFA::State *state = start; state; state = state->next)
+  {
+    for (DFA::State::Edges::iterator i = state->edges.begin(); i != state->edges.end(); ++i)
+    {
+      Char hi = i->second.first;
+      if (hi >= 0xFF)
+        break;
+      DFA::State::Edges::iterator j = i;
+      ++j;
+      while (j != state->edges.end() && j->first <= hi + 1)
+      {
+        hi = j->second.first;
+        if (j->second.second == i->second.second)
+        {
+          i->second.first = hi;
+          state->edges.erase(j++);
+        }
+        else
+        {
+          ++j;
+        }
+      }
+    }
+  }
+#elif REFLEX_WITH_COMPACT_DFA == 1
+  // edge compaction
+  for (DFA::State *state = start; state; state = state->next)
+  {
+    for (DFA::State::Edges::reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
+    {
+      Char lo = i->second.first;
+      if (lo <= 0x00)
+        break;
+      DFA::State::Edges::reverse_iterator j = i;
+      ++j;
+      while (j != state->edges.rend() && j->first >= lo - 1)
+      {
+        lo = j->second.first;
+        if (j->second.second == i->second.second)
+        {
+          i->second.first = lo;
+          state->edges.erase(--j.base());
+        }
+        else
+        {
+          ++j;
+        }
+      }
+    }
+  }
+#else
+  (void)start;
+#endif
+} // compact_dfa
+
+void FSM_Generator::encode_dfa(DFA::State *start)
+{
+  nop_ = 0;
+  for (DFA::State *state = start; state; state = state->next)
+  {
+    if (state->accept > Const::AMAX)
+      state->accept = Const::AMAX;
+    state->first = state->index = nop_;
+#if REFLEX_WITH_COMPACT_DFA == -1
+    Char hi = 0x00;
+    for (DFA::State::Edges::const_iterator i = state->edges.begin(); i != state->edges.end(); ++i)
+    {
+      Char lo = i->first;
+      if (lo == hi)
+        hi = i->second.first + 1;
+      ++nop_;
+      if (is_meta(lo))
+        nop_ += i->second.first - lo;
+    }
+    // add final dead state (HALT opcode) only when needed, i.e. skip dead state if all chars 0-255 are already covered
+    if (hi <= 0xFF)
+    {
+      state->edges[hi] = std::pair<Char,DFA::State*>(0xFF, nullptr);
+      ++nop_;
+    }
+#else
+    Char lo = 0xFF;
+    bool covered = false;
+    for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
+    {
+      Char hi = i->first;
+      if (lo == hi)
+      {
+        if (i->second.first == 0x00)
+          covered = true;
+        else
+          lo = i->second.first - 1;
+      }
+      ++nop_;
+      if (is_meta(lo))
+        nop_ += hi - i->second.first;
+    }
+    // add final dead state (HALT opcode) only when needed, i.e. skip dead state if all chars 0-255 are already covered
+    if (!covered)
+    {
+      state->edges[lo] = std::pair<Char,DFA::State*>(0x00, nullptr);
+      ++nop_;
+    }
+#endif
+    nop_ += static_cast<Pattern::Index>(state->heads.size() + state->tails.size() + (state->accept > 0 || state->redo));
+    if (!valid_goto_index(nop_))
+      throw regex_error(regex_error::exceeds_limits, rex_, rex_.size());
+  }
+  if (nop_ > Pattern::Const::LONG)
+  {
+    // over 64K opcodes: use 64-bit GOTO LONG opcodes
+    nop_ = 0;
+    for (DFA::State *state = start; state; state = state->next)
+    {
+      state->index = nop_;
+#if REFLEX_WITH_COMPACT_DFA == -1
+      Char hi = 0x00;
+      for (DFA::State::Edges::const_iterator i = state->edges.begin(); i != state->edges.end(); ++i)
+      {
+        Char lo = i->first;
+        if (lo == hi)
+          hi = i->second.first + 1;
+        // use 64-bit jump opcode if forward jump determined by previous loop is beyond 32K or backward jump is beyond 64K
+        if (i->second.second != nullptr &&
+            ((i->second.second->first > state->first && i->second.second->first >= Pattern::Const::LONG / 2) ||
+             i->second.second->index >= Pattern::Const::LONG))
+          nop_ += 2;
+        else
+          ++nop_;
+        if (is_meta(lo))
+        {
+          // use 64-bit jump opcode if forward jump determined by previous loop is beyond 32K or backward jump is beyond 64K
+          if (i->second.second != nullptr &&
+            ((i->second.second->first > state->first && i->second.second->first >= Pattern::Const::LONG / 2) ||
+             i->second.second->index >= Pattern::Const::LONG))
+            nop_ += 2 * (i->second.first - lo);
+          else
+            nop_ += i->second.first - lo;
+        }
+      }
+#else
+      Char lo = 0xFF;
+      for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
+      {
+        Char hi = i->first;
+        if (lo == hi)
+          lo = i->second.first - 1;
+        // use 64-bit jump opcode if forward jump determined by previous loop is beyond 32K or backward jump is beyond 64K
+        if (i->second.second != nullptr &&
+            ((i->second.second->first > state->first && i->second.second->first >= Pattern::Const::LONG / 2) ||
+             i->second.second->index >= Pattern::Const::LONG))
+          nop_ += 2;
+        else
+          ++nop_;
+        if (is_meta(lo))
+        {
+          // use 64-bit jump opcode if forward jump determined by previous loop is beyond 32K or backward jump is beyond 64K
+          if (i->second.second != nullptr &&
+            ((i->second.second->first > state->first && i->second.second->first >= Pattern::Const::LONG / 2) ||
+             i->second.second->index >= Pattern::Const::LONG))
+            nop_ += 2 * (hi - i->second.first);
+          else
+            nop_ += hi - i->second.first;
+        }
+      }
+#endif
+      nop_ += static_cast<Pattern::Index>(state->heads.size() + state->tails.size() + (state->accept > 0 || state->redo));
+      if (!valid_goto_index(nop_))
+        throw regex_error(regex_error::exceeds_limits, rex_, rex_.size());
+    }
+  }
+  Pattern::Opcode *opcode = new Pattern::Opcode[nop_];
+  opc_ = opcode;
+  Pattern::Index pc = 0;
+  for (const DFA::State *state = start; state; state = state->next)
+  {
+    if (state->redo)
+    {
+      opcode[pc++] = opcode_redo();
+    }
+    else if (state->accept > 0)
+    {
+      opcode[pc++] = opcode_take(state->accept);
+    }
+    for (Lookaheads::const_iterator i = state->tails.begin(); i != state->tails.end(); ++i)
+    {
+      if (!valid_lookahead_index(static_cast<Pattern::Index>(*i)))
+        throw regex_error(regex_error::exceeds_limits, rex_, rex_.size());
+      opcode[pc++] = opcode_tail(static_cast<Pattern::Index>(*i));
+    }
+    for (Lookaheads::const_iterator i = state->heads.begin(); i != state->heads.end(); ++i)
+    {
+      if (!valid_lookahead_index(static_cast<Pattern::Index>(*i)))
+        throw regex_error(regex_error::exceeds_limits, rex_, rex_.size());
+      opcode[pc++] = opcode_head(static_cast<Pattern::Index>(*i));
+    }
+#if REFLEX_WITH_COMPACT_DFA == -1
+    for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
+    {
+      Char lo = i->first;
+      Char hi = i->second.first;
+      Pattern::Index target_first = i->second.second != nullptr ? i->second.second->first : Pattern::Const::IMAX;
+      Pattern::Index target_index = i->second.second != nullptr ? i->second.second->index : Pattern::Const::IMAX;
+      if (!is_meta(lo))
+      {
+        if (target_index == Pattern::Const::IMAX)
+        {
+          opcode[pc++] = opcode_goto(lo, hi, Pattern::Const::HALT);
+        }
+        else if (nop_ > Pattern::Const::LONG && ((target_first > state->first && target_first >= Pattern::Const::LONG / 2) || target_index >= Pattern::Const::LONG))
+        {
+          opcode[pc++] = opcode_goto(lo, hi, Pattern::Const::LONG);
+          opcode[pc++] = opcode_long(target_index);
+        }
+        else
+        {
+          opcode[pc++] = opcode_goto(lo, hi, target_index);
+        }
+      }
+      else
+      {
+        do
+        {
+          if (target_index == Pattern::Const::IMAX)
+          {
+            opcode[pc++] = opcode_goto(lo, lo, Pattern::Const::HALT);
+          }
+          else if (nop_ > Pattern::Const::LONG && ((target_first > state->first && target_first >= Pattern::Const::LONG / 2) || target_index >= Pattern::Const::LONG))
+          {
+            opcode[pc++] = opcode_goto(lo, lo, Pattern::Const::LONG);
+            opcode[pc++] = opcode_long(target_index);
+          }
+          else
+          {
+            opcode[pc++] = opcode_goto(lo, lo, target_index);
+          }
+        } while (++lo <= hi);
+      }
+    }
+#else
+    for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
+    {
+      Char hi = i->first;
+      Char lo = i->second.first;
+      if (is_meta(lo))
+      {
+        Pattern::Index target_first = i->second.second != nullptr ? i->second.second->first : Pattern::Const::IMAX;
+        Pattern::Index target_index = i->second.second != nullptr ? i->second.second->index : Pattern::Const::IMAX;
+        do
+        {
+          if (target_index == Pattern::Const::IMAX)
+          {
+            opcode[pc++] = opcode_goto(lo, lo, Pattern::Const::HALT);
+          }
+          else if (nop_ > Pattern::Const::LONG && ((target_first > state->first && target_first >= Pattern::Const::LONG / 2) || target_index >= Pattern::Const::LONG))
+          {
+            opcode[pc++] = opcode_goto(lo, lo, Pattern::Const::LONG);
+            opcode[pc++] = opcode_long(target_index);
+          }
+          else
+          {
+            opcode[pc++] = opcode_goto(lo, lo, target_index);
+          }
+        } while (++lo <= hi);
+      }
+    }
+    for (DFA::State::Edges::const_iterator i = state->edges.begin(); i != state->edges.end(); ++i)
+    {
+      Char lo = i->second.first;
+      if (!is_meta(lo))
+      {
+        Char hi = i->first;
+        if (i->second.second != nullptr)
+        {
+          Pattern::Index target_first = i->second.second->first;
+          Pattern::Index target_index = i->second.second->index;
+          if (nop_ > Pattern::Const::LONG && ((target_first > state->first && target_first >= Pattern::Const::LONG / 2) || target_index >= Pattern::Const::LONG))
+          {
+            opcode[pc++] = opcode_goto(lo, hi, Pattern::Const::LONG);
+            opcode[pc++] = opcode_long(target_index);
+          }
+          else
+          {
+            opcode[pc++] = opcode_goto(lo, hi, target_index);
+          }
+        }
+        else
+        {
+          opcode[pc++] = opcode_goto(lo, hi, Pattern::Const::HALT);
+        }
+      }
+    }
+#endif
+  }
+} // encode_dfa
+
+void FSM_Generator::gencode_dfa(const DFA::State *start) const
+{
+  if (!opt_.o)
+    return;
+  for (std::vector<std::string>::const_iterator i = opt_.f.begin(); i != opt_.f.end(); ++i)
+  {
+    const std::string& filename = *i;
+    size_t len = filename.length();
+    if ((len > 2 && filename.compare(len - 2, 2, ".h"  ) == 0)
+     || (len > 4 && filename.compare(len - 4, 4, ".hpp") == 0)
+     || (len > 4 && filename.compare(len - 4, 4, ".cpp") == 0)
+     || (len > 3 && filename.compare(len - 3, 3, ".cc" ) == 0))
+    {
+      FILE *file = nullptr;
+      int err = 0;
+      if (filename.compare(0, 7, "stdout.") == 0)
+        file = stdout;
+      else if (filename.at(0) == '+')
+        err = reflex::fopen_s(&file, filename.c_str() + 1, "a");
+      else
+        err = reflex::fopen_s(&file, filename.c_str(), "w");
+      if (!err && file)
+      {
+        fprintf(file,
+            "#include <reflex/lexer.h>\n\n"
+            "#if defined(OS_WIN)\n"
+            "#pragma warning(disable:4101 4102)\n"
+            "#elif defined(__GNUC__)\n"
+            "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n"
+            "#pragma GCC diagnostic ignored \"-Wunused-label\"\n"
+            "#elif defined(__clang__)\n"
+            "#pragma clang diagnostic ignored \"-Wunused-variable\"\n"
+            "#pragma clang diagnostic ignored \"-Wunused-label\"\n"
+            "#endif\n\n");
+        write_namespace_open(file);
+        fprintf(file,
+            "void reflex_code_%s(reflex::Lexer& l)\n"
+            "{\n"
+            "  int c0 = 0, c1 = 0;\n"
+            "  l.FSM_INIT(c1);\n", opt_.n.empty() ? "FSM" : opt_.n.c_str());
+        for (const DFA::State *state = start; state; state = state->next)
+        {
+          fprintf(file, "\nS%u:\n", state->index);
+          if (state == start)
+            fprintf(file, "  l.FSM_FIND();\n");
+          if (state->redo)
+            fprintf(file, "  l.FSM_REDO();\n");
+          else if (state->accept > 0)
+            fprintf(file, "  l.FSM_TAKE(%u);\n", state->accept);
+          for (Lookaheads::const_iterator i = state->tails.begin(); i != state->tails.end(); ++i)
+            fprintf(file, "  l.FSM_TAIL(%u);\n", *i);
+          for (Lookaheads::const_iterator i = state->heads.begin(); i != state->heads.end(); ++i)
+            fprintf(file, "  l.FSM_HEAD(%u);\n", *i);
+          if (state->edges.rbegin() != state->edges.rend() && state->edges.rbegin()->first == Pattern::Meta::DED)
+            fprintf(file, "  if (l.FSM_DENT()) goto S%u;\n", state->edges.rbegin()->second.second->index);
+          bool peek = false; // if we need to read a character into c1
+          bool prev = false; // if we need to keep the previous character in c0
+          for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
+          {
+#if REFLEX_WITH_COMPACT_DFA == -1
+            Char lo = i->first;
+            Char hi = i->second.first;
+#else
+            Char hi = i->first;
+            Char lo = i->second.first;
+#endif
+            if (!is_meta(lo))
+            {
+              Pattern::Index target_index = Pattern::Const::IMAX;
+              if (i->second.second != nullptr)
+                target_index = i->second.second->index;
+              DFA::State::Edges::const_reverse_iterator j = i;
+              if (target_index == Pattern::Const::IMAX && (++j == state->edges.rend() || is_meta(j->second.first)))
+                break;
+              peek = true;
+            }
+            else
+            {
+              do
+              {
+                if (lo == Pattern::Meta::EOB || lo == Pattern::Meta::EOL)
+                  peek = true;
+                else if (lo == Pattern::Meta::EWE || lo == Pattern::Meta::BWE || lo == Pattern::Meta::NWE)
+                  prev = peek = true;
+                if (prev && peek)
+                  break;
+                check_dfa_closure(i->second.second, 1, peek, prev);
+              } while (++lo <= hi);
+            }
+          }
+          bool read = peek;
+          bool elif = false;
+#if REFLEX_WITH_COMPACT_DFA == -1
+          for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
+          {
+            Char lo = i->first;
+            Char hi = i->second.first;
+            Pattern::Index target_index = Pattern::Const::IMAX;
+            if (i->second.second != nullptr)
+              target_index = i->second.second->index;
+            if (read)
+            {
+              if (prev)
+                fprintf(file, "  c0 = c1, c1 = l.FSM_CHAR();\n");
+              else
+                fprintf(file, "  c1 = l.FSM_CHAR();\n");
+              read = false;
+            }
+            if (!is_meta(lo))
+            {
+              DFA::State::Edges::const_reverse_iterator j = i;
+              if (target_index == Pattern::Const::IMAX && (++j == state->edges.rend() || is_meta(j->second.first)))
+                break;
+              if (lo == hi)
+              {
+                fprintf(file, "  if (c1 == ");
+                print_char(file, lo);
+                fprintf(file, ")");
+              }
+              else if (hi == 0xFF)
+              {
+                fprintf(file, "  if (");
+                print_char(file, lo);
+                fprintf(file, " <= c1)");
+              }
+              else
+              {
+                fprintf(file, "  if (");
+                print_char(file, lo);
+                fprintf(file, " <= c1 && c1 <= ");
+                print_char(file, hi);
+                fprintf(file, ")");
+              }
+              if (target_index == Pattern::Const::IMAX)
+              {
+                if (peek)
+                  fprintf(file, " return l.FSM_HALT(c1);\n");
+                else
+                  fprintf(file, " return l.FSM_HALT();\n");
+              }
+              else
+              {
+                fprintf(file, " goto S%u;\n", target_index);
+              }
+            }
+            else
+            {
+              do
+              {
+                switch (lo)
+                {
+                  case Pattern::Meta::EOB:
+                  case Pattern::Meta::EOL:
+                    fprintf(file, "  ");
+                    if (elif)
+                      fprintf(file, "else ");
+                    fprintf(file, "if (l.FSM_META_%s(c1)) {\n", meta_label[lo - Pattern::Meta::MIN]);
+                    gencode_dfa_closure(file, i->second.second, 2, peek);
+                    fprintf(file, "  }\n");
+                    elif = true;
+                    break;
+                  case Pattern::Meta::EWE:
+                  case Pattern::Meta::BWE:
+                  case Pattern::Meta::NWE:
+                    fprintf(file, "  ");
+                    if (elif)
+                      fprintf(file, "else ");
+                    fprintf(file, "if (l.FSM_META_%s(c0, c1)) {\n", meta_label[lo - Pattern::Meta::MIN]);
+                    gencode_dfa_closure(file, i->second.second, 2, peek);
+                    fprintf(file, "  }\n");
+                    elif = true;
+                    break;
+                  default:
+                    fprintf(file, "  ");
+                    if (elif)
+                      fprintf(file, "else ");
+                    fprintf(file, "if (l.FSM_META_%s()) {\n", meta_label[lo - Pattern::Meta::MIN]);
+                    gencode_dfa_closure(file, i->second.second, 2, peek);
+                    fprintf(file, "  }\n");
+                    elif = true;
+                }
+              } while (++lo <= hi);
+            }
+          }
+#else
+          for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
+          {
+            Char hi = i->first;
+            Char lo = i->second.first;
+            if (is_meta(lo))
+            {
+              if (read)
+              {
+                if (prev)
+                  fprintf(file, "  c0 = c1, c1 = l.FSM_CHAR();\n");
+                else
+                  fprintf(file, "  c1 = l.FSM_CHAR();\n");
+                read = false;
+              }
+              do
+              {
+                switch (lo)
+                {
+                  case Pattern::Meta::EOB:
+                  case Pattern::Meta::EOL:
+                    fprintf(file, "  ");
+                    if (elif)
+                      fprintf(file, "else ");
+                    fprintf(file, "if (l.FSM_META_%s(c1)) {\n", meta_label[lo - Pattern::Meta::MIN]);
+                    gencode_dfa_closure(file, i->second.second, 2, peek);
+                    fprintf(file, "  }\n");
+                    elif = true;
+                    break;
+                  case Pattern::Meta::EWE:
+                  case Pattern::Meta::BWE:
+                  case Pattern::Meta::NWE:
+                    fprintf(file, "  ");
+                    if (elif)
+                      fprintf(file, "else ");
+                    fprintf(file, "if (l.FSM_META_%s(c0, c1)) {\n", meta_label[lo - Pattern::Meta::MIN]);
+                    gencode_dfa_closure(file, i->second.second, 2, peek);
+                    fprintf(file, "  }\n");
+                    elif = true;
+                    break;
+                  default:
+                    fprintf(file, "  ");
+                    if (elif)
+                      fprintf(file, "else ");
+                    fprintf(file, "if (l.FSM_META_%s()) {\n", meta_label[lo - Pattern::Meta::MIN]);
+                    gencode_dfa_closure(file, i->second.second, 2, peek);
+                    fprintf(file, "  }\n");
+                    elif = true;
+                }
+              } while (++lo <= hi);
+            }
+          }
+          for (DFA::State::Edges::const_iterator i = state->edges.begin(); i != state->edges.end(); ++i)
+          {
+            Char hi = i->first;
+            Char lo = i->second.first;
+            Pattern::Index target_index = Pattern::Const::IMAX;
+            if (i->second.second != nullptr)
+              target_index = i->second.second->index;
+            if (read)
+            {
+              if (prev)
+                fprintf(file, "  c0 = c1, c1 = l.FSM_CHAR();\n");
+              else
+                fprintf(file, "  c1 = l.FSM_CHAR();\n");
+              read = false;
+            }
+            if (!is_meta(lo))
+            {
+              DFA::State::Edges::const_iterator j = i;
+              if (target_index == Pattern::Const::IMAX && (++j == state->edges.end() || is_meta(j->second.first)))
+                break;
+              if (lo == hi)
+              {
+                fprintf(file, "  if (c1 == ");
+                print_char(file, lo);
+                fprintf(file, ")");
+              }
+              else if (hi == 0xFF)
+              {
+                fprintf(file, "  if (");
+                print_char(file, lo);
+                fprintf(file, " <= c1)");
+              }
+              else
+              {
+                fprintf(file, "  if (");
+                print_char(file, lo);
+                fprintf(file, " <= c1 && c1 <= ");
+                print_char(file, hi);
+                fprintf(file, ")");
+              }
+              if (target_index == Pattern::Const::IMAX)
+              {
+                if (peek)
+                  fprintf(file, " return l.FSM_HALT(c1);\n");
+                else
+                  fprintf(file, " return l.FSM_HALT();\n");
+              }
+              else
+              {
+                fprintf(file, " goto S%u;\n", target_index);
+              }
+            }
+          }
+#endif
+          if (peek)
+            fprintf(file, "  return l.FSM_HALT(c1);\n");
+          else
+            fprintf(file, "  return l.FSM_HALT();\n");
+        }
+        fprintf(file, "}\n\n");
+        if (opt_.p)
+          write_predictor(file);
+        write_namespace_close(file);
+        if (file != stdout)
+          fclose(file);
+      }
+    }
+  }
+} // gencode_dfa
+
+void FSM_Generator::check_dfa_closure(const DFA::State *state, int nest, bool& peek, bool& prev) const
+{
+  if (nest > 4)
+    return;
+  for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
+  {
+#if REFLEX_WITH_COMPACT_DFA == -1
+    Char lo = i->first;
+    Char hi = i->second.first;
+#else
+    Char hi = i->first;
+    Char lo = i->second.first;
+#endif
+    if (is_meta(lo))
+    {
+      do
+      {
+        if (lo == Pattern::Meta::EOB || lo == Pattern::Meta::EOL)
+          peek = true;
+        else if (lo == Pattern::Meta::EWE || lo == Pattern::Meta::BWE || lo == Pattern::Meta::NWE)
+          prev = peek = true;
+        if (prev && peek)
+          break;
+        check_dfa_closure(i->second.second, nest + 1, peek, prev);
+      } while (++lo <= hi);
+    }
+  }
+} // check_dfa_closure
+
+void FSM_Generator::gencode_dfa_closure(FILE *file, const DFA::State *state, int nest, bool peek) const
+{
+  bool elif = false;
+  if (state->redo)
+  {
+    if (peek)
+      fprintf(file, "%*sm.FSM_REDO(c1);\n", 2*nest, "");
+    else
+      fprintf(file, "%*sm.FSM_REDO();\n", 2*nest, "");
+  }
+  else if (state->accept > 0)
+  {
+    if (peek)
+      fprintf(file, "%*sm.FSM_TAKE(%u, c1);\n", 2*nest, "", state->accept);
+    else
+      fprintf(file, "%*sm.FSM_TAKE(%u);\n", 2*nest, "", state->accept);
+  }
+  for (Lookaheads::const_iterator i = state->tails.begin(); i != state->tails.end(); ++i)
+    fprintf(file, "%*sm.FSM_TAIL(%u);\n", 2*nest, "", *i);
+  if (nest > 5)
+    return;
+  for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
+  {
+#if REFLEX_WITH_COMPACT_DFA == -1
+    Char lo = i->first;
+    Char hi = i->second.first;
+#else
+    Char hi = i->first;
+    Char lo = i->second.first;
+#endif
+    if (is_meta(lo))
+    {
+      do
+      {
+        switch (lo)
+        {
+          case Pattern::Meta::EOB:
+          case Pattern::Meta::EOL:
+            fprintf(file, "%*s", 2*nest, "");
+            if (elif)
+              fprintf(file, "else ");
+            fprintf(file, "if (l.FSM_META_%s(c1)) {\n", meta_label[lo - Pattern::Meta::MIN]);
+            gencode_dfa_closure(file, i->second.second, nest + 1, peek);
+            fprintf(file, "%*s}\n", 2*nest, "");
+            elif = true;
+            break;
+          case Pattern::Meta::EWE:
+          case Pattern::Meta::BWE:
+          case Pattern::Meta::NWE:
+            fprintf(file, "%*s", 2*nest, "");
+            if (elif)
+              fprintf(file, "else ");
+            fprintf(file, "if (l.FSM_META_%s(c0, c1)) {\n", meta_label[lo - Pattern::Meta::MIN]);
+            gencode_dfa_closure(file, i->second.second, nest + 1, peek);
+            fprintf(file, "%*s}\n", 2*nest, "");
+            elif = true;
+            break;
+          default:
+            fprintf(file, "%*s", 2*nest, "");
+            if (elif)
+              fprintf(file, "else ");
+            fprintf(file, "if (l.FSM_META_%s()) {\n", meta_label[lo - Pattern::Meta::MIN]);
+            gencode_dfa_closure(file, i->second.second, nest + 1, peek);
+            fprintf(file, "%*s}\n", 2*nest, "");
+            elif = true;
+        }
+      } while (++lo <= hi);
+    }
+  }
+} // gencode_dfa_closure
+
+void FSM_Generator::export_code() const
+{
+  if (nop_ == 0)
+    return;
+  if (opt_.o)
+    return;
+  for (std::vector<std::string>::const_iterator i = opt_.f.begin(); i != opt_.f.end(); ++i)
+  {
+    const std::string& filename = *i;
+    size_t len = filename.length();
+    if ((len > 2 && filename.compare(len - 2, 2, ".h"  ) == 0)
+     || (len > 4 && filename.compare(len - 4, 4, ".hpp") == 0)
+     || (len > 4 && filename.compare(len - 4, 4, ".cpp") == 0)
+     || (len > 3 && filename.compare(len - 3, 3, ".cc" ) == 0))
+    {
+      FILE *file = nullptr;
+      int err = 0;
+      if (filename.compare(0, 7, "stdout.") == 0)
+        file = stdout;
+      else if (filename.at(0) == '+')
+        err = reflex::fopen_s(&file, filename.c_str() + 1, "a");
+      else
+        err = reflex::fopen_s(&file, filename.c_str(), "w");
+      if (!err && file)
+      {
+        fprintf(file, "#ifndef REFLEX_CODE_DECL\n#include <reflex/pattern.h>\n#define REFLEX_CODE_DECL const reflex::Pattern::Opcode\n#endif\n\n");
+        write_namespace_open(file);
+        fprintf(file, "extern REFLEX_CODE_DECL reflex_code_%s[%u] =\n{\n", opt_.n.empty() ? "FSM" : opt_.n.c_str(), nop_);
+        for (Pattern::Index i = 0; i < nop_; ++i)
+        {
+          Pattern::Opcode opcode = opc_[i];
+          Char lo = lo_of(opcode);
+          Char hi = hi_of(opcode);
+          fprintf(file, "  0x%08X, // %u: ", opcode, i);
+          if (is_opcode_redo(opcode))
+          {
+            fprintf(file, "REDO\n");
+          }
+          else if (is_opcode_take(opcode))
+          {
+            fprintf(file, "TAKE %u\n", long_index_of(opcode));
+          }
+          else if (is_opcode_tail(opcode))
+          {
+            fprintf(file, "TAIL %u\n", long_index_of(opcode));
+          }
+          else if (is_opcode_head(opcode))
+          {
+            fprintf(file, "HEAD %u\n", long_index_of(opcode));
+          }
+          else if (is_opcode_halt(opcode))
+          {
+            fprintf(file, "HALT\n");
+          }
+          else
+          {
+            Pattern::Index index = index_of(opcode);
+            if (index == Pattern::Const::HALT)
+            {
+              fprintf(file, "HALT ON ");
+            }
+            else
+            {
+              if (index == Pattern::Const::LONG)
+              {
+                opcode = opc_[++i];
+                index = long_index_of(opcode);
+                fprintf(file, "GOTO\n  0x%08X, // %u:  FAR %u ON ", opcode, i, index);
+              }
+              else
+              {
+                fprintf(file, "GOTO %u ON ", index);
+              }
+            }
+            if (!is_meta(lo))
+            {
+              print_char(file, lo, true);
+              if (lo != hi)
+              {
+                fprintf(file, "-");
+                print_char(file, hi, true);
+              }
+            }
+            else
+            {
+              fprintf(file, "%s", meta_label[lo - Pattern::Meta::MIN]);
+            }
+            fprintf(file, "\n");
+          }
+        }
+        fprintf(file, "};\n\n");
+        if (opt_.p)
+          write_predictor(file);
+        write_namespace_close(file);
+        if (file != stdout)
+          fclose(file);
+      }
+    }
+  }
+} // export_code
+
+void FSM_Generator::write_predictor(FILE *file) const
+{
+  fprintf(file, "extern const reflex::Pattern::Pred reflex_pred_%s[%zu] = {", opt_.n.empty() ? "FSM" : opt_.n.c_str(), 2 + len_ + (min_ > 1 && len_ == 0) * 256 + (min_ > 0) * Pattern::Const::HASH);
+  fprintf(file, "\n  %3hhu,%3hhu,", static_cast<uint_least8_t>(len_), (static_cast<uint_least8_t>(min_ | (one_ << 4))));
   for (size_t i = 0; i < len_; ++i)
-    ::fprintf(file, "%s%3hhu,", ((i + 2) & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(pre_[i]));
+    fprintf(file, "%s%3hhu,", ((i + 2) & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(pre_[i]));
   if (min_ > 0)
   {
     if (min_ > 1 && len_ == 0)
     {
       for (Char i = 0; i < 256; ++i)
-        ::fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(~bit_[i]));
+        fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(~bit_[i]));
     }
     if (min_ >= 4)
     {
-      for (Hash i = 0; i < Const::HASH; ++i)
-        ::fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(~pmh_[i]));
+      for (Pattern::Hash i = 0; i < Pattern::Const::HASH; ++i)
+        fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(~pmh_[i]));
     }
     else
     {
-      for (Hash i = 0; i < Const::HASH; ++i)
-        ::fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(~pma_[i]));
+      for (Pattern::Hash i = 0; i < Pattern::Const::HASH; ++i)
+        fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(~pma_[i]));
     }
   }
-  ::fprintf(file, "\n};\n\n");
-}
+  fprintf(file, "\n};\n\n");
+} // write_predictor
 
-void Pattern::write_namespace_open(FILE *file) const
+void FSM_Generator::write_namespace_open(FILE *file) const
 {
   if (opt_.z.empty())
     return;
@@ -3264,13 +3058,13 @@ void Pattern::write_namespace_open(FILE *file) const
   size_t i = 0, j;
   while ((j = s.find("::", i)) != std::string::npos)
   {
-    ::fprintf(file, "namespace %s {\n", s.substr(i, j - i).c_str());
+    fprintf(file, "namespace %s {\n", s.substr(i, j - i).c_str());
     i = j + 2;
   }
-  ::fprintf(file, "namespace %s {\n\n", s.substr(i).c_str());
+  fprintf(file, "namespace %s {\n\n", s.substr(i).c_str());
 }
 
-void Pattern::write_namespace_close(FILE *file) const
+void FSM_Generator::write_namespace_close(FILE *file) const
 {
   if (opt_.z.empty())
     return;
@@ -3279,10 +3073,10 @@ void Pattern::write_namespace_close(FILE *file) const
   size_t i = 0, j;
   while ((j = s.find("::", i)) != std::string::npos)
   {
-    ::fprintf(file, "} // namespace %s\n\n", s.substr(i, j - i).c_str());
+    fprintf(file, "} // namespace %s\n\n", s.substr(i, j - i).c_str());
     i = j + 2;
   }
-  ::fprintf(file, "} // namespace %s\n\n", s.substr(i).c_str());
+  fprintf(file, "} // namespace %s\n\n", s.substr(i).c_str());
 }
 
 } // namespace reflex
