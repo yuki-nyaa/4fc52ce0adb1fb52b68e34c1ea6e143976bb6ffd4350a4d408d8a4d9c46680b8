@@ -337,7 +337,7 @@ class Input {
   };
   /// FILE* handler functor base class to handle FILE* errors and non-blocking FILE* reads
   struct Handler { virtual int operator()() = 0; };
-  static constexpr size_t get_raw_temp_default_size = 1024;
+  static constexpr size_t get_raw_temp_default_size = 256; // The choice is rather arbitrary. You might change it according to your need.
  private:
   char* allocate_get_raw_temp(size_t s) {return new char[s];}
   void free_get_raw_temp(char* p) {delete[] p;}
@@ -355,8 +355,8 @@ class Input {
   Input(Source_Type st,T t,encoding enc,const codepage_unit_t* page) noexcept :
     source_type_(st),
     source_(t),
-    get_raw_temp_(allocate_get_raw_temp(get_raw_temp_default_size)),
-    get_raw_temp_size_(get_raw_temp_default_size)
+    get_raw_temp_(nullptr), // Allocated when needed
+    get_raw_temp_size_(0)
   {
     set_encoding(enc,page);
   }
@@ -375,8 +375,8 @@ class Input {
       get_raw_temp_size_(other.get_raw_temp_size_)
   {
     other.set_source();
-    other.get_raw_temp_=other.allocate_get_raw_temp(get_raw_temp_default_size);
-    other.get_raw_temp_size_=get_raw_temp_default_size;
+    other.get_raw_temp_=nullptr;
+    other.get_raw_temp_size_=0;
   }
   /// Construct input character sequence from a char* string and a size.
   Input(
@@ -387,8 +387,8 @@ class Input {
     :
       source_type_(Source_Type::SV),
       source_(cstring,size),
-      get_raw_temp_(allocate_get_raw_temp(get_raw_temp_default_size)),
-      get_raw_temp_size_(get_raw_temp_default_size)
+      get_raw_temp_(nullptr), // Allocated when needed
+      get_raw_temp_size_(0)
   {
     set_encoding(enc,page);
   }
@@ -431,8 +431,8 @@ class Input {
     get_raw_temp_=other.get_raw_temp_;
     get_raw_temp_size_=other.get_raw_temp_size_;
     other.set_source();
-    other.get_raw_temp_=other.allocate_get_raw_temp(get_raw_temp_default_size);
-    other.get_raw_temp_size_=get_raw_temp_default_size;
+    other.get_raw_temp_=nullptr;
+    other.get_raw_temp_size_=0;
     return *this;
   }
   ~Input() noexcept {
@@ -631,7 +631,7 @@ size_t Input::get_raw(C* buf,size_t size,size_t count){
         return fread(buf,size,count,source_.file_);
       else{
         if(get_raw_temp_size_<size)
-          resize_get_raw_temp(size);
+          resize_get_raw_temp(size>get_raw_temp_default_size ? size : get_raw_temp_default_size);
         for(size_t i=0;i<count;++i){
           if(fread(get_raw_temp_,size,1,source_.file_)==1){
             reflex::char_copy(buf,reinterpret_cast<unsigned char*>(get_raw_temp_),size); // `char` and `unsigned char` can alias.
@@ -644,7 +644,7 @@ size_t Input::get_raw(C* buf,size_t size,size_t count){
     }
     case Source_Type::STD_ISTREAM_P:{
       if(get_raw_temp_size_<size)
-        resize_get_raw_temp(size);
+        resize_get_raw_temp(size>get_raw_temp_default_size ? size : get_raw_temp_default_size);
       for(size_t i = 0;i<count;++i){
         source_.istream_->read(get_raw_temp_,size);
         if(static_cast<size_t>(source_.istream_->gcount())!=size)
