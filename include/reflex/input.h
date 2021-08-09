@@ -286,7 +286,7 @@ class Input {
  public:
   /// Input type
   enum struct Source_Type : unsigned char {NIL,FILE_P,STD_ISTREAM_P,CCHAR_P,SV};
-  typedef unsigned short codepage_unit_t;
+  typedef unsigned short codepage_unit_t; // 0-65535
   static const codepage_unit_t predefined_codepages[38][256];
   /// Common encoding constants.
   enum struct encoding : unsigned char  {
@@ -324,7 +324,9 @@ class Input {
     koi8_ru, ///< KOI8-RU
     // Do not change the order of the preceding enumerators!
 
-    utf8, ///< Naturally this also covers plain ASCII and latin-1.
+    latin1,
+
+    utf8, ///< Naturally this also covers plain ASCII
     utf16be, ///< UTF-16 big endian
     utf16le, ///< UTF-16 little endian
     utf32be, ///< UTF-32 big endian
@@ -750,6 +752,19 @@ size_t Input::get(C* s){
       }
       break;
     }
+    case encoding::latin1:{
+      int byte = get_raw();
+      if(byte!=EOF){
+        unsigned char c = byte;
+        if (c < 0x80)
+          l=1,*s = static_cast<C>(c);
+        else{
+          l = to_utf8(c, utf8_buf_);
+          reflex::char_copy(s,utf8_buf_,l);
+        }
+      }
+      break;
+    }
     case encoding::cp437:
     case encoding::cp850:
     case encoding::cp858:
@@ -782,12 +797,15 @@ size_t Input::get(C* s){
     case encoding::koi8_u:
     case encoding::koi8_ru:
     case encoding::custom:{
-      codepage_unit_t c = page_[*get_temp_];
-      if (c < 0x80)
-        l=1,*s = static_cast<C>(c);
-      else{
-        l = to_utf8(c, utf8_buf_);
-        reflex::char_copy(s,utf8_buf_,l);
+      int byte = get_raw();
+      if(byte!=EOF){
+        codepage_unit_t c = page_[static_cast<unsigned char>(byte)];
+        if (c < 0x80)
+          l=1,*s = static_cast<C>(c);
+        else{
+          l = to_utf8(c, utf8_buf_);
+          reflex::char_copy(s,utf8_buf_,l);
+        }
       }
       break;
     }
