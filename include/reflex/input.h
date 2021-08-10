@@ -335,8 +335,6 @@ class Input {
     auto_detect, ///< Try detecting one of the utf BOMs, consuming the BOM if successful. If none found, then utf8 is chosen.
     custom, ///< custom code page
   };
-  /// FILE* handler functor base class to handle FILE* errors and non-blocking FILE* reads
-  struct Handler { virtual int operator()() = 0; };
   static constexpr size_t get_raw_temp_default_size = 4; // Size just enough for normal use. You might increase it if you have special needs.
  private:
   unsigned char* allocate_get_raw_temp(size_t s) {return new unsigned char[s];}
@@ -370,7 +368,6 @@ class Input {
       source_(other.source_),
       enc_(other.enc_),
       page_(other.page_),
-      handler(other.handler),
       get_raw_temp_(other.get_raw_temp_),
       get_raw_temp_size_(other.get_raw_temp_size_)
   {
@@ -427,7 +424,6 @@ class Input {
     source_ = other.source_;
     enc_ = other.enc_;
     page_ = other.page_;
-    handler = other.handler;
     get_raw_temp_=other.get_raw_temp_;
     get_raw_temp_size_=other.get_raw_temp_size_;
     other.set_source();
@@ -587,8 +583,6 @@ class Input {
   unsigned char         utf8_buf_[4]; ///< Buffer for `to_utf8(char32_t,C* c)`. Also used as a temporary storage for `get(C*)`.
   unsigned char*        get_raw_temp_; ///< Temporary storage for `get_raw(C*,size_t,size_t)` in the case of `std::istream` and `FILE*`.
   size_t                get_raw_temp_size_;
- public:
-  Handler              *handler=nullptr; ///< to handle FILE* errors and non-blocking FILE* reads
 };
 
 inline void Input::detect_and_skip_bom(){
