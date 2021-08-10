@@ -337,10 +337,10 @@ class Input {
   };
   /// FILE* handler functor base class to handle FILE* errors and non-blocking FILE* reads
   struct Handler { virtual int operator()() = 0; };
-  static constexpr size_t get_raw_temp_default_size = 256; // The choice is rather arbitrary. You might change it according to your need.
+  static constexpr size_t get_raw_temp_default_size = 4; // Size just enough for normal use. You might increase it if you have special needs.
  private:
-  char* allocate_get_raw_temp(size_t s) {return new char[s];}
-  void free_get_raw_temp(char* p) {delete[] p;}
+  unsigned char* allocate_get_raw_temp(size_t s) {return new unsigned char[s];}
+  void free_get_raw_temp(unsigned char* p) {delete[] p;}
   void resize_get_raw_temp(size_t s){
     if(get_raw_temp_size_==s)
       return;
@@ -584,9 +584,8 @@ class Input {
   encoding              enc_;        ///< encoding
   const codepage_unit_t* page_;      ///< custom code page
 
-  unsigned char         utf8_buf_[4]; ///< Buffer for `to_utf8(char32_t,C* c)`
-  unsigned char         get_temp_[4]; ///< Temporary storage for `get(C* c)`
-  char                  *get_raw_temp_; ///< Temporary storage for `get_raw(C*,size_t,size_t)` in tha case of `std::istream` and `FILE*`.
+  unsigned char         utf8_buf_[4]; ///< Buffer for `to_utf8(char32_t,C* c)`. Also used as a temporary storage for `get(C*)`.
+  unsigned char*        get_raw_temp_; ///< Temporary storage for `get_raw(C*,size_t,size_t)` in the case of `std::istream` and `FILE*`.
   size_t                get_raw_temp_size_;
  public:
   Handler              *handler=nullptr; ///< to handle FILE* errors and non-blocking FILE* reads
@@ -634,7 +633,7 @@ size_t Input::get_raw(C* buf,size_t size,size_t count){
           resize_get_raw_temp(size>get_raw_temp_default_size ? size : get_raw_temp_default_size);
         for(size_t i=0;i<count;++i){
           if(fread(get_raw_temp_,size,1,source_.file_)==1){
-            reflex::char_copy(buf,reinterpret_cast<unsigned char*>(get_raw_temp_),size); // `char` and `unsigned char` can alias.
+            reflex::char_copy(buf,get_raw_temp_,size);
             buf+=size;
           }else
             return i;
@@ -646,11 +645,11 @@ size_t Input::get_raw(C* buf,size_t size,size_t count){
       if(get_raw_temp_size_<size)
         resize_get_raw_temp(size>get_raw_temp_default_size ? size : get_raw_temp_default_size);
       for(size_t i = 0;i<count;++i){
-        source_.istream_->read(get_raw_temp_,size);
+        source_.istream_->read(reinterpret_cast<char*>(get_raw_temp_),size); // `unsigned char` and `char` can alias.
         if(static_cast<size_t>(source_.istream_->gcount())!=size)
           return i;
         else{
-          reflex::char_copy(buf,get_raw_temp_,size);
+          reflex::char_copy(buf,reinterpret_cast<char*>(get_raw_temp_),size); // `unsigned char` and `char` can alias.
           buf+=size;
         }
       }
@@ -666,26 +665,29 @@ size_t Input::get(C* s){
   switch (enc_)
   {
     case encoding::utf8:{
-      int c = peek_raw();
+      int c = get_raw();
       if(c==EOF || c>=0xF8)
         l=0;
       else if(c<0x80)
-        l=1,*s == static_cast<C>(get_raw());
-      else if(c>=0xF0)
-        if(get_raw(get_temp_, 4, 1) == 1)
-          l=4,reflex::char_copy(s,get_temp_,4);
-      else if(c>=0xE0)
-        if(get_raw(get_temp_, 3, 1) == 1)
-          l=3,reflex::char_copy(s,get_temp_,3);
-      else if(c>=0xC0)
-        if(get_raw(get_temp_, 2, 1) == 1)
-          l=2,reflex::char_copy(s,get_temp_,2);
+        l=1,*s == static_cast<C>(c);
+      else{
+        utf8_buf_[0] = static_cast<unsigned char>(c);
+        if(c>=0xF0)
+          if(get_raw(utf8_buf_+1, 3, 1) == 1)
+            l=4,reflex::char_copy(s,utf8_buf_,4);
+        else if(c>=0xE0)
+          if(get_raw(utf8_buf_+1, 2, 1) == 1)
+            l=3,reflex::char_copy(s,utf8_buf_,3);
+        else if(c>=0xC0)
+          if(get_raw(utf8_buf_+1, 1, 1) == 1)
+            l=2,reflex::char_copy(s,utf8_buf_,2);
+      }
       break;
     }
     case encoding::utf16be:{
-      if (get_raw(get_temp_, 2, 1) == 1)
+      if (get_raw(utf8_buf_, 2, 1) == 1)
       {
-        char32_t c = get_temp_[0] << 8 | get_temp_[1];
+        char32_t c = utf8_buf_[0] << 8 | utf8_buf_[1];
         if (c < 0x80)
           l=1,*s = static_cast<C>(c);
         else
@@ -693,8 +695,8 @@ size_t Input::get(C* s){
           if (c >= 0xD800 && c < 0xE000)
           {
             // UTF-16 surrogate pair
-            if (c < 0xDC00 && get_raw(get_temp_ + 2, 2, 1) == 1 && (get_temp_[2] & 0xFC) == 0xDC)
-              c = 0x010000 - 0xDC00 + ((c - 0xD800) << 10) + (get_temp_[2] << 8 | get_temp_[3]);
+            if (c < 0xDC00 && get_raw(utf8_buf_ + 2, 2, 1) == 1 && (utf8_buf_[2] & 0xFC) == 0xDC)
+              c = 0x010000 - 0xDC00 + ((c - 0xD800) << 10) + (utf8_buf_[2] << 8 | utf8_buf_[3]);
             else
               c = ERR_CHAR;
           }
@@ -705,9 +707,9 @@ size_t Input::get(C* s){
       break;
     }
     case encoding::utf16le:{
-      if (get_raw(get_temp_, 2, 1) == 1)
+      if (get_raw(utf8_buf_, 2, 1) == 1)
       {
-        char32_t c = get_temp_[0] | get_temp_[1] << 8;
+        char32_t c = utf8_buf_[0] | utf8_buf_[1] << 8;
         if (c < 0x80)
           l=1,*s = static_cast<C>(c);
         else
@@ -715,8 +717,8 @@ size_t Input::get(C* s){
           if (c >= 0xD800 && c < 0xE000)
           {
             // UTF-16 surrogate pair
-            if (c < 0xDC00 && get_raw(get_temp_ + 2, 2, 1) == 1 && (get_temp_[3] & 0xFC) == 0xDC)
-              c = 0x010000 - 0xDC00 + ((c - 0xD800) << 10) + (get_temp_[2] | get_temp_[3] << 8);
+            if (c < 0xDC00 && get_raw(utf8_buf_ + 2, 2, 1) == 1 && (utf8_buf_[3] & 0xFC) == 0xDC)
+              c = 0x010000 - 0xDC00 + ((c - 0xD800) << 10) + (utf8_buf_[2] | utf8_buf_[3] << 8);
             else
               c = ERR_CHAR;
           }
@@ -727,9 +729,9 @@ size_t Input::get(C* s){
       break;
     }
     case encoding::utf32be:{
-      if (get_raw(get_temp_, 4, 1) == 1)
+      if (get_raw(utf8_buf_, 4, 1) == 1)
       {
-        char32_t c = get_temp_[0] << 24 | get_temp_[1] << 16 | get_temp_[2] << 8 | get_temp_[3];
+        char32_t c = utf8_buf_[0] << 24 | utf8_buf_[1] << 16 | utf8_buf_[2] << 8 | utf8_buf_[3];
         if (c < 0x80)
           l=1,*s = static_cast<C>(c);
         else{
@@ -740,9 +742,9 @@ size_t Input::get(C* s){
       break;
     }
     case encoding::utf32le:{
-      if (get_raw(get_temp_, 4, 1) == 1)
+      if (get_raw(utf8_buf_, 4, 1) == 1)
       {
-        char32_t c = get_temp_[0] | get_temp_[1] << 8 | get_temp_[2] << 16 | get_temp_[3] << 24;
+        char32_t c = utf8_buf_[0] | utf8_buf_[1] << 8 | utf8_buf_[2] << 16 | utf8_buf_[3] << 24;
         if (c < 0x80)
           l=1,*s = static_cast<C>(c);
         else{
