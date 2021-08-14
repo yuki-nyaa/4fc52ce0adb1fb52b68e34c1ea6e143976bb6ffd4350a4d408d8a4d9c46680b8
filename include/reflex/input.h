@@ -285,7 +285,7 @@ With reflex::BufferedInput::streambuf to create a buffered std::istream:
 class Input {
  public:
   /// Input type
-  enum struct Source_Type : unsigned char {NIL,FILE_P,STD_ISTREAM_P,CCHAR_P,SV};
+  enum struct Source_Type : unsigned char {NIL,FILE_P,STD_ISTREAM_P,CCHAR_P,SV,CUCHAR_P,USV,INPUT};
   typedef unsigned short codepage_unit_t; // 0-65535
   static const codepage_unit_t predefined_codepages[38][256];
   /// Common encoding constants.
@@ -417,6 +417,41 @@ class Input {
     :
       Input(Source_Type::STD_ISTREAM_P,&istream,enc,page)
   {}
+  /// Construct input character sequence from a unsigned char* string and a size.
+  Input(
+      const unsigned char *ucstring, ///< char string
+      size_t      size,    ///< length of the string
+      encoding    enc = encoding::auto_detect,
+      const codepage_unit_t* page = nullptr) noexcept
+    :
+      source_type_(Source_Type::USV),
+      source_(ucstring,size),
+      get_raw_temp_(nullptr), // Allocated when needed
+      get_raw_temp_size_(0)
+  {
+    set_encoding(enc,page);
+  }
+  /// Construct input character sequence from a NUL-terminated string.
+  Input(const unsigned char *ucstring, ///< NUL-terminated char* string
+      encoding    enc = encoding::auto_detect,
+      const codepage_unit_t* page = nullptr) noexcept
+    :
+    Input(Source_Type::CUCHAR_P,ucstring,enc,page)
+  {}
+  /// Construct input character sequence from a std::basic_string<unsigned char>.
+  Input(const std::basic_string<unsigned char>& ustring,
+      encoding    enc = encoding::auto_detect,
+      const codepage_unit_t* page = nullptr) noexcept
+    :
+      Input(ustring.c_str(),ustring.size(),enc,page)
+  {}
+  /// Construct input character sequence from another `reflex::Input`.
+  Input(Input& in,
+      encoding    enc = encoding::auto_detect,
+      const codepage_unit_t* page = nullptr) noexcept
+    :
+      Input(Source_Type::INPUT,&in,enc,page)
+  {}
   Input& operator=(const Input&) = delete;
   Input& operator=(Input&& other) noexcept
   {
@@ -437,7 +472,6 @@ class Input {
   Source_Type get_source_type() const {return source_type_;}
   /// Get the `const char*` of this Input object.
   const char *c_str() const
-    /// @returns current `const char*`
   {
     assert(source_type_==Source_Type::CCHAR_P || source_type_==Source_Type::SV);
     switch(source_type_){
@@ -448,39 +482,43 @@ class Input {
   }
   /// Get the `FILE*` of this Input object.
   FILE *file() const
-    /// @returns pointer to current file descriptor
   {
     assert(source_type_==Source_Type::FILE_P);
     return source_.file_;
   }
   /// Get the `std::istream` of this Input object.
   std::istream& istream() const
-    /// @returns reference to current `std::istream`
   {
     assert(source_type_==Source_Type::STD_ISTREAM_P);
     return *(source_.istream_);
   }
-  /// Get the remaining input size. Only meaningful for string view.
-  size_t remaining_size() const {
-    assert(source_type_==Source_Type::SV);
-    return source_.sv_.size_;
-  }
-  /// Check if `get_raw()` can be performed.
-  bool get_raw_able() const
+  /// Get the `const unsigned char*` of this Input object.
+  const unsigned char *u_c_str() const
   {
+    assert(source_type_==Source_Type::CUCHAR_P || source_type_==Source_Type::USV);
     switch(source_type_){
-      case Source_Type::CCHAR_P :
-        return *source_.cstring_!='\0';
-      case Source_Type::SV :
-        return source_.sv_.size_>0;
-      case Source_Type::FILE_P :
-        return feof(source_.file_)==0 && ferror(source_.file_)==0;
-      case Source_Type::STD_ISTREAM_P :
-        return !((source_.istream_)->good());
-      default :
-        return false;
+      case Source_Type::CUCHAR_P : return source_.ucstring_;
+      case Source_Type::USV : return source_.usv_.data_;
+      default : return nullptr;
     }
   }
+  /// Get the `reflex::Input` of this Input object.
+  Input& input() const
+  {
+    assert(source_type_==Source_Type::INPUT);
+    return *(source_.input_);
+  }
+  /// Get the remaining input size. Only meaningful for string view.
+  size_t remaining_size() const {
+    assert(source_type_==Source_Type::SV || source_type_==Source_Type::USV);
+    switch(source_type_){
+      case Source_Type::SV : return source_.sv_.size_;
+      case Source_Type::USV : return source_.usv_.size_;
+      default : return 0;
+    }
+  }
+  /// Check if `get_raw()` can be performed.
+  bool get_raw_able() const;
   explicit operator bool() const
     /// @returns `get_raw_able()`.
   {
@@ -490,42 +528,9 @@ class Input {
   template<typename C>
   size_t get_raw(C* buf,size_t size,size_t count);
   /// Get one unconverted byte. Has the same semantics as `fgetc`.
-  int get_raw(){
-    switch(source_type_){
-      case Source_Type::CCHAR_P:
-        if(source_.cstring_[0]!='\0')
-          return static_cast<unsigned char>(*source_.cstring_++);
-        else
-          return EOF;
-      case Source_Type::SV:
-        if(source_.sv_.size_>0)
-          return --source_.sv_.size_,static_cast<unsigned char>(*source_.sv_.data_++);
-        else
-          return EOF;
-      case Source_Type::FILE_P:
-        return fgetc(source_.file_);
-      case Source_Type::STD_ISTREAM_P:
-        return source_.istream_->get();
-      default: return EOF;
-    }
-  }
+  int get_raw();
   /// Peek one unconverted byte.
-  int peek_raw(){
-    switch(source_type_){
-      case Source_Type::CCHAR_P :
-        return (*source_.cstring_!='\0') ? static_cast<unsigned char>(*source_.cstring_) : EOF;
-      case Source_Type::SV :
-        return (source_.sv_.size_>0) ? static_cast<unsigned char>(*source_.sv_.data_) : EOF;
-      case Source_Type::FILE_P:{
-        int c = fgetc(source_.file_);
-        return (c!=EOF) ? (ungetc(c,source_.file_),c) : EOF;
-      }
-      case Source_Type::STD_ISTREAM_P :
-        return source_.istream_->peek();
-      default:
-        return EOF;
-    }
-  }
+  int peek_raw();
   /// Write to `s` one utf-8 converted code point (1-4 bytes).
   /// @returns utf-8 byte length.
   template<typename C>
@@ -563,6 +568,19 @@ class Input {
     source_type_ = Source_Type::STD_ISTREAM_P;
     source_.istream_ = &is;
   }
+  void set_source(const unsigned char* s){
+    source_type_ = Source_Type::CUCHAR_P;
+    source_.ucstring_ = s;
+  }
+  void set_source(const unsigned char* s,size_t sz){
+    source_type_ = Source_Type::USV;
+    source_.usv_.data_ = s;
+    source_.usv_.size_ = sz;
+  }
+  void set_source(Input& in){
+    source_type_ = Source_Type::INPUT;
+    source_.input_ = &in;
+  }
  protected:
   Source_Type source_type_;
  private:
@@ -571,10 +589,16 @@ class Input {
     std::istream         *istream_; ///< stream input (when non-null)
     const char           *cstring_; ///< char string input (when non-null) of length reflex::Input::size_
     struct{const char* data_; size_t size_;} sv_;
+    const unsigned char* ucstring_;
+    struct{const unsigned char* data_; size_t size_;} usv_;
+    Input* input_;
     constexpr Source_Union_(FILE* file_other) noexcept : file_(file_other) {}
     constexpr Source_Union_(std::istream* istream_other) noexcept : istream_(istream_other) {}
     constexpr Source_Union_(const char* cstring_other) noexcept : cstring_(cstring_other) {}
     constexpr Source_Union_(const char* d,size_t s) noexcept : sv_{d,s} {}
+    constexpr Source_Union_(const unsigned char* ucstring_other) noexcept : ucstring_(ucstring_other) {}
+    constexpr Source_Union_(const unsigned char* d,size_t s) noexcept : usv_{d,s} {}
+    constexpr Source_Union_(Input* i) noexcept : input_(i) {}
     constexpr Source_Union_(std::nullptr_t = nullptr) noexcept : Source_Union_((FILE*)nullptr) {}
   } source_;
   encoding              enc_;        ///< encoding
@@ -588,6 +612,28 @@ class Input {
 inline void Input::detect_and_skip_bom(){
   // TODO
   enc_ = encoding::utf8;
+}
+
+inline bool Input::get_raw_able() const
+{
+  switch(source_type_){
+    case Source_Type::CCHAR_P :
+      return *source_.cstring_!='\0';
+    case Source_Type::SV :
+      return source_.sv_.size_>0;
+    case Source_Type::FILE_P :
+      return feof(source_.file_)==0 && ferror(source_.file_)==0;
+    case Source_Type::STD_ISTREAM_P :
+      return !((source_.istream_)->good());
+    case Source_Type::CUCHAR_P :
+      return *source_.ucstring_!='\0';
+    case Source_Type::USV :
+      return source_.usv_.size_>0;
+    case Source_Type::INPUT :
+      return source_.input_->get_raw_able();
+    default :
+      return false;
+  }
 }
 
 template<typename C>
@@ -649,7 +695,91 @@ size_t Input::get_raw(C* buf,size_t size,size_t count){
       }
       return count;
     }
+    case Source_Type::CUCHAR_P:{
+      for(size_t i = 0;i<count;++i){
+        for(size_t j = 0;j<size;++j)
+          if(source_.ucstring_[j]=='\0')
+            return i;
+        reflex::char_copy(buf,source_.ucstring_,size);
+        buf+=size;
+        source_.ucstring_+=size;
+      }
+      return count;
+    }
+    case Source_Type::USV:{
+      for(size_t i = 0;i<count;++i){
+        if(size>source_.usv_.size_)
+          return i;
+        else{
+          reflex::char_copy(buf,source_.usv_.data_,size);
+          buf+=size;
+          source_.usv_.data_+=size;
+          source_.usv_.size_-=size;
+        }
+      }
+      return count;
+    }
+    case Source_Type::INPUT:{
+      return source_.input_->get_raw(buf,size,count);
+    }
     default : return 0;
+  }
+}
+
+/// Get one unconverted byte. Has the same semantics as `fgetc`.
+inline int Input::get_raw(){
+  switch(source_type_){
+    case Source_Type::CCHAR_P:
+      if(source_.cstring_[0]!='\0')
+        return static_cast<unsigned char>(*source_.cstring_++);
+      else
+        return EOF;
+    case Source_Type::SV:
+      if(source_.sv_.size_>0)
+        return --source_.sv_.size_,static_cast<unsigned char>(*source_.sv_.data_++);
+      else
+        return EOF;
+    case Source_Type::FILE_P:
+      return fgetc(source_.file_);
+    case Source_Type::STD_ISTREAM_P:
+      return source_.istream_->get();
+    case Source_Type::CUCHAR_P:
+      if(source_.ucstring_[0]!=0)
+        return *source_.ucstring_++;
+      else
+        return EOF;
+    case Source_Type::USV:
+      if(source_.usv_.size_>0)
+        return --source_.usv_.size_,*source_.usv_.data_++;
+      else
+        return EOF;
+    case Source_Type::INPUT:
+      return source_.input_->get_raw();
+    default: return EOF;
+  }
+}
+
+/// Peek one unconverted byte.
+inline int Input::peek_raw(){
+  switch(source_type_){
+    case Source_Type::CCHAR_P :
+      return (*source_.cstring_!='\0') ? static_cast<unsigned char>(*source_.cstring_) : EOF;
+    case Source_Type::SV :
+      return (source_.sv_.size_>0) ? static_cast<unsigned char>(*source_.sv_.data_) : EOF;
+    case Source_Type::FILE_P:{
+      int c = fgetc(source_.file_);
+      return (c!=EOF) ? (ungetc(c,source_.file_),c) : EOF;
+    }
+    case Source_Type::STD_ISTREAM_P :
+      return source_.istream_->peek();
+    case Source_Type::CUCHAR_P :
+      return (*source_.ucstring_!=0) ? *source_.ucstring_ : EOF;
+    case Source_Type::USV :
+      return (source_.usv_.size_>0) ? *source_.usv_.data_ : EOF;
+    case Source_Type::INPUT :
+      return source_.input_->peek_raw();
+    default:
+      return EOF;
   }
 }
 
