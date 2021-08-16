@@ -282,6 +282,7 @@ With reflex::BufferedInput::streambuf to create a buffered std::istream:
     fclose(input.file());
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
+
 class Input {
  public:
   /// Input type
@@ -550,6 +551,7 @@ class Input {
     if(enc_!=encoding::custom && enc_!=encoding::utf8 && enc_!=encoding::utf16be && enc_!=encoding::utf16le && enc_!=encoding::utf32be && enc_!=encoding::utf32le)
       page_ = predefined_codepages[static_cast<unsigned>(enc_)];
   }
+  const codepage_unit_t* get_page() const {return page_;}
   void set_source() {source_type_ = Source_Type::NIL;}
   void set_source(FILE* f){
     source_type_ = Source_Type::FILE_P;
@@ -583,7 +585,8 @@ class Input {
   }
  protected:
   Source_Type source_type_;
- private:
+  encoding              enc_;        ///< encoding
+  const codepage_unit_t* page_;      ///< custom code page
   union Source_Union_{
     FILE                 *file_;    ///< FILE* input (when non-null)
     std::istream         *istream_; ///< stream input (when non-null)
@@ -601,13 +604,11 @@ class Input {
     constexpr Source_Union_(Input* i) noexcept : input_(i) {}
     constexpr Source_Union_(std::nullptr_t = nullptr) noexcept : Source_Union_((FILE*)nullptr) {}
   } source_;
-  encoding              enc_;        ///< encoding
-  const codepage_unit_t* page_;      ///< custom code page
-
+ private:
   unsigned char         utf8_buf_[4]; ///< Buffer for `to_utf8(char32_t,C* c)`. Also used as a temporary storage for `get(C*)`.
   unsigned char*        get_raw_temp_; ///< Temporary storage for `get_raw(C*,size_t,size_t)` in the case of `std::istream` and `FILE*`.
   size_t                get_raw_temp_size_;
-};
+}; // class Input
 
 inline void Input::detect_and_skip_bom(){
   // TODO
@@ -724,7 +725,7 @@ size_t Input::get_raw(C* buf,size_t size,size_t count){
     }
     default : return 0;
   }
-}
+} // size_t Input::get_raw(C* buf,size_t size,size_t count)
 
 /// Get one unconverted byte. Has the same semantics as `fgetc`.
 inline int Input::get_raw(){
@@ -793,18 +794,19 @@ unsigned Input::get(C* s){
       if(c==EOF || c>=0xF8)
         l=0;
       else if(c<0x80)
-        l=1,*s == static_cast<C>(c);
+        l=1,*s = static_cast<C>(c);
       else{
         utf8_buf_[0] = static_cast<unsigned char>(c);
-        if(c>=0xF0)
+        if(c>=0xF0){
           if(get_raw(utf8_buf_+1, 3, 1) == 1)
             l=4,reflex::char_copy(s,utf8_buf_,4);
-        else if(c>=0xE0)
+        }else if(c>=0xE0){
           if(get_raw(utf8_buf_+1, 2, 1) == 1)
             l=3,reflex::char_copy(s,utf8_buf_,3);
-        else if(c>=0xC0)
+        }else if(c>=0xC0){
           if(get_raw(utf8_buf_+1, 1, 1) == 1)
             l=2,reflex::char_copy(s,utf8_buf_,2);
+        }
       }
       break;
     }
