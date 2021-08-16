@@ -43,6 +43,7 @@
 #include <cassert>
 #include <iostream>
 #include <string>
+#include <deque>
 
 #if defined(HAVE_AVX512BW)
 # include <immintrin.h>
@@ -939,158 +940,288 @@ unsigned Input::get(C* s){
     }
   }
   return l;
-}
+} // size_t Input::get(C* s)
 
-/// Buffered input.
-class BufferedInput : private Input {
+
+
+
+class Input1_ : protected Input {using Input::Input;};
+class Input2_ : protected Input {using Input::Input;};
+
+class BufferedInput : private Input1_, private Input2_{
  public:
-  using Input::Source_Type;
-  using Input::encoding;
-  using Input::Handler;
-  // `explicit operator bool() const` is overriden
-  using Input::cstring;
-  using Input::file;
-  using Input::istream;
-  // `clear()` is overriden
-  // `good()` is overriden
-  // `eof()` is overriden
-  // `int get()` is overriden
-  // `size_t get(char*,size_t)` is overriden
-  using Input::set_encoding;
-  using Input::get_encoding;
-  /// Buffer size.
-  static constexpr size_t SIZE = 16384;
-  /// Copy constructor (with intended "move semantics" as internal state is shared, should not rely on using the rhs after copying).
-  /// Construct empty buffered input.
-  BufferedInput()
-    :
-      Input(),
-      len_(0),
-      pos_(0)
-  { }
-  /// Copy constructor.
-  BufferedInput(const BufferedInput& input)
-    :
-      Input(input),
-      len_(input.len_),
-      pos_(input.pos_)
-  {
-    std::memcpy(buf_, input.buf_, len_);
-  }
-  /// Construct buffered input from unbuffered input.
-  template<typename... Args>
-  BufferedInput(Args&&... args)
-    :
-      Input(std::forward<Args>(args)...)
-  {
-    len_ = Input::get(buf_, SIZE);
-    pos_ = 0;
-  }
-  /// Copy assignment operator.
-  BufferedInput& operator=(const BufferedInput& input)
-  {
-    Input::operator=(input);
-    len_ = input.len_;
-    pos_ = input.pos_;
-    std::memcpy(buf_, input.buf_, len_);
-    return *this;
-  }
-  /// Assignment operator from unbuffered input.
-  template<typename... Args>
-  BufferedInput& operator=(Args&&... args)
-  {
-    Input::operator=(std::forward<Args>(args)...);
-    len_ = Input::get(buf_, SIZE);
-    pos_ = 0;
-    return *this;
-  }
-  // Cast this Input object to bool, same as checking good().
-  explicit operator bool() const
-    /// @returns true if a non-empty sequence of characters is available to get
-  {
-    return good();
-  }
-  /// Get the size of the input character sequence in number of ASCII/UTF-8 bytes (zero if size is not determinable from a `FILE*` or `std::istream` source).
-  size_t size()
-    /// @returns the nonzero number of ASCII/UTF-8 bytes available to read, or zero when source is empty or if size is not determinable e.g. when reading from standard input
-  {
-    return len_ - pos_ + Input::size();
-  }
-  /// Clear this Input.
-  void clear()
-  {
-    Input::clear();
-    std::memset(buf_,0,SIZE);
-    len_ = 0;
-    pos_ = 0;
-  }
-  /// Check if input is available.
-  bool good() const
-    /// @returns true if a non-empty sequence of characters is available to get
-  {
-    return pos_ < len_ || Input::good();
-  }
-  /// Check if input reached EOF.
-  bool eof() const
-    /// @returns true if input is at EOF and no characters are available
-  {
-    return pos_ >= len_ && Input::eof();
-  }
-  /// Peek a single character (unsigned char 0..255) or EOF (-1) when end-of-input is reached.
-  int peek()
-  {
-    while (true)
-    {
-      if (len_ == 0)
-        return EOF;
-      if (pos_ < len_)
-        return static_cast<unsigned char>(buf_[pos_]);
-      len_ = Input::get(buf_, SIZE);
-      pos_ = 0;
-    }
-  }
-  /// Get a single character (unsigned char 0..255) or EOF (-1) when end-of-input is reached.
-  int get()
-  {
-    while (true)
-    {
-      if (len_ == 0)
-        return EOF;
-      if (pos_ < len_)
-        return static_cast<unsigned char>(buf_[pos_++]);
-      len_ = Input::get(buf_, SIZE);
-      pos_ = 0;
-    }
-  }
-  /// Copy character sequence data into buffer.
-  size_t get(
-      char  *s, ///< points to the string buffer to fill with input
-      size_t n) ///< size of buffer pointed to by s
-  {
-    size_t k = n;
-    while (k > 0)
-    {
-      if (pos_ < len_)
-      {
-        *s++ = buf_[pos_++];
-        --k;
-      }
-      else if (len_ == 0)
-      {
-        break;
-      }
-      else
-      {
-        len_ = Input::get(buf_, SIZE);
-        pos_ = 0;
-      }
-    }
-    return n - k;
-  }
+  using Input1_::Source_Type;
+  using Input1_::codepage_unit_t;
+  using Input1_::predefined_codepages;
+  using Input1_::encoding;
+  using Input1_::get_source_type;
+  using Input1_::c_str;
+  using Input1_::file;
+  using Input1_::istream;
+  using Input1_::u_c_str;
+  using Input1_::input;
+  using Input1_::remaining_size;
+  using Input1_::get_encoding;
+  using Input1_::get_page;
  private:
-  char   buf_[SIZE]; ///< Buffer
-  size_t len_; ///< Length of data to be read, in the buffer. Can be smaller than `SIZE` when the source is smaller than the buffer.
-  size_t pos_; ///< Current position in the buffer.
+  unsigned char* allocate_buffer(size_t s) {return new unsigned char[s];}
+  void free_buffer(unsigned char* p) {delete[] p;}
+  bool no_buffer_needed() const {
+    return Input1_::source_type_==Source_Type::CCHAR_P || Input1_::source_type_==Source_Type::SV || Input1_::source_type_==Source_Type::CUCHAR_P || Input1_::source_type_==Source_Type::USV;
+  }
+ public:
+  BufferedInput() noexcept :
+    Input1_(),
+    Input2_(),
+    buf_raw(nullptr),
+    size_buf_raw(0),
+    pos_buf_u8(0),
+    dend_buf_u8(0),
+    buf_unget(),
+    lineno(1),
+    colno(1)
+  {
+    Input2_::set_source(static_cast<Input1_&>(*this));
+  }
+
+  template<typename... Args>
+  explicit BufferedInput(Args&&... args) noexcept :
+    Input1_(std::forward<Args>(args)...),
+    Input2_(),
+    buf_raw(nullptr),
+    size_buf_raw(0),
+    pos_buf_u8(0),
+    dend_buf_u8(0),
+    buf_unget(),
+    lineno(1),
+    colno(1)
+  {
+    Input2_::set_source(static_cast<Input1_&>(*this));
+    Input2_::set_encoding(Input1_::enc_,Input1_::page_);
+  }
+
+  BufferedInput(const BufferedInput&) = delete;
+
+  BufferedInput(BufferedInput&& other) noexcept :
+    Input1_(std::move(other)),
+    Input2_(std::move(other)),
+    buf_raw(other.buf_raw),
+    size_buf_raw(other.size_buf_raw),
+    pos_buf_u8(other.pos_buf_u8),
+    dend_buf_u8(other.dend_buf_u8),
+    buf_unget(std::move(other.buf_unget)),
+    lineno(other.lineno),
+    colno(other.colno)
+  {
+    std::memcpy(buf_u8,other.buf_u8,4);
+
+    other.buf_raw=nullptr;
+    other.size_buf_raw=0;
+    other.pos_buf_u8=0;
+    other.dend_buf_u8=0;
+    other.Input2_::set_source(static_cast<Input1_&>(other));
+    other.reset_pos();
+  }
+
+  BufferedInput& operator=(const BufferedInput&) = delete;
+
+  BufferedInput& operator=(BufferedInput&& other) noexcept {
+    if(this!=&other){
+      Input1_::operator=(std::move(other)),
+      Input2_::operator=(std::move(other)),
+      buf_raw=other.buf_raw;
+      size_buf_raw=other.size_buf_raw;
+      pos_buf_u8=other.pos_buf_u8;
+      dend_buf_u8=other.dend_buf_u8;
+      buf_unget = std::move(other.buf_unget);
+      lineno = other.lineno;
+      colno = other.colno;
+      std::memcpy(buf_u8,other.buf_u8,4);
+
+      other.buf_raw=nullptr;
+      other.size_buf_raw=0;
+      other.pos_buf_u8=0;
+      other.dend_buf_u8=0;
+      other.Input2_::set_source(static_cast<Input1_&>(other));
+      other.reset_pos();
+    }
+    return *this;
+  }
+
+  ~BufferedInput() noexcept {free_buffer(buf_raw);}
+
+  void resize_buffer(size_t size_new){
+    if(size_new==size_buf_raw)
+      return;
+    else{
+      if(size_new==0){
+        for(size_t i=0;i!=Input2_::source_.usv_.size_;++i)
+          buf_unget.push_back(Input2_::source_.usv_.data_[i]);
+        free_buffer(buf_raw);
+        buf_raw=nullptr;
+        size_buf_raw=0;
+        Input2_::set_source(static_cast<Input1_&>(*this));
+      }else{
+        unsigned char* buf_new = allocate_buffer(size_new);
+        if(size_buf_raw!=0){
+          size_t head = size_new<Input2_::source_.usv_.size_ ? Input2_::source_.usv_.size_-size_new : 0 ;
+          std::memcpy(buf_new,Input2_::source_.usv_.data_+head,Input2_::source_.usv_.size_-head);
+          for(size_t i=0;i!=head;++i)
+            buf_unget.push_back(Input2_::source_.usv_.data_[i]);
+          free_buffer(buf_raw);
+          buf_raw = buf_new;
+          size_buf_raw = size_new;
+          Input2_::set_source(buf_new,Input2_::source_.usv_.size_-head);
+        }else{
+          buf_raw = buf_new;
+          size_buf_raw = size_new;
+          Input2_::set_source(buf_raw,0);
+        }
+      }
+    }
+  }
+
+  size_t fill_buffer(){
+    size_t filled = 0;
+    if(size_buf_raw!=0){
+      std::memmove(buf_raw,Input2_::source_.usv_.data_,Input2_::source_.usv_.size_);
+      filled = Input1_::get_raw(buf_raw+Input2_::source_.usv_.size_,1,size_buf_raw-Input2_::source_.usv_.size_);
+      Input2_::set_source(buf_raw,Input2_::source_.usv_.size_+filled);
+    }
+    return filled;
+  }
+
+  size_t buffer_size() const {return size_buf_raw;}
+
+  static constexpr size_t BUFFER_SIZE_DEFAULT = 512*1024;
+ private:
+  int get_utf8_byte_ignoring_unget(){
+    if(pos_buf_u8==dend_buf_u8 || dend_buf_u8==0){
+      if((dend_buf_u8=Input2_::get(buf_u8))==0){
+        if(fill_buffer()==0){
+          return EOF;
+        }else if((dend_buf_u8=Input2_::get(buf_u8))==0){
+          return EOF;
+        }
+      }
+      pos_buf_u8=0;
+    }
+    int c = buf_u8[pos_buf_u8++];
+    if(c==static_cast<unsigned char>('\n')){
+        ++lineno;
+        colno=1;
+      }else
+        ++colno;
+      return c;
+  }
+ public:
+  int get_utf8_byte(){
+    if(buf_unget.size()!=0){
+      unsigned char c = buf_unget.front();
+      buf_unget.pop_front();
+      if(c==static_cast<unsigned char>('\n')){
+        ++lineno;
+        colno=1;
+      }else
+        ++colno;
+      return c;
+    }
+    if(size_buf_raw==0 && !no_buffer_needed())
+      resize_buffer(BUFFER_SIZE_DEFAULT);
+    return get_utf8_byte_ignoring_unget();
+  }
+
+  BufferedInput& operator>>(int& c) {c=get_utf8_byte();return *this;}
+
+  int peek_utf8_byte(size_t i=0){
+    if(i<buf_unget.size())
+      return buf_unget[i];
+    else
+      i-=buf_unget.size();++i;
+
+    // At this point, i>=1.
+
+    if(size_buf_raw==0 && !no_buffer_needed())
+      resize_buffer(BUFFER_SIZE_DEFAULT);
+
+    int c=EOF;
+    for(;i!=0;--i){
+      c = get_utf8_byte_ignoring_unget();
+      if(c==EOF)
+        return c;
+      else
+        buf_unget.push_back(c);
+    }
+    return c;
+  }
+
+  int operator[](size_t i) {return peek_utf8_byte(i);}
+
+  void set_encoding(encoding enc,const codepage_unit_t* page){
+    Input1_::set_encoding(enc,page);
+    Input2_::set_encoding(enc,page);
+  }
+
+  // The following functions does not affect the current buffer. Better use when EOF is hit.
+  void set_source() {Input1_::source_type_ = Source_Type::NIL;}
+  void set_source(FILE* f) {Input1_::set_source(f);}
+  void set_source(const char* s) {resize_buffer(0);Input1_::set_source(s);}
+  void set_source(const char* s,size_t sz) {resize_buffer(0);Input1_::set_source(s,sz);}
+  void set_source(std::istream& is) {Input1_::set_source(is);}
+  void set_source(const unsigned char* s) {resize_buffer(0);Input1_::set_source(s);}
+  void set_source(const unsigned char* s,size_t sz) {resize_buffer(0);Input1_::set_source(s,sz);}
+  void set_source(Input& in) {Input1_::set_source(in);}
+
+  void unget(char32_t c){
+    if(c<=0x80){
+      buf_unget.push_front(c);
+      if(c==static_cast<unsigned char>('\n')){
+        --lineno;
+        colno=1;
+      }else
+        --colno;
+      return;
+    }
+    unsigned char arr[4];
+    unsigned l = to_utf8(c,arr);
+    for(;l!=0;--l){
+      buf_unget.push_front(arr[l-1]);
+    }
+    colno-=l;
+  }
+
+  BufferedInput& operator<<(char32_t c) {unget(c);return *this;}
+
+  void reset_lineno() {lineno=1;}
+  void reset_colno() {colno=1;}
+  void reset_pos() {lineno=1;colno=1;}
+
+  std::string get_line(){
+    std::string s;
+    int c=0;
+    while(1){
+      c = get_utf8_byte();
+      if(c==EOF)
+        return s;
+      if(c==static_cast<unsigned char>('\n')){
+        s.push_back(static_cast<char>(c));
+        return s;
+      }
+      s.push_back(static_cast<char>(c));
+    }
+  }
+
+ private:
+  unsigned char* buf_raw;
+  size_t size_buf_raw;
+  unsigned char buf_u8[4];
+  unsigned pos_buf_u8;
+  unsigned dend_buf_u8;
+
+  std::deque<unsigned char> buf_unget;
+ public:
+  size_t lineno;
+  size_t colno;
 };
 
 #if defined(HAVE_AVX512BW) || defined(HAVE_AVX2) || defined(HAVE_SSE2)

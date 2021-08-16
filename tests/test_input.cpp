@@ -156,5 +156,106 @@ int main(){
 
     printf("\n\n");
 
-    printf("TEST DONE!");
+    printf("INPUT TEST DONE!\n\n");
+
+    printf("TEST 1\n");
+    FILE* bf1 = fopen("test_input_1.txt","r");
+    BufferedInput bi1(bf1,Input::encoding::utf8);
+    unsigned char barr1[1024];
+    size_t barr1_s = 0;
+    while(1){
+        int b = bi1.get_utf8_byte();
+        if(b==EOF)
+            break;
+        else{
+            barr1[barr1_s++] = b;
+            printf("%x ",static_cast<unsigned>(b));
+        }
+    }
+    fclose(f1);
+    bi1.set_source();
+    bi1.reset_pos();
+
+    printf("\n\n");
+
+    printf("TEST 2\n");
+    bi1.set_source(barr1,barr1_s);
+    unsigned char barr2[1024];
+    size_t barr2_s = 0;
+    while(1){
+        int b = bi1.get_utf8_byte();
+        if(b==EOF)
+            break;
+        else{
+            barr2[barr2_s++] = b;
+            printf("%x ",static_cast<unsigned>(b));
+        }
+    }
+    bi1.set_source();
+    bi1.reset_pos();
+
+    printf("\n\n");
+
+    printf("TEST 3\n");
+    bi1.set_source(barr1,barr1_s);
+    bi1.unget(0xF1);
+    bi1.unget(0xF2);
+    bi1.unget(0xF3);
+    bi1.reset_pos();
+    unsigned char barr3[1024];
+    size_t barr3_s = 0;
+    while(1){
+        int b = bi1.get_utf8_byte();
+        if(b==EOF)
+            break;
+        else{
+            barr3[barr3_s++] = b;
+            printf("%x ",static_cast<unsigned>(b));
+        }
+        if(barr3_s % 9==0)
+            printf("\n%u %u\n",bi1.lineno,bi1.colno);
+    }
+    bi1.set_source();
+    bi1.reset_pos();
+
+    printf("\n\n");
+
+    printf("TEST 4\n");
+    bi1.set_source(barr1,barr1_s);
+    bi1<<0xF1<<0xF2<<0xF3;
+    std::string ps;
+    for(unsigned i=0;i<=10;++i)
+        ps.push_back(bi1[i]);
+    unsigned char barr4[1024];
+    size_t barr4_s = 0;
+    while(1){
+        int b=0;
+        bi1>>b;
+        if(b==EOF)
+            break;
+        else{
+            barr4[barr4_s++] = b;
+            printf("%x ",static_cast<unsigned>(b));
+        }
+    }
+    printf("\n%u\n",ps.size());
+    for(size_t i=0;i<ps.size();++i)
+        printf("%x ",static_cast<unsigned char>(ps[i]));
+    printf("\n\n");
+    bi1.set_source();
+    bi1.reset_pos();
+
+    printf("TEST 5\n");
+
+    bi1.set_source(barr1,barr1_s);
+    std::string str1;
+    while(bi1.peek_utf8_byte()!=EOF){
+        str1 = std::move(bi1.get_line());
+        for(unsigned i = 0;i!=str1.size();++i)
+            printf("%x ",static_cast<unsigned char>(str1[i]));
+        printf("\n%u %u\n",bi1.lineno,bi1.colno);
+    }
+    printf("\n\n");
+    bi1.set_source();
+    bi1.reset_pos();
 }
