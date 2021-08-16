@@ -153,7 +153,7 @@ inline std::string latin1(
 
 /// Convert UCS-4 to UTF-8.
 template<typename C>
-size_t to_utf8(
+unsigned to_utf8(
     char32_t   c, ///< UCS-4 character U+0000 to U+10ffff
     C *s) ///< points to the buffer to populate with UTF-8 (1 to 6 bytes) not NUL-terminated
   /// @returns length (in bytes) of UTF-8 character sequence stored in s

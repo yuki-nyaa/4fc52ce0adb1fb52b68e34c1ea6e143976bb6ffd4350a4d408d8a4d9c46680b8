@@ -534,7 +534,7 @@ class Input {
   /// Write to `s` one utf-8 converted code point (1-4 bytes).
   /// @returns utf-8 byte length.
   template<typename C>
-  size_t get(C* s);
+  unsigned get(C* s);
   encoding get_encoding() const {return enc_;}
   void set_encoding(
       encoding    enc,         ///< encoding
@@ -784,8 +784,8 @@ inline int Input::peek_raw(){
 }
 
 template<typename C>
-size_t Input::get(C* s){
-  size_t l = 0;
+unsigned Input::get(C* s){
+  unsigned l = 0;
   switch (enc_)
   {
     case encoding::utf8:{
