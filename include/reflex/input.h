@@ -984,7 +984,8 @@ class BufferedInput : private Input1_, private Input2_{
       if(c==EOF)
         return s;
       if(c==static_cast<unsigned char>('\n')){
-        s.push_back(static_cast<char>(c));
+        if(s.back()=='\r')
+          s.pop_back();
         return s;
       }
       s.push_back(static_cast<char>(c));
