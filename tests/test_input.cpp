@@ -216,7 +216,6 @@ int main(){
             printf("\n%u %u\n",bi1.lineno,bi1.colno);
     }
     bi1.set_source();
-    bi1.reset_pos();
 
     printf("\n\n");
 
@@ -243,7 +242,6 @@ int main(){
         printf("%x ",static_cast<unsigned char>(ps[i]));
     printf("\n\n");
     bi1.set_source();
-    bi1.reset_pos();
 
     printf("TEST 5\n");
 
@@ -258,5 +256,4 @@ int main(){
     printf("\n\n");
     (void)bi1.u_c_str();
     bi1.set_source();
-    bi1.reset_pos();
 }

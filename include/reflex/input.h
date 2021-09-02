@@ -937,20 +937,12 @@ class BufferedInput : private Input1_, private Input2_{
 
   int operator[](size_t i) {return peek_utf8_byte(i);}
 
+  bool get_able() {return peek_utf8_byte()!=EOF;}
+
   void set_encoding(encoding enc,const codepage_unit_t* page){
     Input1_::set_encoding(enc,page);
     Input2_::set_encoding(enc,page);
   }
-
-  // The following functions does not affect the current buffer. Better use when EOF is hit.
-  void set_source() {Input1_::source_type_ = Source_Type::NIL;}
-  void set_source(FILE* f) {Input1_::set_source(f);}
-  void set_source(const char* s) {resize_buffer(0);Input1_::set_source(s);}
-  void set_source(const char* s,size_t sz) {resize_buffer(0);Input1_::set_source(s,sz);}
-  void set_source(std::istream& is) {Input1_::set_source(is);}
-  void set_source(const unsigned char* s) {resize_buffer(0);Input1_::set_source(s);}
-  void set_source(const unsigned char* s,size_t sz) {resize_buffer(0);Input1_::set_source(s,sz);}
-  void set_source(Input& in) {Input1_::set_source(in);}
 
   void unget(char32_t c){
     if(c<=0x80){
@@ -975,6 +967,23 @@ class BufferedInput : private Input1_, private Input2_{
   void reset_lineno() {lineno=1;}
   void reset_colno() {colno=1;}
   void reset_pos() {lineno=1;colno=1;}
+
+  bool at_bol() const {return colno==1;}
+  bool at_eol(){
+    int c = peek_utf8_byte();
+    return c==static_cast<unsigned char>('\n') || (c==static_cast<unsigned char>('\r') && peek_utf8_byte(1)==static_cast<unsigned char>('\n'));
+  }
+  bool at_begin() const {return lineno==1 && colno==1;}
+
+  // The following functions does not affect the current buffer. Better use when EOF is hit.
+  void set_source(bool if_reset_pos=true) {Input1_::source_type_ = Source_Type::NIL; if(if_reset_pos) reset_pos();}
+  void set_source(FILE* f,bool if_reset_pos=true) {Input1_::set_source(f); if(if_reset_pos) reset_pos();}
+  void set_source(const char* s,bool if_reset_pos=true) {resize_buffer(0);Input1_::set_source(s); if(if_reset_pos) reset_pos();}
+  void set_source(const char* s,size_t sz,bool if_reset_pos=true) {resize_buffer(0);Input1_::set_source(s,sz); if(if_reset_pos) reset_pos();}
+  void set_source(std::istream& is,bool if_reset_pos=true) {Input1_::set_source(is); if(if_reset_pos) reset_pos();}
+  void set_source(const unsigned char* s,bool if_reset_pos=true) {resize_buffer(0);Input1_::set_source(s); if(if_reset_pos) reset_pos();}
+  void set_source(const unsigned char* s,size_t sz,bool if_reset_pos=true) {resize_buffer(0);Input1_::set_source(s,sz); if(if_reset_pos) reset_pos();}
+  void set_source(Input& in,bool if_reset_pos=true) {Input1_::set_source(in); if(if_reset_pos) reset_pos();}
 
   std::string get_line(){
     std::string s;
