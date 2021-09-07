@@ -734,15 +734,15 @@ class BufferedInput : private Input1_, private Input2_{
   using Input1_::codepage_unit_t;
   using Input1_::predefined_codepages;
   using Input1_::encoding;
-  using Input1_::get_source_type;
-  using Input1_::c_str;
-  using Input1_::file;
-  using Input1_::istream;
-  using Input1_::u_c_str;
-  using Input1_::input;
-  using Input1_::remaining_size;
-  using Input1_::get_encoding;
-  using Input1_::get_page;
+  Source_Type get_source_type() const {return Input1_::source_type_;}
+  const char* c_str() const {return Input1_::c_str();}
+  FILE *file() const {return Input1_::file();}
+  std::istream& istream() const {return Input1_::istream();}
+  const unsigned char* u_c_str() const {return Input1_::u_c_str();}
+  Input& input() const {return Input1_::input();}
+  size_t remaining_size() const { return Input1_::remaining_size();}
+  encoding get_encoding() const {return Input1_::enc_;}
+  const codepage_unit_t* get_page() const {return Input1_::page_;}
  private:
   unsigned char* allocate_buffer(size_t s) {return new unsigned char[s];}
   void free_buffer(unsigned char* p) {delete[] p;}

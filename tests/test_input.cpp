@@ -256,6 +256,7 @@ int main(){
         printf("\n%u %u\n",bi1.lineno,bi1.colno);
     }
     printf("\n\n");
+    (void)bi1.u_c_str();
     bi1.set_source();
     bi1.reset_pos();
 }
