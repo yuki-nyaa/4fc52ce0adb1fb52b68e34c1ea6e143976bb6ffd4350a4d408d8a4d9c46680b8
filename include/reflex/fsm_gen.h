@@ -41,6 +41,7 @@
 #include<map>
 #include<set>
 #include<list>
+#include<reflex/error.hpp>
 #include<reflex/ranges.h>
 #include<reflex/pattern.hpp>
 

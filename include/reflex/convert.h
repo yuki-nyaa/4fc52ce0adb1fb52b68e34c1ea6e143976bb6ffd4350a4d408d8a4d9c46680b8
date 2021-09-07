@@ -37,7 +37,7 @@
 #ifndef REFLEX_CONVERT_H
 #define REFLEX_CONVERT_H
 
-#include <reflex/error.h>
+#include <reflex/error.hpp>
 #include <string>
 #include <map>
 

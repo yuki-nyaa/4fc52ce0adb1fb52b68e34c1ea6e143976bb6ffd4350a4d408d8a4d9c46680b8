@@ -36,7 +36,6 @@
 
 #include<cstring>
 #include<reflex/debug.h>
-#include<reflex/error.h>
 #include<reflex/timer.h>
 #include<reflex/setop.h>
 #include<reflex/fsm_gen.h>
