@@ -37,8 +37,8 @@
 #ifndef REFLEX_LEXER_H
 #define REFLEX_LEXER_H
 
-#include <reflex/abslexer.h>
-#include <reflex/pattern.h>
+#include <reflex/abslexer.hpp>
+#include <reflex/pattern.hpp>
 #include <stack>
 
 namespace reflex {

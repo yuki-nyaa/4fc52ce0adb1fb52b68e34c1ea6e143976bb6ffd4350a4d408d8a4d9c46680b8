@@ -2244,7 +2244,7 @@ void Reflex_Parser::write_prelude()
     }
   }
   if (!options["perf_report"].empty())
-    *out << "\n// --perf-report option requires a timer:\n#include <reflex/timer.h>\n";
+    *out << "\n// --perf-report option requires a timer:\n#include <reflex/timer.hpp>\n";
 }
 
 /// Write Flex-compatible #defines to lex.yy.cpp

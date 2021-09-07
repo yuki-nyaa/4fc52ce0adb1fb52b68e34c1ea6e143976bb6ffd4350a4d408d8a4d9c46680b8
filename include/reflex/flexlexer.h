@@ -37,7 +37,7 @@
 #ifndef REFLEX_FLEXLEXER_H
 #define REFLEX_FLEXLEXER_H
 
-#include <reflex/abslexer.h>
+#include <reflex/abslexer.hpp>
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //

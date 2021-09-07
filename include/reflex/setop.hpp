@@ -27,7 +27,7 @@
 \******************************************************************************/
 
 /**
-@file      setop.h
+@file      setop.hpp
 @brief     RE/flex operations on STL containers and sets
 @author    Robert van Engelen - engelen@genivia.com
 @copyright (c) 2016-2020, Robert van Engelen, Genivia Inc. All rights reserved.
@@ -85,7 +85,7 @@ Example
 namespace reflex {
 
 /// Check if sets `s1` and `s2` are disjoint.
-template<typename S1, typename S2> 
+template<typename S1, typename S2>
 bool is_disjoint(
     const S1& s1,
     const S2& s2)
@@ -113,7 +113,7 @@ bool is_disjoint(
 }
 
 /// Check if value `x` is in set `s`.
-template<typename T, typename S> 
+template<typename T, typename S>
 inline bool is_in_set(
     const T& x,
     const S& s)
@@ -123,7 +123,7 @@ inline bool is_in_set(
 }
 
 /// Check if set `s1` is a subset of set `s2`.
-template<typename S1, typename S2> 
+template<typename S1, typename S2>
 bool is_subset(
     const S1& s1,
     const S2& s2)
@@ -190,7 +190,7 @@ void set_delete(
 }
 
 /// Intersection of two ordered sets, with an iterator to get elements lazely.
-template<typename S1, typename S2> 
+template<typename S1, typename S2>
 struct lazy_intersection {
   /// Iterator to lazely get elements of a set intersection.
   struct iterator {
@@ -283,7 +283,7 @@ struct lazy_intersection {
 };
 
 /// Union of two ordered sets, with an iterator to get elements lazely.
-template<typename S1, typename S2> 
+template<typename S1, typename S2>
 struct lazy_union {
   /// Iterator to lazely get elements of a set union.
   struct iterator {
@@ -354,7 +354,7 @@ struct lazy_union {
         second = true;
       }
       else if (i2 == i2_end)
-      { 
+      {
         if (i1 != i1_end)
           ++i1;
         second = false;

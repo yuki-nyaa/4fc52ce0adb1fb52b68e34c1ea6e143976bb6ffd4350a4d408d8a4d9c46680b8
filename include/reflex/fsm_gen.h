@@ -42,7 +42,7 @@
 #include<set>
 #include<list>
 #include<reflex/error.hpp>
-#include<reflex/ranges.h>
+#include<reflex/ranges.hpp>
 #include<reflex/pattern.hpp>
 
 namespace reflex{

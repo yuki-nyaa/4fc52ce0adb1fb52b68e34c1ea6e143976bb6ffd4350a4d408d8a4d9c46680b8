@@ -27,7 +27,7 @@
 \******************************************************************************/
 
 /**
-@file      ranges.h
+@file      ranges.hpp
 @brief     RE/flex range sets as closed and open-ended set containers
 @author    Robert van Engelen - engelen@genivia.com
 @copyright (c) 2016-2020, Robert van Engelen, Genivia Inc. All rights reserved.

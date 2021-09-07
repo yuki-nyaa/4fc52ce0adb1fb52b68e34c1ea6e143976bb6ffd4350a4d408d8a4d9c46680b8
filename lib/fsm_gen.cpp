@@ -36,8 +36,8 @@
 
 #include<cstring>
 #include<reflex/debug.h>
-#include<reflex/timer.h>
-#include<reflex/setop.h>
+#include<reflex/timer.hpp>
+#include<reflex/setop.hpp>
 #include<reflex/fsm_gen.h>
 
 /// DFA compaction: -1 == reverse order edge compression (best); 1 == edge compression; 0 == no edge compression.

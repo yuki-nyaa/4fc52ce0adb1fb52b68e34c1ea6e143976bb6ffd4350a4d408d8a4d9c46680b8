@@ -36,9 +36,9 @@
 
 #include <reflex/convert.h>
 #include <reflex/posix.h>
-#include <reflex/ranges.h>
+#include <reflex/ranges.hpp>
 #include <reflex/unicode.h>
-#include <reflex/utf8.h>
+#include <reflex/utf8.hpp>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>

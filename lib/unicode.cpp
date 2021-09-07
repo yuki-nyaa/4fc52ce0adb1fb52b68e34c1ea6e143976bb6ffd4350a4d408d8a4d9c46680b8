@@ -35,7 +35,7 @@
 */
 
 #include <reflex/unicode.h>
-#include <reflex/utf8.h>
+#include <reflex/utf8.hpp>
 
 namespace reflex {
 

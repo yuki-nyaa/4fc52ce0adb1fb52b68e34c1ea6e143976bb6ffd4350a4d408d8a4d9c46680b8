@@ -27,7 +27,7 @@
 \******************************************************************************/
 
 /**
-@file      utf8.h
+@file      utf8.hpp
 @brief     RE/flex UCS to UTF-8 converters
 @author    Robert van Engelen - engelen@genivia.com
 @copyright (c) 2016-2020, Robert van Engelen, Genivia Inc. All rights reserved.

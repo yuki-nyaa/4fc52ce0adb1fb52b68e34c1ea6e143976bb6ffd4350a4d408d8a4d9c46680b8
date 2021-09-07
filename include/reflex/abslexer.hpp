@@ -27,7 +27,7 @@
 \******************************************************************************/
 
 /**
-@file      abslexer.h (originally absmatcher.h)
+@file      abslexer.hpp (originally absmatcher.h)
 @brief     RE/flex abstract lexer base class.
 @author    Robert van Engelen - engelen@genivia.com
 @copyright (c) 2016-2020, Robert van Engelen, Genivia Inc. All rights reserved.

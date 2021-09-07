@@ -37,7 +37,7 @@
 #ifndef REFLEX_INPUT_H
 #define REFLEX_INPUT_H
 
-#include <reflex/utf8.h>
+#include <reflex/utf8.hpp>
 #include <cstdio>
 #include <cstring>
 #include <cassert>
