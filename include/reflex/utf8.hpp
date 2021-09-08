@@ -193,7 +193,7 @@ unsigned to_utf8(
 template<typename C,typename C2>
 char32_t from_utf8(
     const C *s,         ///< points to the buffer with UTF-8 (1 to 6 bytes)
-    C2 **r = nullptr) ///< points to pointer to set to the new position in s after the UTF-8 sequence, optional
+    C2 **r = (char**)nullptr) ///< points to pointer to set to the new position in s after the UTF-8 sequence, optional
   /// @returns UCS character
 {
   static_assert(is_char_v<C>);
