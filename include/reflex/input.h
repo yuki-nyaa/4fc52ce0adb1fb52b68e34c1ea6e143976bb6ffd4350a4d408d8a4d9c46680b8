@@ -886,13 +886,7 @@ class BufferedInput : private Input1_, private Input2_{
       }
       pos_buf_u8=0;
     }
-    int c = buf_u8[pos_buf_u8++];
-    if(c==static_cast<unsigned char>('\n')){
-        ++lineno;
-        colno=1;
-      }else
-        ++colno;
-      return c;
+    return buf_u8[pos_buf_u8++];
   }
  public:
   int get_utf8_byte(){
@@ -908,7 +902,15 @@ class BufferedInput : private Input1_, private Input2_{
     }
     if(size_buf_raw==0 && !no_buffer_needed())
       resize_buffer(BUFFER_SIZE_DEFAULT);
-    return get_utf8_byte_ignoring_unget();
+    int c = get_utf8_byte_ignoring_unget();
+    if(c!=EOF){
+      if(c==static_cast<unsigned char>('\n')){
+        ++lineno;
+        colno=1;
+      }else
+        ++colno;
+    }
+    return c;
   }
 
   BufferedInput& operator>>(int& c) {c=get_utf8_byte();return *this;}
@@ -971,7 +973,7 @@ class BufferedInput : private Input1_, private Input2_{
   bool at_bol() const {return colno==1;}
   bool at_eol(){
     int c = peek_utf8_byte();
-    return c==static_cast<unsigned char>('\n') || (c==static_cast<unsigned char>('\r') && peek_utf8_byte(1)==static_cast<unsigned char>('\n'));
+    return c==EOF || c==static_cast<unsigned char>('\n') || (c==static_cast<unsigned char>('\r') && peek_utf8_byte(1)==static_cast<unsigned char>('\n'));
   }
   bool at_begin() const {return lineno==1 && colno==1;}
 
