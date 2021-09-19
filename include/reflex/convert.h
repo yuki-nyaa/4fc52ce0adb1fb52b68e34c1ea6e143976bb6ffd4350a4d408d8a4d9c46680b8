@@ -54,22 +54,22 @@ namespace reflex {
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Conversion flags for reflex::convert.
-typedef int convert_flag_type;
+typedef unsigned int convert_flag_type;
 
-namespace convert_flag {
-  const convert_flag_type none       = 0x0000; ///< no conversion (default)
-  const convert_flag_type basic      = 0x0001; ///< convert basic regex (BRE) to extended regex (ERE)
-  const convert_flag_type unicode    = 0x0002; ///< convert . (dot), `\s`, `\w`, `\l`, `\u`, `\S`, `\W`, `\L`, `\U` to Unicode
-  const convert_flag_type recap      = 0x0004; ///< remove capturing groups, add capturing groups to the top level
-  const convert_flag_type lex        = 0x0008; ///< convert Lex/Flex regular expression syntax
-  const convert_flag_type u4         = 0x0010; ///< convert `\uXXXX` and UTF-16 surrogate pairs
-  const convert_flag_type anycase    = 0x0020; ///< convert regex to ignore case, same as `(?i)`
-  const convert_flag_type multiline  = 0x0040; ///< regex with multiline anchors `^` and `$`, same as `(?m)`
-  const convert_flag_type dotall     = 0x0080; ///< convert `.` (dot) to match all, same as `(?s)`
-  const convert_flag_type freespace  = 0x0100; ///< convert regex by removing spacing, same as `(?x)`
-  const convert_flag_type notnewline = 0x0200; ///< inverted character classes and \s do not match newline `\n`
-  const convert_flag_type permissive = 0x0400; ///< convert Unicode to compact UTF-8 patterns and DFA, permits some invalid UTF-8 sequences
-}
+struct convert_flag {
+  static constexpr convert_flag_type none       = 0x0000; ///< no conversion (default)
+  static constexpr convert_flag_type basic      = 0x0001; ///< convert basic regex (BRE) to extended regex (ERE)
+  static constexpr convert_flag_type unicode    = 0x0002; ///< convert . (dot), `\s`, `\w`, `\l`, `\u`, `\S`, `\W`, `\L`, `\U` to Unicode
+  static constexpr convert_flag_type recap      = 0x0004; ///< remove capturing groups, add capturing groups to the top level
+  static constexpr convert_flag_type lex        = 0x0008; ///< convert Lex/Flex regular expression syntax
+  static constexpr convert_flag_type u4         = 0x0010; ///< convert `\uXXXX` and UTF-16 surrogate pairs
+  static constexpr convert_flag_type anycase    = 0x0020; ///< convert regex to ignore case, same as `(?i)`
+  static constexpr convert_flag_type multiline  = 0x0040; ///< regex with multiline anchors `^` and `$`, same as `(?m)`
+  static constexpr convert_flag_type dotall     = 0x0080; ///< convert `.` (dot) to match all, same as `(?s)`
+  static constexpr convert_flag_type freespace  = 0x0100; ///< convert regex by removing spacing, same as `(?x)`
+  static constexpr convert_flag_type notnewline = 0x0200; ///< inverted character classes and \s do not match newline `\n`
+  static constexpr convert_flag_type permissive = 0x0400; ///< convert Unicode to compact UTF-8 patterns and DFA, permits some invalid UTF-8 sequences
+};
 
 /// @brief Returns the converted regex string given a regex library signature and conversion flags, throws regex_error.
 ///

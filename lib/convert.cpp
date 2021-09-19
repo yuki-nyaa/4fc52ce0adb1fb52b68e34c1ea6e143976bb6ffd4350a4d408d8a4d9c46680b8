@@ -52,19 +52,19 @@ namespace reflex {
 ////////////////////////////////////////////////////////////////////////////////
 
 /// regex meta chars
-static const char regex_meta[] = "#$()*+.?[\\]^{|}";
+constexpr char regex_meta[16] = "#$()*+.?[\\]^{|}";
 
 /// regex chars that when escaped should be un-escaped
-static const char regex_unescapes[] = "!\"#%&',-/:;@`";
+constexpr char regex_unescapes[14] = "!\"#%&',-/:;@`";
 
 /// regex chars that when escaped should be converted to \xXX
-static const char regex_escapes[] = "~";
+constexpr char regex_escapes[2] = "~";
 
 /// regex anchors and boundaries
-static const char regex_anchors[] = "AZzBby<>";
+constexpr char regex_anchors[9] = "AZzBby<>";
 
 /// \a (BEL), \b (BS), \t (TAB), \n (LF), \v (VT), \f (FF), \r (CR)
-static const char regex_abtnvfr[] = "abtnvfr";
+constexpr char regex_abtnvfr[8] = "abtnvfr";
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -72,14 +72,261 @@ static const char regex_abtnvfr[] = "abtnvfr";
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
-inline int lowercase(int c)
+static constexpr int lowercase(int c)
 {
   return static_cast<unsigned char>(c | 0x20);
 }
 
-inline int uppercase(int c)
+static constexpr int uppercase(int c)
 {
   return static_cast<unsigned char>(c & ~0x20);
+}
+
+/// Convert `a` to a null-terminated regex str at `buf`. Non-printable chars as well as regex keychars are converted to octal escape "\0xxx".
+static const char *regex_char(char *buf, char a, char esc, size_t *n = nullptr)
+{
+  static constexpr const char digits[17] = "0123456789abcdef";
+  if (a >= '!' && a <= '~' && a != '#' && a != '-' && a != '[' && a != '\\' && a != ']' && a != '^' &&
+      (n != nullptr || (a <= 'z' && a != '$' && a != '(' && a != ')' && a != '*' && a != '+' && a != '.' && a != '?')) //QUES `n!=nullptr` ?
+     )
+  {
+    buf[0] = a;
+    buf[1] = '\0';
+    if (n)
+      *n = 1;
+  }
+  else
+  {
+    unsigned char ua = static_cast<unsigned char>(a);
+    buf[0] = '\\';
+    switch(esc){
+      case 'x' :
+        buf[1] = 'x';
+        buf[2] = digits[ua >> 4 & 0xf];
+        buf[3] = digits[ua & 0xf];
+        buf[4] = '\0';
+        if (n)
+  	      *n = 4;
+        break;
+      case '0' :
+        buf[1] = '0';
+        buf[2] = digits[ua >> 6 & 7];
+        buf[3] = digits[ua >> 3 & 7];
+        buf[4] = digits[ua & 7];
+        buf[5] = '\0';
+        if (n)
+  	      *n = 5;
+        break;
+      default:
+        buf[1] = digits[ua >> 6 & 7];
+        buf[2] = digits[ua >> 3 & 7];
+        buf[3] = digits[ua & 7];
+        buf[4] = '\0';
+        if (n)
+  	      *n = 4;
+    }
+  }
+  return buf;
+}
+
+static const char *regex_range(char *buf, char a, char b, char esc, bool brackets = true)
+{
+  if (a == b)
+    return regex_char(buf, a, esc);
+  char *s = buf;
+  if (brackets)
+    *s++ = '[';
+  size_t n;
+  regex_char(s, a, esc, &n);
+  s += n;
+  if (b > a + 1)
+    *s++ = '-';
+  regex_char(s, b, esc, &n);
+  s += n;
+  if (brackets)
+    *s++ = ']';
+  *s++ = '\0';
+  return buf;
+}
+
+/// Convert an 8-bit ASCII + Latin-1 Supplement range [a,b] to a regex pattern.
+static std::string latin1_regex(
+    char  a,               ///< lower bound of UCS range
+    char  b,               ///< upper bound of UCS range
+    char  esc = 'x',       ///< escape char 'x' for hex \xXX, or '0' or '\0' for octal \0nnn and \nnn
+    bool brackets = true) ///< place in [ brackets ]
+  /// @returns regex string to match the UCS range encoded in UTF-8
+{
+  if (static_cast<unsigned char>(a) > static_cast<unsigned char>(b))
+    b = a;
+  char buf[16];
+  return regex_range(buf, a, b, esc, brackets);
+}
+
+/// Convert a UCS-4 range [a,b] to a UTF-8 regex pattern.
+static std::string utf8_regex(
+    char32_t  a,                ///< lower bound of UCS range
+    char32_t  b,                ///< upper bound of UCS range
+    char  esc = 'x',        ///< escape char 'x' for hex \xXX, or '0' or '\0' for octal \0nnn and \nnn
+    const char *par = "(", ///< capturing or non-capturing parenthesis "(?:"
+    bool strict = true)    ///< returned regex is strict UTF-8 (true) or permissive and lean UTF-8 (false)
+  /// @returns regex string to match the UCS range encoded in UTF-8
+{
+  if (static_cast<unsigned char>(a) > static_cast<unsigned char>(b))
+    b = a;
+  static constexpr const char *min_utf8_strict[6] = { // strict: pattern is strict, matching only strictly valid UTF-8
+    "\x00",
+    "\xc2\x80",
+    "\xe0\xa0\x80",
+    "\xf0\x90\x80\x80",
+    "\xf8\x88\x80\x80\x80",
+    "\xfc\x84\x80\x80\x80\x80"
+  };
+  static constexpr const char *min_utf8_lean[6] = { // lean: pattern is permissive, matching also some invalid UTF-8 but more tightly compressed UTF-8
+    "\x00",
+    "\xc2\x80",
+    "\xe0\x80\x80",
+    "\xf0\x80\x80\x80",
+    "\xf8\x80\x80\x80\x80",
+    "\xfc\x80\x80\x80\x80\x80"
+  };
+  static constexpr const char *max_utf8[6] = {
+    "\x7f",
+    "\xdf\xbf",
+    "\xef\xbf\xbf",
+    "\xf7\xbf\xbf\xbf",
+    "\xfb\xbf\xbf\xbf\xbf",
+    "\xfd\xbf\xbf\xbf\xbf\xbf"
+  };
+  const char * const *min_utf8 = (strict ? min_utf8_strict : min_utf8_lean);
+  char any[16];
+  char buf[16];
+  char at[6];
+  char bt[6];
+  size_t n = to_utf8(a, at);
+  size_t m = to_utf8(b, bt);
+  const unsigned char *as = reinterpret_cast<const unsigned char*>(at);
+  const unsigned char *bs = nullptr;
+  std::string regex;
+  if (strict)
+  {
+    regex_range(any, 0x80, 0xbf, esc);
+  }
+  else
+  {
+    any[0] = '.';
+    any[1] = '\0';
+  }
+  while (n <= m)
+  {
+    if (n < m)
+      bs = reinterpret_cast<const unsigned char*>(max_utf8[n - 1]);
+    else
+      bs = reinterpret_cast<const unsigned char*>(bt);
+    size_t i;
+    for (i = 0; i < n && as[i] == bs[i]; ++i)
+      regex.append(regex_char(buf, as[i], esc));
+    int l = 0; // pattern compression: l == 0 -> as[i+1..n-1] == UTF-8 lower bound
+    for (size_t k = i + 1; k < n && l == 0; ++k)
+      if (as[k] != 0x80)
+        l = 1;
+    int h = 0; // pattern compression: h == 0 -> bs[i+1..n-1] == UTF-8 upper bound
+    for (size_t k = i + 1; k < n && h == 0; ++k)
+      if (bs[k] != 0xbf)
+        h = 1;
+    if (i + 1 < n)
+    {
+      size_t j = i;
+      if (i != 0)
+        regex.append(par);
+      if (l != 0)
+      {
+        size_t p = 0;
+        regex.append(regex_char(buf, as[i], esc));
+        ++i;
+        while (i + 1 < n)
+        {
+          if (as[i + 1] == 0x80) // pattern compression
+          {
+            regex.append(regex_range(buf, as[i], 0xbf, esc));
+            for (++i; i < n && as[i] == 0x80; ++i)
+              regex.append(any);
+          }
+          else
+          {
+            if (as[i] != 0xbf)
+            {
+              ++p;
+              regex.append(par).append(regex_range(buf, as[i] + 1, 0xbf, esc));
+              for (size_t k = i + 1; k < n; ++k)
+                regex.append(any);
+              regex.append("|");
+            }
+            regex.append(regex_char(buf, as[i], esc));
+            ++i;
+          }
+        }
+        if (i < n)
+          regex.append(regex_range(buf, as[i], 0xbf, esc));
+        for (size_t k = 0; k < p; ++k)
+          regex.append(")");
+        i = j;
+      }
+      if (i + 1 < n && as[i] + l <= bs[i] - h)
+      {
+        if (l != 0)
+          regex.append("|");
+        regex.append(regex_range(buf, as[i] + l, bs[i] - h, esc));
+        for (size_t k = i + 1; k < n; ++k)
+          regex.append(any);
+      }
+      if (h != 0)
+      {
+        size_t p = 0;
+        regex.append("|").append(regex_char(buf, bs[i], esc));
+        ++i;
+        while (i + 1 < n)
+        {
+          if (bs[i + 1] == 0xbf) // pattern compression
+          {
+            regex.append(regex_range(buf, 0x80, bs[i], esc));
+            for (++i; i < n && bs[i] == 0xbf; ++i)
+              regex.append(any);
+          }
+          else
+          {
+            if (bs[i] != 0x80)
+            {
+              ++p;
+              regex.append(par).append(regex_range(buf, 0x80, bs[i] - 1, esc));
+              for (size_t k = i + 1; k < n; ++k)
+                regex.append(any);
+              regex.append("|");
+            }
+            regex.append(regex_char(buf, bs[i], esc));
+            ++i;
+          }
+        }
+        if (i < n)
+          regex.append(regex_range(buf, 0x80, bs[i], esc));
+        for (size_t k = 0; k < p; ++k)
+          regex.append(")");
+      }
+      if (j != 0)
+        regex.append(")");
+    }
+    else if (i < n)
+    {
+      regex.append(regex_range(buf, as[i], bs[i], esc));
+    }
+    if (n < m)
+    {
+      as = reinterpret_cast<const unsigned char*>(min_utf8[n]);
+      regex.append("|");
+    }
+    ++n;
+  }
+  return regex;
 }
 
 static std::string posix_class(const char *s, int esc)
@@ -92,7 +339,7 @@ static std::string posix_class(const char *s, int esc)
     if (s[0] == '^')
       regex.push_back('^');
     for (; wc[1] != 0; wc += 2)
-      regex.append(latin1(wc[0], wc[1], esc, false));
+      regex.append(latin1_regex(wc[0], wc[1], esc, false));
     regex.push_back(']');
   }
   return regex;
@@ -111,13 +358,13 @@ static std::string unicode_class(const char *s, int esc, convert_flag_type flags
         if (wc[0] > 0xDFFF)
         {
           // exclude U+D800 to U+DFFF
-          regex.assign(utf8(0x00, 0xD7FF, esc, par, !(flags & convert_flag::permissive))).push_back('|');
+          regex.assign(utf8_regex(0x00, 0xD7FF, esc, par, !(flags & convert_flag::permissive))).push_back('|');
           if (wc[0] > 0xE000)
-            regex.append(utf8(0xE000, wc[0] - 1, esc, par, !(flags & convert_flag::permissive))).push_back('|');
+            regex.append(utf8_regex(0xE000, wc[0] - 1, esc, par, !(flags & convert_flag::permissive))).push_back('|');
         }
         else
         {
-          regex.assign(utf8(0x00, wc[0] - 1, esc, par, !(flags & convert_flag::permissive))).push_back('|');
+          regex.assign(utf8_regex(0x00, wc[0] - 1, esc, par, !(flags & convert_flag::permissive))).push_back('|');
         }
       }
       int last = wc[1] + 1;
@@ -128,13 +375,13 @@ static std::string unicode_class(const char *s, int esc, convert_flag_type flags
         {
           // exclude U+D800 to U+DFFF
           if (last < 0xD800)
-            regex.append(utf8(last, 0xD7FF, esc, par, !(flags & convert_flag::permissive))).push_back('|');
+            regex.append(utf8_regex(last, 0xD7FF, esc, par, !(flags & convert_flag::permissive))).push_back('|');
           if (wc[0] > 0xE000)
-            regex.append(utf8(0xE000, wc[0] - 1, esc, par, !(flags & convert_flag::permissive))).push_back('|');
+            regex.append(utf8_regex(0xE000, wc[0] - 1, esc, par, !(flags & convert_flag::permissive))).push_back('|');
         }
         else
         {
-          regex.append(utf8(last, wc[0] - 1, esc, par, !(flags & convert_flag::permissive))).push_back('|');
+          regex.append(utf8_regex(last, wc[0] - 1, esc, par, !(flags & convert_flag::permissive))).push_back('|');
         }
         last = wc[1] + 1;
       }
@@ -144,12 +391,12 @@ static std::string unicode_class(const char *s, int esc, convert_flag_type flags
         {
           // exclude U+D800 to U+DFFF
           if (last < 0xD800)
-            regex.append(utf8(last, 0xD7FF, esc, par, !(flags & convert_flag::permissive))).push_back('|');
-          regex.append(utf8(0xE000, 0x10FFFF, esc, par, !(flags & convert_flag::permissive))).push_back('|');
+            regex.append(utf8_regex(last, 0xD7FF, esc, par, !(flags & convert_flag::permissive))).push_back('|');
+          regex.append(utf8_regex(0xE000, 0x10FFFF, esc, par, !(flags & convert_flag::permissive))).push_back('|');
         }
         else
         {
-          regex.append(utf8(last, 0x10FFFF, esc, par, !(flags & convert_flag::permissive))).push_back('|');
+          regex.append(utf8_regex(last, 0x10FFFF, esc, par, !(flags & convert_flag::permissive))).push_back('|');
         }
       }
       if (!regex.empty())
@@ -157,10 +404,10 @@ static std::string unicode_class(const char *s, int esc, convert_flag_type flags
     }
     else
     {
-      regex.assign(utf8(wc[0], wc[1], esc, par, !(flags & convert_flag::permissive)));
+      regex.assign(utf8_regex(wc[0], wc[1], esc, par, !(flags & convert_flag::permissive)));
       wc += 2;
       for (; wc[1] != 0; wc += 2)
-        regex.append("|").append(utf8(wc[0], wc[1], esc, par, !(flags & convert_flag::permissive)));
+        regex.append("|").append(utf8_regex(wc[0], wc[1], esc, par, !(flags & convert_flag::permissive)));
     }
   }
   if (regex.find('|') != std::string::npos)
@@ -360,7 +607,7 @@ static std::string convert_unicode_ranges(const ORanges<int>& ranges, convert_fl
   std::string regex;
   int esc = hex_or_octal_escape(signature);
   for (ORanges<int>::const_iterator i = ranges.begin(); i != ranges.end(); ++i)
-    regex.append(utf8(i->first, i->second - 1, esc, par, !(flags & convert_flag::permissive))).push_back('|');
+    regex.append(utf8_regex(i->first, i->second - 1, esc, par, !(flags & convert_flag::permissive))).push_back('|');
   regex.pop_back();
   regex.insert(0, par).push_back(')');
   return regex;
@@ -377,13 +624,13 @@ static std::string convert_posix_ranges(const ORanges<int>& ranges, const char *
     inverse -= ranges;
     regex = "[^";
     for (ORanges<int>::const_iterator i = inverse.begin(); i != inverse.end(); ++i)
-      regex.append(latin1(i->first, i->second - 1, esc, false));
+      regex.append(latin1_regex(i->first, i->second - 1, esc, false));
   }
   else
   {
     regex = "[";
     for (ORanges<int>::const_iterator i = ranges.begin(); i != ranges.end(); ++i)
-      regex.append(latin1(i->first, i->second - 1, esc, false));
+      regex.append(latin1_regex(i->first, i->second - 1, esc, false));
   }
   regex.push_back(']');
   return regex;
@@ -1025,7 +1272,7 @@ static void convert_escape_char(const char *pattern, size_t len, size_t& loc, si
   {
     // translate \x to \xXX
     int esc = hex_or_octal_escape(signature);
-    regex.append(&pattern[loc], pos - loc - 1).append(latin1(c, c, esc));
+    regex.append(&pattern[loc], pos - loc - 1).append(latin1_regex(c, c, esc));
     loc = pos + 1;
   }
   else if (std::strchr(regex_meta, c) == nullptr)
@@ -1131,7 +1378,7 @@ static void convert_escape_char(const char *pattern, size_t len, size_t& loc, si
         if (s == nullptr)
           throw regex_error(regex_error::invalid_escape, pattern, pos);
         int wc = static_cast<int>(s - regex_abtnvfr + '\a');
-        regex.append(&pattern[loc], pos - loc - 1).append(latin1(wc, wc, esc));
+        regex.append(&pattern[loc], pos - loc - 1).append(latin1_regex(wc, wc, esc));
         loc = pos + 1;
       }
     }
@@ -1171,7 +1418,7 @@ static void convert_escape(const char *pattern, size_t len, size_t& loc, size_t&
     {
       // translate \cX to \xXX
       int esc = hex_or_octal_escape(signature);
-      regex.append(&pattern[loc], pos - loc - 2).append(latin1(c, c, esc));
+      regex.append(&pattern[loc], pos - loc - 2).append(latin1_regex(c, c, esc));
       loc = pos + 1;
     }
   }
@@ -1224,9 +1471,9 @@ static void convert_escape(const char *pattern, size_t len, size_t& loc, size_t&
     {
       int esc = hex_or_octal_escape(signature);
       if (is_modified(mod, 'u'))
-        regex.append(&pattern[loc], pos - loc - 1).append(utf8(wc, wc, esc, par));
+        regex.append(&pattern[loc], pos - loc - 1).append(utf8_regex(wc, wc, esc, par));
       else
-        regex.append(&pattern[loc], pos - loc - 1).append(latin1(wc, wc, esc));
+        regex.append(&pattern[loc], pos - loc - 1).append(latin1_regex(wc, wc, esc));
     }
     pos = k - 1;
     loc = pos + 1;
@@ -1271,21 +1518,21 @@ static void convert_escape(const char *pattern, size_t len, size_t& loc, size_t&
           {
             int esc = hex_or_octal_escape(signature);
             if (is_modified(mod, 'u'))
-              regex.append(&pattern[loc], pos - loc - 1).append(utf8(wc, wc, esc, par));
+              regex.append(&pattern[loc], pos - loc - 1).append(utf8_regex(wc, wc, esc, par));
             else
-              regex.append(&pattern[loc], pos - loc - 1).append(latin1(wc, wc, esc));
+              regex.append(&pattern[loc], pos - loc - 1).append(latin1_regex(wc, wc, esc));
           }
         }
         else if (is_modified(mod, 'u'))
         {
           //// translate \u{X}, \uXXXX, \uDXXX\uDYYY, and \x{X} to raw UTF-8 number sequence
           //char buf[8];
-          //buf[utf8(wc, buf)] = '\0';
+          //buf[to_utf8(wc, buf)] = '\0';
           //regex.append(&pattern[loc], pos - loc - 1).append(par).append(buf).push_back(')');
 
           // translate \u{X}, \uXXXX, \uDXXX\uDYYY, and \x{X} to \xXX sequence
           int esc = hex_or_octal_escape(signature);
-          regex.append(&pattern[loc], pos - loc - 1).append(utf8(wc, wc, esc, par));
+          regex.append(&pattern[loc], pos - loc - 1).append(utf8_regex(wc, wc, esc, par));
         }
         else
         {
