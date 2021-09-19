@@ -36,6 +36,9 @@
 
 #pragma once
 
+#include<cstdint>
+#include<cstring>
+
 namespace reflex {
 class Lexer;
 /// Pattern class holds a regex pattern and its compiled FSM opcode table or code for the reflex::Matcher engine.
@@ -74,9 +77,9 @@ struct Pattern{
 
   struct Predictor{
     char      pref_[256]; ///< pattern prefix, shorter or equal to 255 bytes
-    unsigned  len_; ///< prefix length of pre_[], less or equal to 255
-    unsigned  min_; ///< patterns after the prefix are at least this long but no more than 8
-    bool      one_; ///< true if matching one string in pre_[] without meta/anchors
+    unsigned  len_ = 0; ///< prefix length of pre_[], less or equal to 255
+    unsigned  min_ = 0; ///< patterns after the prefix are at least this long but no more than 8
+    bool      one_ = false; ///< true if matching one string in pre_[] without meta/anchors
     Pred      bit_[256];         ///< bitap array
     Pred      pmh_[Const::HASH]; ///< predict-match hash array
     Pred      pma_[Const::HASH]; ///< predict-match array
@@ -163,7 +166,10 @@ struct Pattern{
   /// Returns zero when match is predicted or nonzero shift value, based on s[0..3].
   static size_t predict_match(const Pred pma[], const char *s)
   {
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wnarrowing"
     unsigned char b[4] = {s[0],s[1],s[2],s[3]};
+    #pragma GCC diagnostic pop
     Hash h[3] = {hash(b[0], b[1])};
     h[1] = hash(h[0], b[2]);
     h[2] = hash(h[1], b[3]);
