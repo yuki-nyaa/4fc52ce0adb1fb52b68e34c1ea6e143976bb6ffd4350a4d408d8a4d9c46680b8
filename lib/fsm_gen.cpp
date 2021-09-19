@@ -35,7 +35,11 @@
 */
 
 #include<cstring>
+#ifdef REFLEX_DEBUG
+#include<cmath>
+#endif
 #include<reflex/debug.h>
+#include<reflex/error.hpp>
 #include<reflex/timer.hpp>
 #include<reflex/setop.hpp>
 #include<reflex/fsm_gen.h>
@@ -140,15 +144,15 @@ void FSM_Generator::parse(
         if (c == '-')
           active = false;
         else if (c == 'i')
-          opt_.i = active;
+          option.case_insensitive = active;
         else if (c == 'm')
-          opt_.m = active;
+          option.multi_line = active;
         else if (c == 'q')
-          opt_.q = active;
+          option.verbatim_content = active;
         else if (c == 's')
-          opt_.s = active;
+          option.single_line = active;
         else if (c == 'x')
-          opt_.x = active;
+          option.free_space = active;
         else
           error(regex_error::invalid_modifier, loc);
         ++loc;
@@ -163,7 +167,7 @@ void FSM_Generator::parse(
   do
   {
     Location end = loc;
-    if (!opt_.q && !opt_.x)
+    if (!option.verbatim_content && !option.free_space)
     {
       while (true)
       {
@@ -175,7 +179,7 @@ void FSM_Generator::parse(
           end = loc;
           break;
         }
-        if (c == opt_.e)
+        if (c == option.escape_char)
         {
           c = at(++end);
           if (c == '\0' || std::strchr("0123456789<>ABDHLNPSUWXbcdehijklpsuwxz", c) != nullptr)
@@ -186,7 +190,7 @@ void FSM_Generator::parse(
           if (c == 'Q')
           {
             while ((c = at(++end)) != '\0')
-              if (c == opt_.e && at(end + 1) == 'E')
+              if (c == option.escape_char && at(end + 1) == 'E')
                 break;
           }
         }
@@ -201,7 +205,7 @@ void FSM_Generator::parse(
       while (loc < end)
       {
         Char c = at(loc++);
-        if (c == opt_.e)
+        if (c == option.escape_char)
         {
           if (at(loc) == 'Q')
           {
@@ -224,7 +228,7 @@ void FSM_Generator::parse(
               c = static_cast<Char>(s - abtnvfr + '\a');
           }
         }
-        else if (c >= 'A' && c <= 'Z' && opt_.i)
+        else if (c >= 'A' && c <= 'Z' && option.case_insensitive)
         {
           c = lowercase(c);
         }
@@ -283,11 +287,11 @@ void FSM_Generator::parse(
     error(regex_error::mismatched_parens, loc);
   else if (at(loc) != 0)
     error(regex_error::invalid_syntax, loc);
-  if (opt_.i)
+  if (option.case_insensitive)
     update_modified('i', modifiers, 0, len - 1);
-  if (opt_.m)
+  if (option.multi_line)
     update_modified('m', modifiers, 0, len - 1);
-  if (opt_.s)
+  if (option.single_line)
     update_modified('s', modifiers, 0, len - 1);
   #ifdef REFLEX_PATTERN_TIMER
   pms_ = timer_elapsed(t);
@@ -387,7 +391,7 @@ void FSM_Generator::parse2(
   {
     while (true)
     {
-      if (opt_.x)
+      if (option.free_space)
         while (std::isspace(at(loc)))
           ++loc;
       if (at(loc) == '^')
@@ -517,7 +521,7 @@ void FSM_Generator::parse3(
       lookahead,
       iter);
   Char c = at(loc);
-  if (opt_.x)
+  if (option.free_space)
     while (std::isspace(c))
       c = at(++loc);
   while (true)
@@ -778,17 +782,17 @@ void FSM_Generator::parse4(
       else
       {
         Location m_loc = loc;
-        bool opt_q = opt_.q;
-        bool opt_x = opt_.x;
+        bool opt_q = option.verbatim_content;
+        bool opt_x = option.free_space;
         bool active = true;
         do
         {
           if (c == '-')
             active = false;
           else if (c == 'q')
-            opt_.q = active;
+            option.verbatim_content = active;
           else if (c == 'x')
-            opt_.x = active;
+            option.free_space = active;
           else if (c != 'i' && c != 'm' && c != 's')
             error(regex_error::invalid_modifier, loc);
           c = at(++loc);
@@ -824,8 +828,8 @@ void FSM_Generator::parse4(
               update_modified(uppercase(c), modifiers, m_loc, loc);
           }
         } while (c != '\0' && c != ':' && c != ')');
-        opt_.q = opt_q;
-        opt_.x = opt_x;
+        option.verbatim_content = opt_q;
+        option.free_space = opt_x;
       }
     }
     else
@@ -866,7 +870,7 @@ void FSM_Generator::parse4(
         if (c_loc != std::string::npos && at(static_cast<Location>(c_loc + 1)) == ']')
           loc = static_cast<Location>(c_loc + 1);
       }
-      else if (c == opt_.e && !opt_.b)
+      else if (c == option.escape_char && !option.disable_escapes_in_bra)
       {
         ++loc;
       }
@@ -877,26 +881,26 @@ void FSM_Generator::parse4(
       error(regex_error::mismatched_brackets, loc);
     ++loc;
   }
-  else if ((c == '"' && opt_.q) || escape_at(loc) == 'Q')
+  else if ((c == '"' && option.verbatim_content) || escape_at(loc) == 'Q')
   {
     bool quoted = (c == '"');
     if (!quoted)
       ++loc;
     Location q_loc = ++loc;
     c = at(loc);
-    if (c != '\0' && (quoted ? c != '"' : c != opt_.e || at(loc + 1) != 'E'))
+    if (c != '\0' && (quoted ? c != '"' : c != option.escape_char || at(loc + 1) != 'E'))
     {
       firstpos.insert(loc);
       Position p;
       do
       {
-        if (quoted && c == opt_.e && at(loc + 1) == '"')
+        if (quoted && c == option.escape_char && at(loc + 1) == '"')
           ++loc;
         if (p != Position::NPOS)
           followpos[p.pos()].insert(loc);
         p = loc++;
         c = at(loc);
-      } while (c != '\0' && (!quoted || c != '"') && (quoted || c != opt_.e || at(loc + 1) != 'E'));
+      } while (c != '\0' && (!quoted || c != '"') && (quoted || c != option.escape_char || at(loc + 1) != 'E'));
       lastpos.insert(p);
       nullable = false;
       modifiers['q'].insert(q_loc, loc - 1);
@@ -908,7 +912,7 @@ void FSM_Generator::parse4(
     else
       error(regex_error::mismatched_quotation, loc);
   }
-  else if (c == '#' && opt_.x)
+  else if (c == '#' && option.free_space)
   {
     ++loc;
     while ((c = at(loc)) != '\0' && c != '\n')
@@ -916,7 +920,7 @@ void FSM_Generator::parse4(
     if (c == '\n')
       ++loc;
   }
-  else if (std::isspace(c) && opt_.x)
+  else if (std::isspace(c) && option.verbatim_content)
   {
     ++loc;
   }
@@ -936,7 +940,7 @@ void FSM_Generator::parse4(
     firstpos.insert(loc);
     lastpos.insert(loc);
     nullable = false;
-    if (c == opt_.e)
+    if (c == option.escape_char)
       (void)parse_esc(loc);
     else
       ++loc;
@@ -1135,7 +1139,7 @@ void FSM_Generator::compile(
           if (state->tnode->edge[c] != nullptr)
           {
             DFA::State *target_state = last_state = last_state->next = dfa_.state(state->tnode->edge[c]);
-            if (opt_.i && std::isalpha(c))
+            if (option.case_insensitive && std::isalpha(c))
             {
               state->edges[lowercase(c)] = std::pair<Char,DFA::State*>(lowercase(c), target_state);
               state->edges[uppercase(c)] = std::pair<Char,DFA::State*>(uppercase(c), target_state);
@@ -1156,7 +1160,7 @@ void FSM_Generator::compile(
         for (Char c = 0; c < 256; ++c)
           if (state->tnode->edge[c] != nullptr)
             chars.insert(c);
-        if (opt_.i)
+        if (option.case_insensitive)
           for (Char c = 'a'; c <= 'z'; ++c)
             if (state->tnode->edge[c] != nullptr)
               chars.insert(uppercase(c));
@@ -1176,7 +1180,7 @@ void FSM_Generator::compile(
               if (common.contains(c))
               {
                 Positions pos(i->second);
-                if (opt_.i && std::isalpha(c))
+                if (option.case_insensitive && std::isalpha(c))
                 {
                   if (c >= 'a' && c <= 'z')
                   {
@@ -1205,10 +1209,10 @@ void FSM_Generator::compile(
             ++i;
           }
         }
-        if (opt_.i)
+        if (option.case_insensitive)
         {
           // normalize by removing upper case if option i (case insensitivem matching) is enabled
-          static const uint_least64_t upper[5] = { 0x0000000000000000, 0x0000000007FFFFFE, 0, 0, 0 };
+          static constexpr unsigned long long upper[5] = { 0x0000000000000000, 0x0000000007FFFFFE, 0, 0, 0 };
           chars -= Chars(upper);
         }
         if (chars.any())
@@ -1220,7 +1224,7 @@ void FSM_Generator::compile(
             if (chars.contains(c))
             {
               DFA::State *target_state = last_state = last_state->next = dfa_.state(state->tnode->edge[c]);
-              if (opt_.i && std::isalpha(c))
+              if (option.case_insensitive && std::isalpha(c))
               {
                 state->edges[lowercase(c)] = std::pair<Char,DFA::State*>(lowercase(c), target_state);
                 state->edges[uppercase(c)] = std::pair<Char,DFA::State*>(uppercase(c), target_state);
@@ -1781,7 +1785,7 @@ void FSM_Generator::compile_list(Location loc, Chars& chars, const Map& modifier
         }
         loc = static_cast<Location>(c_loc + 1);
       }
-      else if (c == opt_.e && !opt_.b)
+      else if (c == option.escape_char && !option.disable_escapes_in_bra)
       {
         c = parse_esc(loc, &chars);
         --loc;
@@ -1861,7 +1865,8 @@ void FSM_Generator::assemble(DFA::State *start)
   REFLEX_DBGLOG("BEGIN assemble()");
   timer_type t;
   timer_start(t);
-  predict_match_dfa(start);
+  if (option.predict_match)
+    predict_match_dfa(start);
   export_dfa(start);
   compact_dfa(start);
   encode_dfa(start);
@@ -1875,12 +1880,12 @@ void FSM_Generator::predict_match_dfa(DFA::State *start)
 {
   REFLEX_DBGLOG("BEGIN Pattern::predict_match_dfa()");
   DFA::State *state = start;
-  one_ = true;
+  pred_.one_ = true;
   while (state->accept == 0)
   {
     if (state->edges.size() != 1)
     {
-      one_ = false;
+      pred_.one_ = false;
       break;
     }
     Char lo = state->edges.begin()->first;
@@ -1888,82 +1893,82 @@ void FSM_Generator::predict_match_dfa(DFA::State *start)
     {
       if (lo != state->edges.begin()->second.first)
         break;
-      if (len_ >= 255)
+      if (pred_.len_ >= 255)
       {
-        one_ = false;
+        pred_.one_ = false;
         break;
       }
-      pre_[len_++] = static_cast<uint_least8_t>(lo);
+      pred_.pref_[pred_.len_++] = static_cast<unsigned char>(lo);
     }
     else
     {
-      one_ = false;
+      pred_.one_ = false;
       break;
     }
     DFA::State *next = state->edges.begin()->second.second;
     if (next == nullptr)
     {
-      one_ = false;
+      pred_.one_ = false;
       break;
     }
     state = next;
   }
   if (state != nullptr && state->accept > 0 && !state->edges.empty())
-    one_ = false;
-  min_ = 0;
-  std::memset(bit_, 0xFF, sizeof(bit_));
-  std::memset(pmh_, 0xFF, sizeof(pmh_));
-  std::memset(pma_, 0xFF, sizeof(pma_));
+    pred_.one_ = false;
+  pred_.min_ = 0;
+  std::memset(pred_.bit_, 0xFF, sizeof(pred_.bit_));
+  std::memset(pred_.pmh_, 0xFF, sizeof(pred_.pmh_));
+  std::memset(pred_.pma_, 0xFF, sizeof(pred_.pma_));
   if (state != nullptr && state->accept == 0)
   {
     gen_predict_match(state);
 #ifdef REFLEX_DEBUG
     for (Char i = 0; i < 256; ++i)
     {
-      if (bit_[i] != 0xFF)
+      if (pred_.bit_[i] != 0xFF)
       {
         if (isprint(i))
-          REFLEX_DBGLOGN("bit['%c'] = %02x", i, bit_[i]);
+          REFLEX_DBGLOGN("bit['%c'] = %02x", i, pred_.bit_[i]);
         else
-          REFLEX_DBGLOGN("bit[%3d] = %02x", i, bit_[i]);
+          REFLEX_DBGLOGN("bit[%3d] = %02x", i, pred_.bit_[i]);
       }
     }
     for (Pattern::Hash i = 0; i < Pattern::Const::HASH; ++i)
     {
-      if (pmh_[i] != 0xFF)
+      if (pred_.pmh_[i] != 0xFF)
       {
-        if (isprint(pmh_[i]))
-          REFLEX_DBGLOGN("pmh['%c'] = %02x", i, pmh_[i]);
+        if (isprint(pred_.pmh_[i]))
+          REFLEX_DBGLOGN("pmh['%c'] = %02x", i, pred_.pmh_[i]);
         else
-          REFLEX_DBGLOGN("pmh[%3d] = %02x", i, pmh_[i]);
+          REFLEX_DBGLOGN("pmh[%3d] = %02x", i, pred_.pmh_[i]);
       }
     }
     for (Pattern::Hash i = 0; i < Pattern::Const::HASH; ++i)
     {
-      if (pma_[i] != 0xFF)
+      if (pred_.pma_[i] != 0xFF)
       {
-        if (isprint(pma_[i]))
-          REFLEX_DBGLOGN("pma['%c'] = %02x", i, pma_[i]);
+        if (isprint(pred_.pma_[i]))
+          REFLEX_DBGLOGN("pma['%c'] = %02x", i, pred_.pma_[i]);
         else
-          REFLEX_DBGLOGN("pma[%3d] = %02x", i, pma_[i]);
+          REFLEX_DBGLOGN("pma[%3d] = %02x", i, pred_.pma_[i]);
       }
     }
 #endif
   }
-  REFLEX_DBGLOGN("min = %zu", min_);
+  REFLEX_DBGLOGN("min = %zu", pred_.min_);
   REFLEX_DBGLOG("END Pattern::predict_match_dfa()");
 } // predict_match_dfa
 
 void FSM_Generator::gen_predict_match(DFA::State *state)
 {
-  min_ = 8;
+  pred_.min_ = 8;
   std::map<DFA::State*,ORanges<Pattern::Hash>> states[8];
   gen_predict_match_transitions(state, states[0]);
   for (int level = 1; level < 8; ++level)
     for (std::map<DFA::State*,ORanges<Pattern::Hash>>::iterator from = states[level - 1].begin(); from != states[level - 1].end(); ++from)
       gen_predict_match_transitions(level, from->first, from->second, states[level]);
   for (Char i = 0; i < 256; ++i)
-    bit_[i] &= (1 << min_) - 1;
+    pred_.bit_[i] &= (1 << pred_.min_) - 1;
 }
 
 void FSM_Generator::gen_predict_match_transitions(DFA::State *state, std::map<DFA::State*,ORanges<Pattern::Hash>>& states)
@@ -1973,7 +1978,7 @@ void FSM_Generator::gen_predict_match_transitions(DFA::State *state, std::map<DF
     Char lo = edge->first;
     if (is_meta(lo))
     {
-      min_ = 0;
+      pred_.min_ = 0;
       break;
     }
     DFA::State *next = edge->second.second;
@@ -1996,15 +2001,15 @@ void FSM_Generator::gen_predict_match_transitions(DFA::State *state, std::map<DF
       next = nullptr;
     }
     if (accept)
-      min_ = 1;
+      pred_.min_ = 1;
     Char hi = edge->second.first;
     while (lo <= hi)
     {
-      bit_[lo] &= ~1;
-      pmh_[lo] &= ~1;
+      pred_.bit_[lo] &= ~1;
+      pred_.pmh_[lo] &= ~1;
       if (accept)
-        pma_[lo] &= ~(1 << 7);
-      pma_[lo] &= ~(1 << 6);
+        pred_.pma_[lo] &= ~(1 << 7);
+      pred_.pma_[lo] &= ~(1 << 6);
       if (next != nullptr)
         states[next].insert(hash(lo));
       ++lo;
@@ -2038,14 +2043,14 @@ void FSM_Generator::gen_predict_match_transitions(size_t level, DFA::State *stat
     {
       next = nullptr;
     }
-    if (accept && min_ > level)
-      min_ = level + 1;
-    if (level < 4 || level <= min_)
+    if (accept && pred_.min_ > level)
+      pred_.min_ = level + 1;
+    if (level < 4 || level <= pred_.min_)
     {
       Char hi = edge->second.first;
-      if (level <= min_)
+      if (level <= pred_.min_)
         while (lo <= hi)
-          bit_[lo++] &= ~(1 << level);
+          pred_.bit_[lo++] &= ~(1 << level);
       for (ORanges<Pattern::Hash>::const_iterator label = labels.begin(); label != labels.end(); ++label)
       {
         Pattern::Hash label_hi = label->second - 1;
@@ -2054,12 +2059,12 @@ void FSM_Generator::gen_predict_match_transitions(size_t level, DFA::State *stat
           for (lo = edge->first; lo <= hi; ++lo)
           {
             Pattern::Hash h = Pattern::hash(label_lo, lo);
-            pmh_[h] &= ~(1 << level);
+            pred_.pmh_[h] &= ~(1 << level);
             if (level < 4)
             {
               if (level == 3 || accept)
-                pma_[h] &= ~(1 << (7 - 2 * level));
-              pma_[h] &= ~(1 << (6 - 2 * level));
+                pred_.pma_[h] &= ~(1 << (7 - 2 * level));
+              pred_.pma_[h] &= ~(1 << (6 - 2 * level));
             }
             if (next != nullptr)
               states[next].insert(hash(h));
@@ -2072,7 +2077,7 @@ void FSM_Generator::gen_predict_match_transitions(size_t level, DFA::State *stat
 
 void FSM_Generator::export_dfa(const DFA::State *start) const
 {
-  for (std::vector<std::string>::const_iterator i = opt_.f.begin(); i != opt_.f.end(); ++i)
+  for (std::vector<std::string>::const_iterator i = option.files.begin(); i != option.files.end(); ++i)
   {
     const std::string& filename = *i;
     size_t len = filename.length();
@@ -2088,7 +2093,7 @@ void FSM_Generator::export_dfa(const DFA::State *start) const
         err = reflex::fopen_s(&file, filename.c_str(), "w");
       if (!err && file)
       {
-        fprintf(file, "digraph %s {\n\t\trankdir=LR;\n\t\tconcentrate=true;\n\t\tnode [fontname=\"ArialNarrow\"];\n\t\tedge [fontname=\"Courier\"];\n\n\t\tinit [root=true,peripheries=0,label=\"%s\",fontname=\"Courier\"];\n\t\tinit -> N%p;\n", opt_.n.empty() ? "FSM" : opt_.n.c_str(), opt_.n.c_str(), (void*)start);
+        fprintf(file, "digraph %s {\n\t\trankdir=LR;\n\t\tconcentrate=true;\n\t\tnode [fontname=\"ArialNarrow\"];\n\t\tedge [fontname=\"Courier\"];\n\n\t\tinit [root=true,peripheries=0,label=\"%s\",fontname=\"Courier\"];\n\t\tinit -> N%p;\n", option.namespace_name.empty() ? "FSM" : option.namespace_name.c_str(), option.namespace_name.c_str(), (void*)start);
         for (const DFA::State *state = start; state; state = state->next)
         {
           if (state == start)
@@ -2516,9 +2521,9 @@ void FSM_Generator::encode_dfa(DFA::State *start)
 
 void FSM_Generator::gencode_dfa(const DFA::State *start) const
 {
-  if (!opt_.o)
+  if (!option.optimize)
     return;
-  for (std::vector<std::string>::const_iterator i = opt_.f.begin(); i != opt_.f.end(); ++i)
+  for (std::vector<std::string>::const_iterator i = option.files.begin(); i != option.files.end(); ++i)
   {
     const std::string& filename = *i;
     size_t len = filename.length();
@@ -2550,15 +2555,13 @@ void FSM_Generator::gencode_dfa(const DFA::State *start) const
             "#endif\n\n");
         write_namespace_open(file);
         fprintf(file,
-            "void reflex_code_%s(reflex::Lexer& l)\n"
+            "void %s_fsm_%s(reflex::Lexer& l)\n"
             "{\n"
-            "  int c0 = 0, c1 = 0;\n"
-            "  l.FSM_INIT(c1);\n", opt_.n.empty() ? "FSM" : opt_.n.c_str());
+            "  int c = reflex::UNK;\n"
+            ,option.lexer_name.c_str(),option.state_name.c_str());
         for (const DFA::State *state = start; state; state = state->next)
         {
           fprintf(file, "\nS%u:\n", state->index);
-          if (state == start)
-            fprintf(file, "  l.FSM_FIND();\n");
           if (state->redo)
             fprintf(file, "  l.FSM_REDO();\n");
           else if (state->accept > 0)
@@ -2619,7 +2622,7 @@ void FSM_Generator::gencode_dfa(const DFA::State *start) const
               if (prev)
                 fprintf(file, "  c0 = c1, c1 = l.FSM_CHAR();\n");
               else
-                fprintf(file, "  c1 = l.FSM_CHAR();\n");
+                fprintf(file, "  c = l.FSM_CHAR();\n");
               read = false;
             }
             if (!is_meta(lo))
@@ -2629,7 +2632,7 @@ void FSM_Generator::gencode_dfa(const DFA::State *start) const
                 break;
               if (lo == hi)
               {
-                fprintf(file, "  if (c1 == ");
+                fprintf(file, "  if (c == ");
                 print_char(file, lo);
                 fprintf(file, ")");
               }
@@ -2637,22 +2640,19 @@ void FSM_Generator::gencode_dfa(const DFA::State *start) const
               {
                 fprintf(file, "  if (");
                 print_char(file, lo);
-                fprintf(file, " <= c1)");
+                fprintf(file, " <= c)");
               }
               else
               {
                 fprintf(file, "  if (");
                 print_char(file, lo);
-                fprintf(file, " <= c1 && c1 <= ");
+                fprintf(file, " <= c && c <= ");
                 print_char(file, hi);
                 fprintf(file, ")");
               }
               if (target_index == Pattern::Const::IMAX)
               {
-                if (peek)
-                  fprintf(file, " return l.FSM_HALT(c1);\n");
-                else
-                  fprintf(file, " return l.FSM_HALT();\n");
+                fprintf(file, " return;\n");
               }
               else
               {
@@ -2804,13 +2804,10 @@ void FSM_Generator::gencode_dfa(const DFA::State *start) const
             }
           }
 #endif
-          if (peek)
-            fprintf(file, "  return l.FSM_HALT(c1);\n");
-          else
-            fprintf(file, "  return l.FSM_HALT();\n");
+          fprintf(file, "  return;\n");
         }
         fprintf(file, "}\n\n");
-        if (opt_.p)
+        if (option.predict_match)
           write_predictor(file);
         write_namespace_close(file);
         if (file != stdout)
@@ -2855,19 +2852,19 @@ void FSM_Generator::gencode_dfa_closure(FILE *file, const DFA::State *state, int
   if (state->redo)
   {
     if (peek)
-      fprintf(file, "%*sm.FSM_REDO(c1);\n", 2*nest, "");
+      fprintf(file, "%*sl.FSM_REDO(c1);\n", 2*nest, "");
     else
-      fprintf(file, "%*sm.FSM_REDO();\n", 2*nest, "");
+      fprintf(file, "%*sl.FSM_REDO();\n", 2*nest, "");
   }
   else if (state->accept > 0)
   {
     if (peek)
-      fprintf(file, "%*sm.FSM_TAKE(%u, c1);\n", 2*nest, "", state->accept);
+      fprintf(file, "%*sl.FSM_TAKE(%u, c1);\n", 2*nest, "", state->accept);
     else
-      fprintf(file, "%*sm.FSM_TAKE(%u);\n", 2*nest, "", state->accept);
+      fprintf(file, "%*sl.FSM_TAKE(%u);\n", 2*nest, "", state->accept);
   }
   for (Lookaheads::const_iterator i = state->tails.begin(); i != state->tails.end(); ++i)
-    fprintf(file, "%*sm.FSM_TAIL(%u);\n", 2*nest, "", *i);
+    fprintf(file, "%*sl.FSM_TAIL(%u);\n", 2*nest, "", *i);
   if (nest > 5)
     return;
   for (DFA::State::Edges::const_reverse_iterator i = state->edges.rbegin(); i != state->edges.rend(); ++i)
@@ -2924,9 +2921,9 @@ void FSM_Generator::export_code() const
 {
   if (nop_ == 0)
     return;
-  if (opt_.o)
+  if (option.optimize)
     return;
-  for (std::vector<std::string>::const_iterator i = opt_.f.begin(); i != opt_.f.end(); ++i)
+  for (std::vector<std::string>::const_iterator i = option.files.begin(); i != option.files.end(); ++i)
   {
     const std::string& filename = *i;
     size_t len = filename.length();
@@ -2947,7 +2944,7 @@ void FSM_Generator::export_code() const
       {
         fprintf(file, "#ifndef REFLEX_CODE_DECL\n#include <reflex/pattern.h>\n#define REFLEX_CODE_DECL const reflex::Pattern::Opcode\n#endif\n\n");
         write_namespace_open(file);
-        fprintf(file, "extern REFLEX_CODE_DECL reflex_code_%s[%u] =\n{\n", opt_.n.empty() ? "FSM" : opt_.n.c_str(), nop_);
+        fprintf(file, "extern REFLEX_CODE_DECL reflex_code_%s[%u] =\n{\n", option.namespace_name.empty() ? "FSM" : option.namespace_name.c_str(), nop_);
         for (Pattern::Index i = 0; i < nop_; ++i)
         {
           Pattern::Opcode opcode = opc_[i];
@@ -3011,7 +3008,7 @@ void FSM_Generator::export_code() const
           }
         }
         fprintf(file, "};\n\n");
-        if (opt_.p)
+        if (option.predict_match)
           write_predictor(file);
         write_namespace_close(file);
         if (file != stdout)
@@ -3023,26 +3020,26 @@ void FSM_Generator::export_code() const
 
 void FSM_Generator::write_predictor(FILE *file) const
 {
-  fprintf(file, "extern const reflex::Pattern::Pred reflex_pred_%s[%zu] = {", opt_.n.empty() ? "FSM" : opt_.n.c_str(), 2 + len_ + (min_ > 1 && len_ == 0) * 256 + (min_ > 0) * Pattern::Const::HASH);
-  fprintf(file, "\n  %3hhu,%3hhu,", static_cast<uint_least8_t>(len_), (static_cast<uint_least8_t>(min_ | (one_ << 4))));
-  for (size_t i = 0; i < len_; ++i)
-    fprintf(file, "%s%3hhu,", ((i + 2) & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(pre_[i]));
-  if (min_ > 0)
+  fprintf(file, "extern const reflex::Pattern::Pred reflex_pred_%s[%zu] = {", option.namespace_name.empty() ? "FSM" : option.namespace_name.c_str(), 2 + pred_.len_ + (pred_.min_ > 1 && pred_.len_ == 0) * 256 + (pred_.min_ > 0) * Pattern::Const::HASH);
+  fprintf(file, "\n  %3hhu,%3hhu,", static_cast<unsigned char>(pred_.len_), (static_cast<unsigned char>(pred_.min_ | (pred_.one_ << 4))));
+  for (size_t i = 0; i < pred_.len_; ++i)
+    fprintf(file, "%s%3hhu,", ((i + 2) & 0xF) ? "" : "\n  ", static_cast<unsigned char>(pred_.pref_[i]));
+  if (pred_.min_ > 0)
   {
-    if (min_ > 1 && len_ == 0)
+    if (pred_.min_ > 1 && pred_.len_ == 0)
     {
       for (Char i = 0; i < 256; ++i)
-        fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(~bit_[i]));
+        fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", ~pred_.bit_[i]);
     }
-    if (min_ >= 4)
+    if (pred_.min_ >= 4)
     {
       for (Pattern::Hash i = 0; i < Pattern::Const::HASH; ++i)
-        fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(~pmh_[i]));
+        fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", ~pred_.pmh_[i]);
     }
     else
     {
       for (Pattern::Hash i = 0; i < Pattern::Const::HASH; ++i)
-        fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", static_cast<uint_least8_t>(~pma_[i]));
+        fprintf(file, "%s%3hhu,", (i & 0xF) ? "" : "\n  ", ~pred_.pma_[i]);
     }
   }
   fprintf(file, "\n};\n\n");
@@ -3050,10 +3047,10 @@ void FSM_Generator::write_predictor(FILE *file) const
 
 void FSM_Generator::write_namespace_open(FILE *file) const
 {
-  if (opt_.z.empty())
+  if (option.namespace_name.empty())
     return;
 
-  const std::string& s = opt_.z;
+  const std::string& s = option.namespace_name;
   size_t i = 0, j;
   while ((j = s.find("::", i)) != std::string::npos)
   {
@@ -3065,10 +3062,10 @@ void FSM_Generator::write_namespace_open(FILE *file) const
 
 void FSM_Generator::write_namespace_close(FILE *file) const
 {
-  if (opt_.z.empty())
+  if (option.namespace_name.empty())
     return;
 
-  const std::string& s = opt_.z;
+  const std::string& s = option.namespace_name;
   size_t i = 0, j;
   while ((j = s.find("::", i)) != std::string::npos)
   {

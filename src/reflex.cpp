@@ -46,7 +46,7 @@
 #include<iomanip>
 #include<reflex/input.h>
 #include<reflex/convert.h>
-#include<reflex/pattern.h>
+#include<reflex/fsm_gen.h>
 
 #if defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(__CYGWIN__) || defined(__MINGW32__) || defined(__MINGW64__) || defined(__BORLANDC__)
 # define OS_WIN
@@ -696,7 +696,7 @@ Reflex_Parser::Reflex_Parser(int argc, char **argv)
       if (!file)
         abort("cannot open file ", infile.c_str());
     }
-    in = file;
+    in.set_source(file);
   }
 
   set_library();
@@ -909,10 +909,10 @@ void Reflex_Parser::include(const std::string& filename,const bool sys /*  =fals
   size_t save_lineno = lineno;
   size_t save_linelen = linelen;
   lineno = 0;
-  in_include = file;
+  in_include.set_source(file);
   parse_section_1();
   fclose(file);
-  in_include.clear();
+  in_include.set_source();
   infile = std::move(save_infile);
   line = std::move(save_line);
   lineno = save_lineno;
@@ -922,24 +922,15 @@ void Reflex_Parser::include(const std::string& filename,const bool sys /*  =fals
 /// Fetch next line from the given input, return true if ok
 bool Reflex_Parser::get_line()
 {
-  if (in.eof())
+  if (!in.get_able())
     return false;
-  if (!in.good())
-    abort("error in reading");
-  ++lineno;
-  line.clear();
-  int c;
-  while ((c = in.get()) != EOF && c != '\n')
-  {
-    if (c != '\r')
-      line.push_back(c);
-  }
+  line = std::move(in.get_line());
   size_t pos = line.size();
   while (pos > 0 && std::isspace(line.at(pos - 1)))
     --pos;
   line.resize(pos);
   linelen = line.size();
-  if (in.eof() && line.empty())
+  if (!in.get_able() && line.empty())
     return false;
   return true;
 }
@@ -1775,7 +1766,7 @@ void Reflex_Parser::parse_section_1()
 /// Parse section 2 of a lex specification
 void Reflex_Parser::parse_section_2()
 {
-  if (in.eof())
+  if (!in.get_able())
     error("missing %% section 2");
   bool init = true;
   std::vector<Starts> scopes;
@@ -1862,7 +1853,7 @@ void Reflex_Parser::parse_section_2()
   if (!scopes.empty())
   {
     const char *name = conditions.at(*scopes.back().begin()).c_str();
-    if (in.eof())
+    if (!in.get_able())
       error("EOF encountered inside scope ", name);
     else
       error("%% section ending encountered inside scope ", name);
@@ -2316,6 +2307,35 @@ void Reflex_Parser::write_class()
   {
     base.assign("reflex::AbstractLexer_old<").append(base_lexer).append(">");
   }
+  write_banner("TABLES DECLARATION");
+  if (!options["namespace"].empty())
+  {
+    write_namespace_open();
+    *out << '\n';
+  }
+  if (options["base_lexer"].empty() && !options["fast"].empty())
+  {
+    for (Start start = 0; start < conditions.size(); ++start)
+    {
+      *out << "void " << options["lexer"] << "_fsm_" << conditions[start] << "(reflex::Lexer&);\n";
+      if (!options["find"].empty())
+        *out << "extern const reflex::Pattern::Pred "<< options["lexer"] <<"_pattern_pred_" << conditions[start] << "[];\n";
+    }
+  }
+  else if (options["base_lexer"].empty() && !options["full"].empty())
+  {
+    for (Start start = 0; start < conditions.size(); ++start)
+    {
+      *out << "extern const reflex::Pattern::Opcode "<< options["lexer"] <<"_opcode_" << conditions[start] << "[];\n";
+      if (!options["find"].empty())
+        *out << "extern const reflex::Pattern::Pred "<< options["lexer"] <<"_pattern_pred_" << conditions[start] << "[];\n";
+    }
+  }
+  if (!options["namespace"].empty())
+  {
+    write_namespace_close();
+    *out << '\n';
+  }
   write_banner("LEXER CLASS");
   std::string lexer = options["lexer"];
   if (!options["namespace"].empty())
@@ -2327,43 +2347,30 @@ void Reflex_Parser::write_class()
   *out <<
     "class " << lexer << " : public " << base_lexer << " {\n";
   *out << " public:\n";
-  if (options["base_lexer"].empty() && !options["fast"].empty())
-  {
-    for (Start start = 0; start < conditions.size(); ++start)
-    {
-      *out << "  static void dfa_code_" << conditions[start] << "(reflex::Lexer&);\n";
-      if (!options["find"].empty())
-        *out << "  static const reflex::Pattern::Pred pattern_pred_" << conditions[start] << "[];\n";
-    }
-  }
-  else if (options["base_lexer"].empty() && !options["full"].empty())
-  {
-    for (Start start = 0; start < conditions.size(); ++start)
-    {
-      *out << "  static const reflex::Pattern::Opcode opcode_" << conditions[start] << "[];\n";
-      if (!options["find"].empty())
-        *out << "  static const reflex::Pattern::Pred pattern_pred_" << conditions[start] << "[];\n";
-    }
-  }
-  *out << '\n';
+  *out<<"  enum struct State{";
+  for (Start start = 0; start < conditions.size(); ++start)
+    *out << conditions[start] << ",";
+  *out << "} start;\n";
   *out << " protected:\n  "
     "void patterns_init(){\n";
   if (options["base_lexer"].empty() && !options["fast"].empty())
   {
     for (Start start = 0; start < conditions.size(); ++start)
     {
-      *out << "    patterns.emplace_back(dfa_code_" << conditions[start] << ");\n";
+      *out << "    patterns.emplace_back("<< lexer <<"_fsm_" << conditions[start];
       if (!options["find"].empty())
-        *out << "    patterns.emplace_back(pattern_pred_" << conditions[start] << ");\n";
+        *out << ","<< lexer <<"_pattern_pred_" << conditions[start];
+      *out<<");\n";
     }
   }
   else if (options["base_lexer"].empty() && !options["full"].empty())
   {
     for (Start start = 0; start < conditions.size(); ++start)
     {
-      *out << "    patterns.emplace_back(opcode_" << conditions[start] << ");\n";
+      *out << "    patterns.emplace_back("<< lexer <<"_opcode_" << conditions[start];
       if (!options["find"].empty())
-        *out << "    patterns.emplace_back(pattern_pred_" << conditions[start] << ");\n";
+        *out << ","<< lexer <<"_pattern_pred_" << conditions[start];
+      *out<<");\n";
     }
   }
   *out << "  }\n";
@@ -2484,23 +2491,17 @@ void Reflex_Parser::write_class()
         "\n";
   }
   else
-  { // TODO Here
+  {
     *out <<
       " public:\n"
-      "  typedef " << base_lexer << " BaseLexer;\n"
-      "  " << lexer << "(\n";
-    if (!options["ctorarg"].empty())
-      *out << "      " << options["ctorarg"] << ",\n";
-    *out <<
-      "      const reflex::Input& input = reflex::Input(),\n"
-      "      std::ostream&        os    = std::cout)\n"
-      "    :\n"
-      "      AbstractBaseLexer(input, os)\n";
+      "  typedef " << base_lexer << " BaseLexer;\n";
+    *out << "  template<typename... Args>\n"
+      << "  " << lexer << "(Args&&... args) noexcept :\n"
+      << "    BaseLexer(std::forward<Args>(args)...)\n"
+      << "  {\n"
+      << "    patterns_init();";
     write_section_init();
-    *out<<"  enum {";
-    for (Start start = 0; start < conditions.size(); ++start)
-      *out << conditions[start] << ",";
-    *out << "};\n";
+    *out << "  }\n";
     if (!options["bison_complete"].empty())
     {
       if (!options["bison_locations"].empty())
@@ -2571,34 +2572,6 @@ void Reflex_Parser::write_class()
     else
       *out << " = 0;\n";
   }
-  if (options["bison_cc"].empty() && options["bison_bridge"].empty() && options["bison_locations"].empty())
-  {
-    if (params.empty())
-      *out <<
-        "  " << token_type << " " << lex << "(\n"
-        "      const reflex::Input& input,\n"
-        "      std::ostream        *os = nullptr)\n"
-        "  {\n"
-        "    in(input);\n"
-        "    if (os)\n"
-        "      out(*os);\n"
-        "    return " << lex << "();\n"
-        "  }\n";
-    else
-      *out <<
-        "  " << token_type << " " << lex << "(const reflex::Input& input" << comma_params << ")\n"
-        "  {\n"
-        "    in(input);\n"
-        "    return " << lex << "(" << args << ");\n"
-        "  }\n"
-        "  " << token_type << " " << lex << "(const reflex::Input& input, std::ostream *os" << comma_params << ")\n"
-        "  {\n"
-        "    in(input);\n"
-        "    if (os)\n"
-        "      out(*os);\n"
-        "    return " << lex << "(" << args << ");\n"
-        "  }\n";
-  }
   write_perf_report();
   write_section_class();
   *out <<
@@ -2650,14 +2623,12 @@ void Reflex_Parser::write_section_class()
 /// Write %%code_init code to lex.yy.cpp
 void Reflex_Parser::write_section_init()
 {
-  *out << "  {\n";
   if (!section_init.empty())
     write_code(section_init);
   if (!options["debug"].empty())
     *out << "    set_debug(" << options["debug"] << ");\n";
   if (!options["perf_report"].empty())
     *out << "    set_perf_report();\n";
-  *out << "  }\n";
 }
 
 /// Write %%code_lextop code to lex.yy.cpp
@@ -3235,7 +3206,7 @@ void Reflex_Parser::write_lexer()
       *out <<
         "        {\n"
         "          case 0:\n"
-        "            if (at_end())\n"
+        "            if (got()==EOF)\n"
         "            {\n";
       bool has_eof = false;
       for (Rules::const_iterator rule = rules[start].begin(); rule != rules[start].end(); ++rule)
@@ -3264,7 +3235,7 @@ void Reflex_Parser::write_lexer()
             "              yyterminate();\n";
         else
           *out <<
-            "              return " << token_eof << ";\n";
+            "              throw Lexer_Error(str(),in.lineno,in.colno,in.peek_utf8_byte());\n";
       }
       *out <<
         "            }\n"
@@ -3309,8 +3280,7 @@ void Reflex_Parser::write_lexer()
               "              throw " << options["exception"] << ";\n";
           else
             *out <<
-              "              //lexer_error((std::string(\"scanner jammed in initial state \")+std::to_string(start())).c_str());\n"
-              "              return " << token_type << "();\n";
+              "              throw Lexer_Error(str(),in.lineno,in.colno,in.peek_utf8_byte());\n";
         }
         else
         {
@@ -3325,7 +3295,7 @@ void Reflex_Parser::write_lexer()
               "              output(input());\n";
           else
             *out <<
-              "              out().put(input());\n";
+              "              return " << token_type << "();\n";
         }
       }
       *out <<
@@ -3547,37 +3517,48 @@ void Reflex_Parser::stats()
   }
   else
   {
+    FSM_Generator::Option opt;
+    opt.throw_error = true;
+    if (!options["fast"].empty())
+      opt.optimize = true;
+    if (!options["find"].empty())
+      opt.predict_match = true;
     for (Start start = 0; start < conditions.size(); ++start)
     {
-      std::string option = "r";
-      option.append(";n=").append(conditions[start]);
       if (!options["namespace"].empty())
-        option.append(";z=").append(options["namespace"]);
-      if (options["graphs_file"] == "true")
-        option.append(";f=reflex.").append(conditions[start]).append(".gv");
-      else if (!options["graphs_file"].empty())
-        option.append(";f=").append(start > 0 ? "+" : "").append(add_file_ext(options["graphs_file"], "gv"));
-      if (!options["fast"].empty())
-        option.append(";o");
-      if (!options["find"].empty())
-        option.append(";p");
-      if (options["tables_file"] == "true")
-        option.append(";f=reflex.").append(conditions[start]).append(".cpp");
-      else if (!options["tables_file"].empty())
-        option.append(";f=").append(start > 0 ? "+" : "").append(add_file_ext(options["tables_file"], "cpp"));
-      if ((!options["full"].empty() || !options["fast"].empty()) && options["tables_file"].empty() && options["stdout"].empty())
-        option.append(";f=+").append(escape_bs(options["outfile"]));
+        opt.namespace_name = options["namespace"];
+      opt.lexer_name = options["lexer"];
+      opt.state_name = conditions[start];
+      if (options["graphs_file"] == "true"){
+        opt.files.push_back(conditions[start]);
+        opt.files.back().append(".gv");
+      }else if (!options["graphs_file"].empty()){
+        opt.files.emplace_back();
+        opt.files.back().append(start > 0 ? "+" : "").append(add_file_ext(options["graphs_file"], "gv"));
+      }
+      if (options["tables_file"] == "true"){
+        opt.files.push_back(conditions[start]);
+        opt.files.back().append(".cpp");
+      }else if (!options["tables_file"].empty()){
+        opt.files.emplace_back();
+        opt.files.back().append(start > 0 ? "+" : "").append(add_file_ext(options["tables_file"], "cpp"));
+      }
+      if ((!options["full"].empty() || !options["fast"].empty()) && options["tables_file"].empty() && options["stdout"].empty()){
+        opt.files.emplace_back();
+        opt.files.back().append("+").append(escape_bs(options["outfile"]));
+      }
       try
       {
-        reflex::Pattern pattern(patterns[start], option); // This generates DFA and writes code.
+        FSM_Generator fsm_gen(std::move(opt));
+        fsm_gen.generate(patterns[start]);
         reflex::Pattern::Index accept = 1;
         for (size_t rule = 0; rule < rules[start].size(); ++rule)
           if (rules[start][rule].regex != "<<EOF>>" && rules[start][rule].regex != "<<DEFAULT>>")
-            if (!pattern.reachable(accept++))
+            if (!fsm_gen.reachable(accept++))
               warning("rule cannot be matched because a previous rule subsumes it, perhaps try to move this rule up?", "", rules[start][rule].code.lineno);
         reflex::Pattern::Index n = 0;
         if (!patterns[start].empty())
-          n = pattern.size();
+          n = fsm_gen.size();
         if (!options["verbose"].empty())
         {
           std::cout << "    ";
@@ -3586,14 +3567,14 @@ void Reflex_Parser::stats()
           else
             std::cout << "%x ";
           std::cout << conditions[start] << ":\n"
-            << std::setw(10) << n << " rules (" << pattern.parse_time() << " ms)";
+            << std::setw(10) << n << " rules (" << fsm_gen.parse_time() << " ms)";
           if (n < rules[start].size())
             std::cout << " + <<EOF>> rule";
           std::cout
             << '\n'
-            << std::setw(10) << pattern.nodes() << " nodes (" << pattern.nodes_time() << " ms)\n"
-            << std::setw(10) << pattern.edges() << " edges (" << pattern.edges_time() << " ms)\n"
-            << std::setw(10) << pattern.words() << " words (" << pattern.words_time() << " ms)\n";
+            << std::setw(10) << fsm_gen.nodes() << " nodes (" << fsm_gen.nodes_time() << " ms)\n"
+            << std::setw(10) << fsm_gen.edges() << " edges (" << fsm_gen.edges_time() << " ms)\n"
+            << std::setw(10) << fsm_gen.words() << " words (" << fsm_gen.words_time() << " ms)\n";
         }
       }
       catch (reflex::regex_error& e)
