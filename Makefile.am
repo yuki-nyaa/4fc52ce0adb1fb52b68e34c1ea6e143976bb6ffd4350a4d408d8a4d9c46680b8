@@ -1,4 +1,4 @@
-SUBDIRS = lib src . tests @EXAMPLESDIR@
+SUBDIRS = lib src . @EXAMPLESDIR@
 
 # man1_MANS = doc/man/reflex.1
 
@@ -45,7 +45,7 @@ install-data-hook:
 		 echo "|             https://sourceforge.net/projects/re-flex |"; \
 		 echo "|______________________________________________________|";
 
-.PHONY:		test
+#.PHONY:		test
 
-test:		$(top_builddir)/src/reflex
-		-cd tests; $(MAKE) && ./rtest
+#test:		$(top_builddir)/src/reflex
+#		-cd tests; $(MAKE) && ./rtest

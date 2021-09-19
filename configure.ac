@@ -14,7 +14,7 @@ AM_PROG_AR
 AC_PROG_RANLIB
 AC_PROG_INSTALL
 
-AX_CXX_COMPILE_STDCXX(11,noext,mandatory)
+AX_CXX_COMPILE_STDCXX(17,noext,mandatory)
 
 # removed to avoid Max OS X libtool issues, alas...
 # LT_INIT
